@@ -1,0 +1,108 @@
+/* 통계 · 마무리 CTA — styles.css 원본 2464~2568줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- metrics ---- */
+  .metrics {
+    background: linear-gradient(180deg, var(--ground), var(--ground-2));
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .metrics__grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    padding: clamp(48px, 7vw, 76px) 40px;
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .metric b {
+    font-family: 'Space Grotesk', 'IBM Plex Sans KR', sans-serif;
+    font-size: clamp(32px, 4.6vw, 50px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .metric span {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  /* ---- 마무리: 수치 + 시작 CTA ---- */
+  .closing {
+    padding: clamp(40px, 6vw, 64px) clamp(24px, 5vw, 56px) clamp(44px, 7vw, 64px);
+    border: 1px solid var(--edge);
+    border-radius: 28px;
+    background: radial-gradient(
+      130% 150% at 50% 0%,
+      var(--blue-wash),
+      var(--surface) 74%
+    );
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .closing__stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    padding-bottom: 32px;
+    margin-bottom: 34px;
+    border-bottom: 1px solid var(--line);
+  }
+  .closing__stats .metric {
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+  }
+  .closing__stats .metric b {
+    font-size: clamp(28px, 4vw, 44px);
+  }
+  .closing__cta .eyebrow {
+    margin-bottom: 6px;
+  }
+  .closing__cta h2 {
+    margin: 0 0 12px;
+    font-size: clamp(24px, 3.6vw, 36px);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .closing__cta p {
+    margin: 0 0 24px;
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 900px) {
+    .closing__stats {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px 16px;
+    }
+  }
+  @media (max-width: 520px) {
+    .closing__stats {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .step {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 20px;
+    border: 1px solid var(--edge);
+    border-radius: 17px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .foot {
+    padding: 28px 0 40px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    border-top: 1px solid var(--line);
+  }
+

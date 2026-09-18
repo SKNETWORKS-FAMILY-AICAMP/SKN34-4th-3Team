@@ -1,0 +1,310 @@
+/* 기능 페이지 셸 · 로드맵 헤더 · 단계 탭 — styles.css 원본 1784~2090줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ===== 로드맵 페이지: 간결 헤더 ===== */
+  .rmhead {
+    background: var(--surface-solid);
+    border-bottom: 1px solid var(--line);
+  }
+  .rmhead__in {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 40px;
+    height: 62px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .rmhead__actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .rmhead__back {
+    background: none;
+    border: 0;
+    padding: 6px 4px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .rmhead__back:hover {
+    color: var(--blue-deep);
+  }
+  .mp-head__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .fp__head--plain {
+    background: transparent;
+    border-bottom: 0;
+  }
+  .fp__head--plain .fp__head-in {
+    padding: 30px 40px 6px;
+  }
+
+  /* ===== 로드맵: 가로 단계 탭(홈의 아이콘 스트립 압축판) + [체크리스트 | AI 코치] ===== */
+  .rz--nav {
+    margin-top: 0;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .rz--nav .rz__row {
+    align-items: stretch;   /* 선택 하이라이트 박스 높이를 단계끼리 맞춘다 */
+  }
+  .rz--nav .rz__step {
+    gap: 6px;
+    padding: 9px 4px;
+    justify-content: flex-start;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .rz--nav .rz__step:hover {
+    background: var(--surface-solid);
+  }
+  .rz--nav .rz__step.is-active {
+    background: var(--surface-solid);
+    border-color: var(--blue);
+    box-shadow: var(--shadow-sm);
+  }
+  .rz--nav .rz__step:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+  .rz--nav .rz__ico {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+  }
+  .rz--nav .rz__ico svg {
+    width: 23px;
+    height: 23px;
+  }
+  .rz--nav .rz__step.is-active .rz__ico {
+    background: linear-gradient(135deg, var(--blue), var(--violet));
+    border-color: transparent;
+    color: #fff;
+  }
+  .rz--nav .rz__step.is-done .rz__ico {
+    background: #16a34a;
+    border-color: transparent;
+    color: #fff;
+  }
+  .rz--nav .rz__phase {
+    font-size: 10.5px;
+  }
+  .rz--nav .rz__t {
+    font-size: 13px;
+  }
+  .rz--nav .rz__d {
+    font-size: 11px;
+    line-height: 1.4;
+    max-width: 15ch;
+  }
+  .rz--nav .rz__sep {
+    flex-basis: 14px;
+    margin-top: 22px;
+    font-size: 17px;
+  }
+  .rg2__prog {
+    margin: 0 0 20px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .rg2__prog b {
+    color: var(--blue-deep);
+  }
+  .rg2__cols {
+    display: grid;
+    /* 할 일 목록 1 : AI 코치 대화창 2 */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .rg2__list {
+    min-width: 0;
+  }
+  .rg2__tasks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .rg2__taskrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-solid);
+  }
+  .rg2__taskrow:hover {
+    border-color: var(--line-strong);
+  }
+  .rg2__task input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex: none;
+    accent-color: var(--blue);
+    cursor: pointer;
+  }
+  .rg2__taskbtn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+  }
+  .rg2__taskcaret {
+    flex: none;
+    font-style: normal;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--ink-faint);
+  }
+  .rg2__taskbtn:hover .rg2__taskcaret {
+    color: var(--blue);
+  }
+  .rg2__goal {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--ground);
+  }
+  .rg2__goallabel {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .rg2__goaltext {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rg2__goalspan {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .rg2__taskinfo {
+    margin: 8px 0 0;
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--blue-wash);
+    animation: taskInfoIn 0.18s var(--ease, ease) both;
+  }
+  .rg2__tasklabel {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .rg2__taskwhy {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+  }
+  .rg2__taskmeta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 9px 0 0;
+    padding-top: 9px;
+    border-top: 1px dashed var(--line-strong);
+    font-size: 13px;
+  }
+  .rg2__taskmeta span {
+    color: var(--ink-faint);
+  }
+  .rg2__taskmeta b {
+    color: var(--ink);
+    font-weight: 700;
+  }
+  @keyframes taskInfoIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+  }
+  .rg2__task.is-done .rg2__taskrow {
+    background: var(--ground);
+  }
+  .rg2__task.is-done .rg2__taskbtn span {
+    color: var(--ink-faint);
+    text-decoration: line-through;
+  }
+  .rg2__chat {
+    min-width: 0;
+  }
+  .rg2__chat .ai {
+    max-width: none;
+    height: min(62vh, 440px);
+  }
+  @media (max-width: 900px) {
+    .rg2__cols {
+      grid-template-columns: 1fr;
+    }
+    .rg2__chat .ai {
+      height: min(58vh, 440px);
+    }
+  }
+  @media (max-width: 560px) {
+    .rmhead__in {
+      padding: 0 20px;
+    }
+    .fp__head--plain .fp__head-in {
+      padding: 24px 20px 4px;
+    }
+  }
+
+  /* 어디서나 보이는 고정 다크모드 토글 */
+  .theme-fab {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 70;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font-size: 18px;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .theme-fab:hover {
+    color: var(--ink);
+    border-color: var(--blue);
+  }
+

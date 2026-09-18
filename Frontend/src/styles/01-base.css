@@ -1,0 +1,286 @@
+/* 루트 변수 · 다크모드 · 셸 기본 — styles.css 원본 1~280줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+:root {
+    color-scheme: light dark;
+    --ground: #f4f6fd;
+    --ground-2: #eaeefb;
+    --surface: rgba(255, 255, 255, 0.74);
+    --surface-solid: #ffffff;
+    --edge: rgba(255, 255, 255, 0.92);
+    --line: rgba(31, 45, 90, 0.09);
+    --line-strong: rgba(31, 45, 90, 0.16);
+    --ink: #182142;
+    --ink-soft: #59637f;
+    --ink-faint: #8b93b2;
+    --blue: #2f7bf0;
+    --blue-deep: #2467e6;
+    --blue-wash: #eef4ff;
+    --violet: #7c5cf0;
+    --orange: #f97316;
+    --green: #00925f;
+    --red: #dc3c42;
+    --amber: #a9700d;
+    --shadow: 0 22px 54px rgba(24, 33, 66, 0.13);
+    --shadow-sm: 0 8px 24px rgba(24, 33, 66, 0.08);
+    --glow-blue: rgba(47, 123, 240, 0.28);
+    --glow-violet: rgba(150, 120, 255, 0.24);
+    --radius: 22px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      --ground: #0d101e;
+      --ground-2: #12162a;
+      --surface: rgba(27, 32, 54, 0.6);
+      --surface-solid: #161b30;
+      --edge: rgba(255, 255, 255, 0.08);
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --ink: #edf0fb;
+      --ink-soft: #a2aacb;
+      --ink-faint: #6d7599;
+      --blue: #5c9dff;
+      --blue-deep: #4b8ff5;
+      --blue-wash: rgba(92, 157, 255, 0.12);
+      --violet: #a58bf7;
+      --orange: #fb923c;
+      --green: #3ad795;
+      --red: #ff6b6f;
+      --amber: #e0a955;
+      --shadow: 0 26px 64px rgba(0, 0, 0, 0.5);
+      --shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.36);
+      --glow-blue: rgba(60, 120, 255, 0.22);
+      --glow-violet: rgba(150, 120, 255, 0.18);
+    }
+  }
+
+  :root[data-theme='dark'] {
+    --ground: #0d101e;
+    --ground-2: #12162a;
+    --surface: rgba(27, 32, 54, 0.6);
+    --surface-solid: #161b30;
+    --edge: rgba(255, 255, 255, 0.08);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --ink: #edf0fb;
+    --ink-soft: #a2aacb;
+    --ink-faint: #6d7599;
+    --blue: #5c9dff;
+    --blue-deep: #4b8ff5;
+    --blue-wash: rgba(92, 157, 255, 0.12);
+    --violet: #a58bf7;
+    --orange: #fb923c;
+    --green: #3ad795;
+    --red: #ff6b6f;
+    --amber: #e0a955;
+    --shadow: 0 26px 64px rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.36);
+    --glow-blue: rgba(60, 120, 255, 0.22);
+    --glow-violet: rgba(150, 120, 255, 0.18);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans KR', Pretendard, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', 'Malgun Gothic', sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  .u-num {
+    font-family: 'Space Grotesk', 'IBM Plex Sans KR', sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  /* ---- scroll reveal (강화) ---- */
+  .reveal {
+    opacity: 0;
+    transform: translateY(46px) scale(0.972);
+    filter: blur(6px);
+    transition: opacity 0.8s var(--ease), transform 0.8s var(--ease),
+      filter 0.8s var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  .progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    transform-origin: 0 50%;
+    transform: scaleX(var(--p, 0));
+    background: linear-gradient(90deg, var(--blue), var(--violet));
+    z-index: 50;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+      filter: none;
+      transition: none;
+    }
+    .progress {
+      display: none;
+    }
+  }
+
+  /* ---- shell ---- */
+  .wrap {
+    max-width: 1160px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(14px);
+    background: color-mix(in srgb, var(--ground) 78%, transparent);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 66px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    color: var(--ink);
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+  .brand__mark {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--blue), var(--violet));
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .nav__spacer {
+    flex: 1;
+  }
+  .nav__user {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-right: 2px;
+  }
+  .nav__user b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-soft);
+  }
+  .icon-btn:hover {
+    color: var(--ink);
+  }
+  .hamburger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 42px;
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 11px;
+    background: var(--surface);
+  }
+  .hamburger span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--ink);
+    transition: background 0.15s ease;
+  }
+  .hamburger:hover span {
+    background: var(--blue-deep);
+  }
+  .btn {
+    display: inline-block;
+    border-radius: 11px;
+    border: 1px solid transparent;
+    padding: 10px 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn--primary {
+    background: linear-gradient(135deg, var(--blue), var(--blue-deep));
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(36, 103, 230, 0.32);
+  }
+  .btn--primary:hover {
+    transform: translateY(-1px);
+  }
+  .btn--ghost {
+    background: var(--surface);
+    border-color: var(--line-strong);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .btn--ghost:hover {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+  }
+  .btn--lg {
+    padding: 14px 24px;
+    font-size: 14.5px;
+    border-radius: 13px;
+  }
+

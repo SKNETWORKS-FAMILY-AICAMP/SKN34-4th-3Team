@@ -1,0 +1,595 @@
+/* 히어로 · 마감임박 패널 · 섹션 공통 · 홈 캘린더 — styles.css 원본 438~1029줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- hero ---- */
+  .hero {
+    position: relative;
+    overflow: hidden;
+  }
+  .glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(14px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .glow--blue {
+    top: -190px;
+    right: -140px;
+    width: 640px;
+    height: 500px;
+    background: radial-gradient(circle, var(--glow-blue), transparent 66%);
+    animation: drift 19s ease-in-out infinite alternate;
+  }
+  .glow--violet {
+    bottom: -280px;
+    left: -160px;
+    width: 620px;
+    height: 520px;
+    background: radial-gradient(circle, var(--glow-violet), transparent 66%);
+    animation: drift2 24s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    to {
+      transform: translate3d(-46px, 34px, 0) scale(1.1);
+    }
+  }
+  @keyframes drift2 {
+    to {
+      transform: translate3d(40px, -30px, 0) scale(1.12);
+    }
+  }
+  .hero__inner {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1.08fr 0.92fr;
+    gap: 48px;
+    align-items: center;
+    padding: 64px 0 72px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 24px;
+    padding: 6px 13px;
+    border: 1px solid var(--edge);
+    border-radius: 999px;
+    background: var(--surface);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    animation: word-in 0.7s var(--ease) both;
+  }
+  .badge__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.15);
+    }
+  }
+
+  .figure {
+    margin: 0 0 6px;
+    font-size: clamp(56px, 8vw, 88px);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--ink);
+    animation: word-in 0.8s var(--ease) both;
+    animation-delay: 0.05s;
+  }
+  .figure__unit {
+    font-size: 0.34em;
+    font-weight: 600;
+    color: var(--ink-soft);
+    margin-left: 8px;
+    letter-spacing: 0;
+  }
+  .title {
+    margin: 0 0 16px;
+    font-size: clamp(26px, 3.4vw, 35px);
+    font-weight: 700;
+    line-height: 1.34;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+  }
+  .title .w {
+    display: inline-block;
+    animation: word-in 0.7s var(--ease) both;
+    animation-delay: calc(var(--i) * 52ms + 140ms);
+  }
+  @keyframes word-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.6em);
+      filter: blur(5px);
+    }
+  }
+  .lede {
+    margin: 0 0 30px;
+    max-width: 42ch;
+    font-size: 15.5px;
+    line-height: 1.78;
+    color: var(--ink-soft);
+    text-wrap: pretty;
+    animation: word-in 0.8s var(--ease) both;
+    animation-delay: 0.5s;
+  }
+  .hero__actions {
+    display: flex;
+    gap: 11px;
+    margin-bottom: 34px;
+    flex-wrap: wrap;
+    animation: word-in 0.8s var(--ease) both;
+    animation-delay: 0.62s;
+  }
+  .stats {
+    display: flex;
+    gap: 34px;
+    margin: 0;
+    animation: word-in 0.8s var(--ease) both;
+    animation-delay: 0.72s;
+  }
+  .stat {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .stat__value {
+    margin: 0;
+    font-size: 25px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .stat__value--pos {
+    color: var(--green);
+  }
+  .stat__label {
+    margin-top: 4px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .glow--blue,
+    .glow--violet,
+    .badge,
+    .figure,
+    .title .w,
+    .lede,
+    .hero__actions,
+    .stats {
+      animation: none;
+    }
+  }
+
+  /* ---- deadline panel ---- */
+  .panel {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--edge);
+    border-radius: var(--radius);
+    padding: 22px 22px 8px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+    animation: word-in 0.9s var(--ease) both;
+    animation-delay: 0.35s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .panel {
+      animation: none;
+    }
+  }
+  .panel__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .panel__title {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+  .panel__more {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--blue-deep);
+    text-decoration: none;
+  }
+  .deadlines {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .deadline {
+    display: grid;
+    grid-template-columns: 46px 1fr auto;
+    align-items: center;
+    gap: 13px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .deadline:last-child {
+    border-bottom: 0;
+  }
+  .deadline__dday {
+    font-size: 13.5px;
+    font-weight: 700;
+  }
+  .is-urgent {
+    color: var(--red);
+  }
+  .is-soon {
+    color: var(--amber);
+  }
+  .is-normal {
+    color: var(--ink-faint);
+  }
+  .deadline__title {
+    margin: 0 0 2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .deadline__meta {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .star {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-faint);
+    transition: color 0.12s ease, border-color 0.12s ease;
+  }
+  .star:hover {
+    color: var(--amber);
+    border-color: var(--amber);
+  }
+  .star[aria-pressed='true'] {
+    color: var(--amber);
+    border-color: var(--amber);
+    background: color-mix(in srgb, var(--amber) 12%, transparent);
+  }
+  .panel__foot {
+    padding: 12px 2px 14px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+
+  /* ---- section 공통 ---- */
+  .sec {
+    padding: clamp(74px, 11vw, 132px) 0;
+  }
+  .sec--alt {
+    background: linear-gradient(180deg, var(--ground), var(--ground-2));
+    border-top: 1px solid var(--line);
+  }
+
+  /* ---- 홈: 섹션 하나당 화면 전체 ---- */
+  html {
+    scroll-padding-top: 66px; /* sticky nav 높이 보정 */
+  }
+  .home-flow > section {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    scroll-snap-align: start;
+  }
+  @media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-snap-type: y proximity;
+    }
+  }
+  @media (max-width: 767px) {
+    .home-flow > section {
+      min-height: 0;
+      display: block;
+    }
+  }
+  .eyebrow {
+    margin: 0 0 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    color: var(--blue);
+  }
+  .sec__title {
+    margin: 0 0 40px;
+    font-size: clamp(22px, 3.6vw, 34px);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+
+  /* ---- 창업 일정 달력 ---- */
+  .stmt__grid {
+    display: grid;
+    grid-template-columns: 358px minmax(0, 1fr);
+    gap: 52px;
+    align-items: center;
+  }
+  .stmt__head {
+    margin: 0 0 22px;
+    font-size: clamp(28px, 4.4vw, 48px);
+    font-weight: 700;
+    line-height: 1.24;
+    letter-spacing: -0.04em;
+    color: var(--ink);
+  }
+  .stmt__line {
+    display: block;
+  }
+  .stmt__line em {
+    font-style: normal;
+    color: var(--blue-deep);
+  }
+  .stmt__sub {
+    margin: 0 0 26px;
+    max-width: 44ch;
+    font-size: 15.5px;
+    line-height: 1.8;
+    color: var(--ink-soft);
+  }
+  .stmt__mini {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-width: 420px;
+  }
+  .stmt__mini li {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    align-items: baseline;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13.5px;
+  }
+  .stmt__mini li:last-child {
+    border-bottom: 0;
+  }
+  .stmt__mini b {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    color: var(--red);
+  }
+  .stmt__mini span {
+    color: var(--ink);
+  }
+  .stmt__mini em {
+    display: block;
+    margin-top: 2px;
+    font-style: normal;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+
+  .cal {
+    background: var(--surface-solid);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+    padding: 20px 20px 18px;
+  }
+  .cal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .cal__title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .cal__nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .cal__nav button {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 12px;
+  }
+  .cal__nav button:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .cal__month {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    min-width: 74px;
+    text-align: center;
+  }
+  .cal__sub {
+    margin: 4px 0 12px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .cal__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .cal__dow {
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    padding: 2px 0 8px;
+  }
+  .cal__dow--sun {
+    color: var(--red);
+  }
+  .cal__day {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border: 0;
+    background: transparent;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+  }
+  button.cal__day {
+    cursor: pointer;
+  }
+  .cal__day:hover:not(.cal__day--sel) {
+    background: var(--ground);
+  }
+  .cal__day--out {
+    color: var(--ink-faint);
+    opacity: 0.4;
+  }
+  .cal__day--today {
+    font-weight: 700;
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+  .cal__day--sel {
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+  }
+  .cal__dot {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2px;
+  }
+  .cal__dot i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+  }
+  .t-tax {
+    background: var(--orange);
+  }
+  .t-policy {
+    background: var(--violet);
+  }
+  .cal__day--sel .cal__dot i {
+    background: #fff;
+  }
+  .cal__legend {
+    display: flex;
+    gap: 14px;
+    margin: 12px 2px 0;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  .cal__legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .cal__legend i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .cal__events {
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+  .cal__events h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .cal__ev {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 6px 0;
+  }
+  .cal__ev > i {
+    margin-top: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex: none;
+  }
+  .cal__ev b {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cal__ev span {
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  .cal__empty {
+    font-size: 12px;
+    color: var(--ink-faint);
+    padding: 4px 0 2px;
+  }
+  /* 일정이 몇 건이든 카드 높이는 그대로 두고 이 목록만 스크롤한다 */
+  .cal__evlist {
+    max-height: 150px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .cal__evlist::-webkit-scrollbar {
+    width: 8px;
+  }
+  .cal__evlist::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .cal__evlist::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: var(--line-strong);
+  }
+  .cal__evlist::-webkit-scrollbar-thumb:hover {
+    background-color: var(--ink-faint);
+  }
+  .cal__err {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    color: var(--red);
+  }
+  .cal__more {
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+

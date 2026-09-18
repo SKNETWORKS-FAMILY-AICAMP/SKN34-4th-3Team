@@ -1,7 +1,32 @@
 [project]
 name = "llm"
 version = "0.1.0"
-description = "Add your description here"
+description = "LLM and RAG service for grounded policy and tax explanations"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "cohere>=7.1.1",
+    "fastapi>=0.116.0",
+    "langchain-openai>=0.3.28",
+    "langchain-text-splitters>=1.1.2",
+    "langgraph>=1.2.11",
+    "langsmith>=0.12.1",
+    "numpy>=2.5.2",
+    "pgvector>=0.4",
+    "psycopg-pool>=3.2,<4",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.10.1",
+    "pypdf>=6.16.2",
+    "python-multipart>=0.0.20",
+    "uvicorn[standard]>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

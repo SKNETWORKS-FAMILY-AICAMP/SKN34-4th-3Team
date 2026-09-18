@@ -1,0 +1,327 @@
+/* 로드맵: 단계별 지원사업 · A-Z 로드맵 — styles.css 원본 1460~1783줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- 로드맵: 단계별 지원사업 + 완료 리포트 ---- */
+  .rg__progs {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .rg__progs h4 {
+    margin: 0 0 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rg__prog {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+    padding: 11px 13px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    background: var(--ground);
+    margin-bottom: 8px;
+  }
+  .rg__prog:last-child {
+    margin-bottom: 0;
+  }
+  .rg__prog b {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rg__prog span {
+    grid-column: 1;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+  }
+  .rg__prog em {
+    grid-row: 1;
+    grid-column: 2;
+    font-style: normal;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--amber);
+    white-space: nowrap;
+  }
+  .rg__prog em.is-urgent {
+    color: var(--red);
+  }
+  .rg__none {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+
+  .rg__report {
+    border: 1px solid var(--edge);
+    border-radius: 18px;
+    padding: 24px 26px;
+    margin-bottom: 16px;
+    background: radial-gradient(120% 170% at 0% 0%, var(--blue-wash), var(--surface-solid) 74%);
+    box-shadow: var(--shadow-sm);
+  }
+  .rg__report--locked {
+    background: var(--surface-solid);
+    border: 1px dashed var(--line-strong);
+  }
+  .rg__report h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .rg__report > p {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .rg__match {
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    align-items: center;
+    gap: 4px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-solid);
+    margin-bottom: 8px;
+  }
+  .rg__rank {
+    grid-row: 1 / span 2;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+    display: grid;
+    place-items: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+  }
+  .rg__match b {
+    font-size: 13.5px;
+    font-weight: 700;
+  }
+  .rg__score {
+    grid-row: 1;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--green);
+  }
+  .rg__why {
+    grid-column: 2 / span 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .rg__why span {
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ground);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+  }
+  .rg__next {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+  }
+  .rg__next li {
+    display: flex;
+    gap: 9px;
+    padding: 7px 0;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .rg__next li::before {
+    content: '→';
+    color: var(--blue);
+    font-weight: 700;
+    flex: none;
+  }
+  .rg__secttl {
+    margin: 18px 0 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  /* ---- 4. 창업 A-Z 로드맵 (아이콘 + 화살표 한 줄) ---- */
+  .rz {
+    margin-top: 60px;
+  }
+  .rz__row {
+    display: flex;
+    align-items: flex-start;
+  }
+  .rz__step {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 13px;
+    padding: 0 8px;
+    opacity: 0;
+    transform: translateY(26px) scale(0.9);
+    transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+  .rz.is-in .rz__step {
+    opacity: 1;
+    transform: none;
+  }
+  .rz__step .rz__ico {
+    transform: scale(0.5) rotate(-8deg);
+    transition: transform 0.55s var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+  .rz.is-in .rz__step .rz__ico {
+    transform: none;
+  }
+  .rz__ico {
+    width: 76px;
+    height: 76px;
+    border-radius: 22px;
+    display: grid;
+    place-items: center;
+    background: var(--surface-solid);
+    border: 1px solid var(--line-strong);
+    color: var(--blue-deep);
+    box-shadow: var(--shadow-sm);
+  }
+  .rz__ico svg {
+    width: 34px;
+    height: 34px;
+  }
+  .rz__step--accent .rz__ico {
+    background: linear-gradient(135deg, var(--blue), var(--violet));
+    border-color: transparent;
+    color: #fff;
+  }
+  .rz__phase {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--blue);
+  }
+  .rz__t {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rz__d {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 17ch;
+  }
+  .rz__sep {
+    flex: 0 0 24px;
+    align-self: flex-start;
+    margin-top: 28px;
+    display: grid;
+    place-items: center;
+    color: var(--ink-faint);
+    font-size: 26px;
+    opacity: 0;
+    transition: opacity 0.4s var(--ease);
+    transition-delay: var(--d, 0ms);
+  }
+  .rz.is-in .rz__sep {
+    opacity: 1;
+  }
+  @media (max-width: 860px) {
+    .rz__row {
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 22px 0;
+    }
+    .rz__step {
+      flex: 0 0 33.333%;
+    }
+    .rz__sep {
+      display: none;
+    }
+  }
+  @media (max-width: 540px) {
+    .rz__step {
+      flex: 0 0 50%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rz__step,
+    .rz__sep,
+    .rz__step .rz__ico {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+
+  /* ---- 기능 페이지 셸 ---- */
+  .fp {
+    min-height: 100vh;
+    background: var(--ground);
+  }
+  .fp__head {
+    background: var(--surface-solid);
+    border-bottom: 1px solid var(--line);
+  }
+  .fp__head-in {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 26px 32px 24px;
+  }
+  .fp__back {
+    background: none;
+    border: 0;
+    padding: 0;
+    margin-bottom: 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .fp__back:hover {
+    color: var(--blue-deep);
+  }
+  .fp__title {
+    margin: 0 0 6px;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .fp__body {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 24px 32px 88px;
+  }
+  .fp--wide .fp__head-in,
+  .fp--wide .fp__body {
+    max-width: 1180px;
+    /* flex 컨테이너 안에서 가로 auto 마진이 있으면 stretch 대신 "내용 크기"로 폭이 잡힌다.
+       그러면 대화 내용에 따라 대화창 폭이 들쭉날쭉해지므로 폭을 명시한다. */
+    width: 100%;
+  }
+  /* AI 상담: 전체 폭 사용(사이드바 좌측 밀착, 대화창 우측 넓게) */
+  .fp--full .fp__head-in,
+  .fp--full .fp__body {
+    max-width: none;
+    width: 100%;
+    margin: 0;
+  }
+  /* 창업 로드맵 · AI 상담: 폭 1180px 가운데 정렬 */
+  .fp--wideplus .fp__head-in,
+  .fp--wideplus .fp__body {
+    max-width: 1180px;
+    width: 100%;
+    margin: 0 auto;
+  }
+

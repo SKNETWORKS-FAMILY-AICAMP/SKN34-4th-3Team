@@ -1,0 +1,14 @@
+/* 원래 한 파일(4,326줄)이던 스타일을 기능별로 나눴다. 순서가 CSS 캐스케이드에 영향을 주므로
+   원본 파일에서의 등장 순서를 그대로 유지한다 — 재배열하거나 알파벳순 등으로 바꾸지 말 것. */
+@import './styles/01-base.css';
+@import './styles/02-drawer-nav.css';
+@import './styles/03-home.css';
+@import './styles/04-ai-chat.css';
+@import './styles/05-roadmap.css';
+@import './styles/06-page-shell.css';
+@import './styles/07-cvx-sidebar.css';
+@import './styles/08-roadmap-guide.css';
+@import './styles/09-metrics-closing.css';
+@import './styles/10-tools.css';
+@import './styles/11-mypage.css';
+@import './styles/12-misc.css';

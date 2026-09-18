@@ -1,7 +1,15 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "청년·1인 창업자 맞춤형 AI 행정·재정 지원 플랫폼 Backend"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "psycopg[binary]>=3.2.0",
+]
+
+[tool.uv]
+package = false

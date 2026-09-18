@@ -4,7 +4,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-COPY . .
-RUN uv sync
+# Keep the container environment outside /app so the Compose bind mount does
+# not hide it during local development.
+ENV UV_PROJECT_ENVIRONMENT=/opt/backend-venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
 
-CMD ["uv", "run", "python", "main.py"]
+COPY . .
+RUN uv sync --frozen
+
+EXPOSE 8000
+
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

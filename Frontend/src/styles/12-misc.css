@@ -1,0 +1,375 @@
+/* 반응형 · 기타 — styles.css 원본 3990~4327줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* =====================================================================
+     앱 화면 100% 배율에서 한 화면에 담기 (문서 스크롤 없음 · 필요 시 패널 내부 스크롤)
+     대상: 서브페이지(roadmap/tax/gov/ai) + 마이페이지. 홈 랜딩은 제외.
+     ===================================================================== */
+  .slim-shell {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .slim-shell > .rmhead {
+    flex: none;
+  }
+  .fp--wide {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .fp--wide .fp__head--plain .fp__head-in {
+    padding: 10px 40px 2px;
+  }
+  .fp--wide .fp__title {
+    font-size: 19px;
+    margin-bottom: 2px;
+  }
+  .fp--wide .fp__body {
+    flex: 1;
+    min-height: 0;
+    padding: 8px 32px 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .fp__body > * {
+    flex: 1;
+    min-height: 0;
+  }
+  /* 대화 패널: 헤더바 + 테두리 컨테이너, 내부 .ai 는 테두리 없이 꽉 채움 (이미지 기준) */
+  .chatpanel__hd {
+    flex: none;
+    padding: 12px 18px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+  }
+  .az2__chat {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .az2__chat .ai {
+    max-width: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .az2__chat .ai__body {
+    background: var(--ground);
+  }
+
+  /* --- 1. 창업 로드맵: 기존 레이아웃, 대화창은 열 높이를 꽉 채움 --- */
+  .fp--wide .rg2 {
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .rz--nav,
+  .fp--wide .rg2__prog {
+    flex: none;
+  }
+  /* 한 화면에 다 들어가게 단계 스트립을 한 번 더 조인다 */
+  .fp--wide .rz--nav {
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+  }
+  .fp--wide .rz--nav .rz__step {
+    gap: 3px;
+    padding: 5px 4px;
+  }
+  .fp--wide .rz--nav .rz__ico {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+  .fp--wide .rz--nav .rz__ico svg {
+    width: 16px;
+    height: 16px;
+  }
+  .fp--wide .rz--nav .rz__phase {
+    font-size: 10px;
+  }
+  .fp--wide .rz--nav .rz__t {
+    font-size: 12px;
+  }
+  .fp--wide .rz--nav .rz__d {
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+  .fp--wide .rz--nav .rz__sep {
+    margin-top: 13px;
+    font-size: 14px;
+  }
+  .fp--wide .rg2__prog {
+    margin: 0 0 8px;
+  }
+  .fp--wide .rg2__cols {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  .fp--wide .rg2__tasks {
+    gap: 8px;
+  }
+  .fp--wide .rg2__taskrow {
+    padding: 10px 14px;
+  }
+  .fp--wide .rg2__taskinfo {
+    padding: 10px 14px;
+  }
+  .fp--wide .rg2__tasklabel {
+    margin-bottom: 5px;
+  }
+  .fp--wide .rg2__taskwhy {
+    line-height: 1.65;
+  }
+  .fp--wide .rg2__taskmeta {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+  .fp--wide .rg2__goal {
+    margin-bottom: 10px;
+    padding: 9px 12px;
+  }
+  .fp--wide .rg2__goaltext {
+    font-size: 12px;
+  }
+  .fp--wide .rg2__list {
+    overflow-y: auto;
+  }
+  .fp--wide .rg2__chat {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .fp--wide .rg2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-width: none;
+    background: var(--ground);        /* 이미지처럼 회색 패널 */
+  }
+  .fp--wide .rg2__chat .ai__bar {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .msg--ai {
+    background: var(--surface-solid);  /* 회색 패널 위 흰 말풍선 */
+    border: 1px solid var(--line-strong);
+  }
+  .fp--wide .rg2__chat .ai__foot {
+    background: var(--surface-solid);
+  }
+  .fp--wide .rg2__chat .ai__foot input {
+    background: var(--surface-solid);
+  }
+
+  /* --- 2. 세무 AI: 내 질문 목록 | 전체 높이 대화 패널 --- */
+  .fp--wide .cvx {
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 20px;
+    align-items: stretch;
+    height: 100%;
+  }
+  .fp--wide .cvx__side {
+    min-height: 0;
+  }
+  .fp--wide .cvx__main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .fp--wide .cvx__main .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+
+  /* --- 3. 공고지원 AI: 왼쪽 카드 | 오른쪽 대화창, 좌우 높이 맞춤 --- */
+  .fp--wide .az2 {
+    display: grid;
+    grid-template-columns: minmax(0, 348px) minmax(0, 1fr);
+    gap: 18px;
+    height: 100%;
+    align-items: stretch;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fp--wide .az2__cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;   /* 추천 공고 · 달력 카드 높이를 절반씩 동일하게 */
+    gap: 12px;
+    background: transparent;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fp--wide .az2__chat {
+    min-width: 0;
+    min-height: 0;
+  }
+  .fp--wide .az2__chat .ai {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  .fp--wide .az2__cols > .az2__card,
+  .fp--wide .az2__cols > .cal {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-shadow: none;
+  }
+  .fp--wide .az2__card {
+    padding: 10px 12px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fp--wide .az2__cardttl {
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .fp--wide .az2__note {
+    margin-bottom: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .fp--wide .az2__reclist {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2px 9px 4px 1px;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+    align-content: start;
+    gap: 8px;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar {
+    width: 6px;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--line-strong);
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-faint);
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  .fp--wide .az2__reclist::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  .fp--wide .az2__reclist li {
+    padding-bottom: 8px;
+  }
+  .fp--wide .az2__rectitle {
+    font-size: 12px;
+  }
+  .fp--wide .az2__recmeta {
+    font-size: 10.5px;
+  }
+  .fp--wide .az2__recscore {
+    font-size: 13px;
+  }
+  .fp--wide .az2__cols > .cal {
+    padding: 10px 12px;
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  .fp--wide .cal__title {
+    font-size: 13px;
+  }
+  .fp--wide .cal__sub {
+    margin: 3px 0 6px;
+    font-size: 10.5px;
+  }
+  .fp--wide .cal__grid {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: auto;
+    grid-auto-rows: minmax(0, 1fr);
+  }
+  .fp--wide .cal__dow {
+    padding: 0 0 4px;
+  }
+  .fp--wide .cal__day {
+    aspect-ratio: auto;
+    font-size: 11px;
+  }
+  .fp--wide .cal__legend {
+    flex: none;
+    margin-top: 6px;
+    font-size: 10px;
+  }
+
+  /* 마이페이지 */
+  .mp {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .mp-side {
+    overflow-y: auto;
+  }
+  .mp-main {
+    overflow-y: auto;
+    padding: 20px 36px 26px;
+  }
+  .mp-head {
+    margin-bottom: 16px;
+  }
+  .mp-hello {
+    font-size: 20px;
+  }
+  .mp-dash .cal__day {
+    height: 30px;
+  }
+  .mp-dash .mp-card {
+    padding: 16px 18px;
+  }
+  .mp-dash .mp-pct {
+    font-size: 26px;
+    margin-bottom: 8px;
+  }
+  .mp-dash .mp-card__head {
+    margin-bottom: 10px;
+  }
+
+  /* 메인(홈)만 살짝 축소해서 한 화면에 더 잘 들어오게 */
+  .home-scale {
+    zoom: 0.9;
+  }
+
+  /* 세로가 매우 짧은 화면에서만 문서 스크롤 허용(내용 잘림 방지) */
+  @media (max-height: 600px) {
+    .slim-shell,
+    .mp {
+      height: auto;
+      min-height: 100vh;
+      overflow: visible;
+    }
+    .fp--wide,
+    .fp--wide .fp__body {
+      overflow: visible;
+    }
+  }
+

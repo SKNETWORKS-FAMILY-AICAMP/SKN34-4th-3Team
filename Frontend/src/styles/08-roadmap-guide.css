@@ -1,0 +1,149 @@
+/* 로드맵 가이드 — styles.css 원본 2318~2463줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- 로드맵 가이드 ---- */
+  .rg {
+    display: grid;
+    grid-template-columns: 236px 1fr;
+    gap: 18px;
+  }
+  .rg__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rg__navitem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    background: transparent;
+    text-align: left;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .rg__navitem:hover {
+    background: var(--surface-solid);
+  }
+  .rg__navitem--active {
+    background: var(--surface-solid);
+    border-color: var(--line);
+    color: var(--ink);
+    font-weight: 700;
+    box-shadow: var(--shadow-sm);
+  }
+  .rg__navk {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    display: grid;
+    place-items: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+  }
+  .rg__navitem--done .rg__navk {
+    background: var(--green);
+    color: #fff;
+  }
+  .rg__panel {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 22px 24px;
+  }
+  .rg__phase {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--blue);
+  }
+  .rg__title {
+    margin: 4px 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .rg__desc {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .rg__progress {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--ground-2);
+    overflow: hidden;
+    margin: 0 0 16px;
+  }
+  .rg__progress i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--violet));
+    transition: width 0.5s var(--ease);
+  }
+  .rg__tasks {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+  }
+  .rg__task {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .rg__task:last-child {
+    border-bottom: 0;
+  }
+  .rg__task input {
+    margin-top: 1px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--blue);
+    flex: none;
+  }
+  .rg__task--done span {
+    color: var(--ink-faint);
+    text-decoration: line-through;
+  }
+  .rg__ai {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--blue-wash);
+    border: 1px solid var(--edge);
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+  .rg__ai--muted {
+    color: var(--ink-soft);
+  }
+  @media (max-width: 760px) {
+    .rg {
+      grid-template-columns: 1fr;
+    }
+    .rg__nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    .rg__navitem {
+      width: auto;
+    }
+    .rg__navitem span:not(.rg__navk) {
+      display: none;
+    }
+  }
+

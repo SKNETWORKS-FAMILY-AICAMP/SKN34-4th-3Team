@@ -1,0 +1,21 @@
+[project]
+name = "db"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "HJK013", email = "kimhj9995@naver.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "holidays>=0.103",
+    "psycopg2-binary>=2.9.12",
+    "python-dotenv>=1.2.3",
+    "requests>=2.34.2",
+]
+
+[project.scripts]
+db = "db:main"
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"

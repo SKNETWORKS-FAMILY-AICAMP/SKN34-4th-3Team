@@ -1,0 +1,797 @@
+/* 마이페이지 전체 — styles.css 원본 3251~3989줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- my page ---- */
+  .mp {
+    display: grid;
+    grid-template-columns: 248px 1fr;
+    min-height: 100vh;
+    background: var(--ground);
+  }
+  .mp-side {
+    border-right: 1px solid var(--line);
+    padding: 26px 18px;
+    background: var(--surface-solid);
+  }
+  .mp-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 4px 8px 26px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+  .mp-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .mp-group {
+    margin: 16px 8px 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+  }
+  .mp-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    text-align: left;
+  }
+  .mp-link:hover {
+    background: var(--ground);
+    color: var(--ink);
+  }
+  .mp-link--active {
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-weight: 700;
+  }
+  .mp-link--sub {
+    padding-left: 26px;
+    font-size: 13px;
+  }
+  .mp-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--violet);
+    border: 1px solid currentColor;
+    border-radius: 5px;
+    padding: 1px 5px;
+  }
+  .mp-side__div {
+    height: 1px;
+    margin: 16px 8px;
+    background: var(--line);
+  }
+  .mp-main {
+    padding: 34px 40px 60px;
+  }
+  .mp-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 26px;
+  }
+  .mp-hello {
+    margin: 0 0 6px;
+    font-size: 23px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+  .mp-basis {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .mp-logout {
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 8px 13px;
+    border-radius: 9px;
+  }
+  .mp-logout:hover {
+    color: var(--red);
+    border-color: var(--red);
+  }
+  .mp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    max-width: 920px;
+  }
+  .mp-card {
+    background: var(--surface-solid);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow-sm);
+  }
+  /* 두 열의 카드 폭을 동일하게 유지한다. */
+  .mp-card--wide {
+    grid-column: 1 / -1;
+  }
+  .mp-card--action {
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .mp-card--action:hover {
+    border-color: var(--blue);
+    box-shadow: var(--shadow);
+  }
+  .mp-card--action:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
+  .mp-card__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .mp-card__title {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 700;
+  }
+  .mp-card__tag {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .mp-card__link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--blue-deep);
+    cursor: pointer;
+    flex: none;
+  }
+  .mp-card__link:hover,
+  .mp-card--action:hover .mp-card__link {
+    text-decoration: underline;
+  }
+
+  /* ---- 마이페이지: 공고·정책 탭 ---- */
+  .mp-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .mp-tab {
+    padding: 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-solid);
+    font: inherit;
+    font-size: 13px;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .mp-tab:hover {
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+  .mp-tab.is-active {
+    border-color: transparent;
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* ---- 마이페이지: 상담 기록 ---- */
+  .clog {
+    list-style: none;
+    margin: 14px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+  }
+  .clog__item {
+    position: relative;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--ground);
+  }
+  .clog__q {
+    margin: 0 0 6px;
+    padding-right: 74px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .clog__a {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    white-space: pre-wrap;
+  }
+  .clog__at {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+
+  /* ---- AI 추천 공고 리스트 ---- */
+  .mg__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .mg__card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-sm);
+    padding: 16px 18px;
+  }
+  .mg__top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mg__top h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mg__score {
+    flex: none;
+    font-size: 14px;
+    font-weight: 700;
+    color: #16a34a;
+  }
+  .mg__meta {
+    margin: 4px 0 10px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .mg__why {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .mg__chip {
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: var(--ground);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 9px;
+  }
+  .mg__save {
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    border-radius: 9px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .mg__save:hover {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+  }
+  .mg__save.is-saved {
+    border-color: var(--blue);
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+  }
+  .mp-pct {
+    margin: 0 0 12px;
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--blue-deep);
+  }
+  .mp-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--ground-2);
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .mp-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--blue), var(--blue-deep));
+  }
+  .mp-cite {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .mp-cite + .mp-cite {
+    margin-top: 7px;
+  }
+  .mp-cite > span:last-child {
+    text-align: right;
+  }
+  .mp-cite b {
+    color: var(--ink);
+  }
+  .mp-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .mp-rows li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 13.5px;
+  }
+  .mp-dot {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-right: 7px;
+    border-radius: 50%;
+    background: var(--blue);
+    vertical-align: middle;
+  }
+  .mp-rowval--urgent {
+    color: var(--red);
+  }
+  .mp-rows li:first-child {
+    padding-top: 0;
+  }
+  .mp-rows li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .mp-rows button {
+    all: unset;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+  }
+  .mp-rows button:hover .mp-rowlabel,
+  .mp-rows button:hover .mp-consult {
+    color: var(--blue-deep);
+  }
+  .mp-rowlabel {
+    color: var(--ink);
+  }
+  .mp-rowval {
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .mp-consult {
+    color: var(--ink-soft);
+  }
+  .mp-recap {
+    margin: 0 0 4px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .mp-rows--recap li {
+    display: block;
+    padding: 10px 0;
+  }
+  /* 질문이 길어도 한 줄로 자른다 → 줄 수가 고정되니 카드 높이도 안 흔들린다 */
+  .mp-rows--recap .mp-consult {
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mp-consult--none {
+    color: var(--ink-faint);
+  }
+  .mp-deadline-card {
+    min-width: 0;
+  }
+  .mp-deadline-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 116px;
+    overflow-y: auto;
+  }
+  .mp-deadline-list li {
+    display: grid;
+    grid-template-columns: 7px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-height: 34px;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 12.5px;
+  }
+  .mp-deadline-list li:last-child {
+    border-bottom: 0;
+  }
+  .mp-deadline-kind {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .mp-deadline-kind.is-tax {
+    background: var(--orange);
+  }
+  .mp-deadline-kind.is-policy {
+    background: var(--violet);
+  }
+  .mp-deadline-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ink-soft);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mp-deadline-list strong {
+    color: var(--amber);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .mp-deadline-list strong.is-today {
+    color: var(--red);
+  }
+  .mp-deadline-empty {
+    margin: 0;
+    padding: 20px 0;
+    color: var(--ink-faint);
+    font-size: 12.5px;
+    text-align: center;
+  }
+  .mp-stub {
+    max-width: 920px;
+    background: var(--surface-solid);
+    border: 1px dashed var(--line-strong);
+    border-radius: 16px;
+    padding: 44px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+  }
+
+  /* ---- 마이페이지: 대시보드 + 캘린더 ---- */
+  .mp-dash {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+    align-items: stretch;
+    max-width: 1200px;
+  }
+  /* 대시보드는 화면에 남는 세로를 끝까지 쓴다 (아래 카드·캘린더가 늘어난다) */
+  .mp-main--dash {
+    display: flex;
+    flex-direction: column;
+  }
+  .mp-main--dash .mp-dash {
+    flex: 1 1 auto;
+    min-height: 430px;
+  }
+  /* 윗줄(로드맵·마감 임박)은 제 높이만, 아랫줄(세무·공고지원)이 나머지를 가져간다 */
+  .mp-dash .mp-grid {
+    max-width: none;
+    grid-template-rows: minmax(190px, auto) minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+  /* 캘린더도 같은 높이까지 늘리고, 안에서 일정 목록이 남는 공간을 먹는다 */
+  .mp-dash .cal {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* 달력 칸은 원래 크기 그대로, 남는 세로는 일정 목록(스크롤 영역)이 가져간다.
+     덕분에 일정을 몇 건 넣어도 추가 입력칸 위치가 움직이지 않는다 */
+  .mp-dash .cal__grid,
+  .mp-dash .cal__add {
+    flex: none;
+  }
+  .mp-dash .cal__events {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .mp-dash .cal__evlist {
+    flex: 1 1 auto;
+    max-height: none;
+  }
+  .mp-dash .cal__day {
+    aspect-ratio: auto;
+    height: 40px;
+  }
+  /* 카드 영역이 좁아지면 카드만 1열로, 캘린더는 계속 오른쪽에 둔다 */
+  @media (max-width: 1080px) {
+    .mp-dash {
+      align-items: start;
+    }
+    .mp-dash .mp-grid {
+      grid-template-columns: 1fr;
+      grid-template-rows: none;
+      grid-auto-rows: auto;
+    }
+  }
+  /* 더 좁아지면 캘린더를 아래로 내리되 폭은 유지 */
+  @media (max-width: 860px) {
+    .mp-dash {
+      grid-template-columns: 1fr;
+    }
+    .mp-dash .cal {
+      max-width: 420px;
+      align-self: start;
+    }
+    .mp-main--dash .mp-dash {
+      min-height: 0;
+    }
+  }
+  /* 캘린더 일정 추가/삭제 */
+  .cal__add {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .cal__add input,
+  .cal__add select {
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .cal__add .cal__add-row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 6px;
+  }
+  .cal__add .cal__add-row input {
+    flex: 1;
+  }
+  .cal__add button {
+    border: 0;
+    border-radius: 8px;
+    padding: 0 12px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .cal__ev {
+    justify-content: space-between;
+  }
+  .cal__ev-del {
+    border: 0;
+    background: transparent;
+    color: var(--ink-faint);
+    cursor: pointer;
+    font-size: 13px;
+    flex: none;
+    align-self: center;
+  }
+  .cal__ev-del:hover {
+    color: var(--red);
+  }
+
+  /* ---- 지출관리 ---- */
+  .exp-form {
+    display: grid;
+    grid-template-columns: 130px 1fr 120px 130px auto;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .exp-form input,
+  .exp-form select {
+    padding: 9px 10px;
+    font: inherit;
+    font-size: 12.5px;
+    color: var(--ink);
+    background: var(--ground);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+  }
+  .exp-form button {
+    border: 0;
+    border-radius: 8px;
+    padding: 0 14px;
+    background: var(--blue);
+    color: #fff;
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  @media (max-width: 720px) {
+    .exp-form {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .exp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .exp-list li {
+    display: grid;
+    grid-template-columns: 92px 1fr auto auto 24px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 13px;
+  }
+  .exp-list li:last-child {
+    border-bottom: 0;
+  }
+  .exp-cat {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--ground);
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    justify-self: start;
+  }
+  .exp-ded {
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .exp-ded--ok {
+    color: var(--green);
+  }
+  .exp-ded--check {
+    color: var(--amber);
+  }
+  .exp-total {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  /* ---- 프로필 · 설정 ---- */
+  .pf-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px dashed var(--line-strong);
+    font-size: 13px;
+  }
+  .pf-toggle:last-child {
+    border-bottom: 0;
+  }
+  .pf-switch {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    border: 0;
+    background: var(--line-strong);
+    position: relative;
+    cursor: pointer;
+    flex: none;
+    transition: background 0.15s ease;
+  }
+  .pf-switch[aria-pressed='true'] {
+    background: var(--blue);
+  }
+  .pf-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s ease;
+  }
+  .pf-switch[aria-pressed='true']::after {
+    transform: translateX(18px);
+  }
+  .pf-saved {
+    margin: 12px 0 0;
+    font-size: 12.5px;
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .wrap {
+      padding: 0 22px;
+    }
+    .hero__inner {
+      grid-template-columns: 1fr;
+      gap: 34px;
+      padding: 44px 0 52px;
+    }
+    .stmt__grid,
+    .chat__grid {
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+    .metrics__grid {
+      grid-template-columns: repeat(2, 1fr);
+      padding: 48px 22px;
+    }
+    .mp {
+      grid-template-columns: 1fr;
+    }
+    .mp-side {
+      border-right: 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .mp-main {
+      padding: 26px 22px 48px;
+    }
+    .mp-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .hero__actions {
+      flex-direction: column;
+    }
+    .btn {
+      text-align: center;
+    }
+    .stats {
+      gap: 22px;
+      flex-wrap: wrap;
+    }
+    .metrics__grid {
+      grid-template-columns: 1fr;
+    }
+    .nav__user {
+      display: none;
+    }
+  }
+

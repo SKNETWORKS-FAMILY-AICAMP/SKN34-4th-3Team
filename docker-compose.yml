@@ -2,17 +2,95 @@ services:
   backend:
     build:
       context: ./Backend
+    restart: unless-stopped
+    environment:
+      LLM_API_URL: http://llm:8001
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:-db}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
+      TOKEN_SECRET: ${TOKEN_SECRET}
+    ports:
+      - "8000:8000"
     volumes:
       - ./Backend:/app
+    healthcheck:
+      # 이미지에 curl 이 없다. /health 는 LLM·Postgres 상태까지 조회해 수 초 걸릴 수 있어 timeout 을 넉넉히 둔다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+      llm:
+        condition: service_healthy
 
-  vision:
+  # 배포 전용. 로컬 개발은 Vite(:5173)를 쓰므로 프로필 없이는 빌드도 기동도 하지 않는다.
+  # 서버에서는 docker compose --profile frontend up -d --build 로 띄운다.
+  frontend:
     build:
-      context: ./Vision
-    volumes:
-      - ./Vision:/app
+      context: ./Frontend
+    profiles: ["frontend"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # 발표자료(Slidev) 전용. 다른 서비스와 무관한 정적 사이트라 의존성이 없다.
+  # frontend nginx 가 /ppt/ 로 프록시하므로 포트를 직접 열지 않는다.
+  # 발표 때는 docker compose --profile frontend --profile presentation up -d --build 로 함께 띄운다.
+  presentation:
+    build:
+      context: ./Presentation
+    profiles: ["presentation"]
+    restart: unless-stopped
 
   llm:
     build:
       context: ./LLM
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:-db}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
+      VECTOR_STORE_BACKEND: postgres
+      PORT: 8001
+    ports:
+      - "8001:8001"
     volumes:
       - ./LLM:/app
+    healthcheck:
+      # 이미지에 curl 이 없다. python:3.13-slim 의 기본 python 으로 확인한다.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: startup_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./DB/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./DB/app_extras.sql:/docker-entrypoint-initdb.d/02_app_extras.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db_data:

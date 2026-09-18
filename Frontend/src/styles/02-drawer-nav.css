@@ -1,0 +1,168 @@
+/* 메뉴 드로어 — styles.css 원본 281~437줄. 순서가 캐스케이드에 영향을 주므로
+   반드시 src/styles.css의 @import 목록 순서 그대로 유지할 것. */
+
+  /* ---- 옆에서 펼쳐지는 메뉴 드로어 ---- */
+  .drawer-root {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    pointer-events: none;
+  }
+  .drawer-root.is-open {
+    pointer-events: auto;
+  }
+  .drawer-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 14, 26, 0.55);
+    opacity: 0;
+    transition: opacity 0.35s var(--ease);
+  }
+  .drawer-root.is-open .drawer-overlay {
+    opacity: 1;
+  }
+  .drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: min(440px, 90vw);
+    display: flex;
+    flex-direction: column;
+    padding: 26px 34px 36px;
+    background: var(--surface-solid);
+    border-left: 1px solid var(--line);
+    box-shadow: -40px 0 90px rgba(10, 14, 26, 0.3);
+    transform: translateX(100%);
+    transition: transform 0.46s var(--ease);
+    overflow-y: auto;
+  }
+  .drawer-root.is-open .drawer {
+    transform: none;
+  }
+  .drawer__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 26px;
+  }
+  .drawer__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+  }
+  .drawer__close {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 22px;
+    line-height: 1;
+  }
+  .drawer__close:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .drawer__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .drawer__item {
+    border-top: 1px solid var(--line);
+  }
+  .drawer__item:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+  .drawer__link {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    width: 100%;
+    padding: 15px 2px;
+    background: none;
+    border: 0;
+    text-align: left;
+    font-size: clamp(16px, 4vw, 21.5px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    opacity: 0;
+    transform: translateX(34px);
+    transition: opacity 0.55s var(--ease), transform 0.55s var(--ease),
+      color 0.15s ease;
+  }
+  .drawer-root.is-open .drawer__link {
+    opacity: 1;
+    transform: none;
+    transition-delay: calc(var(--i) * 65ms + 200ms);
+  }
+  .drawer__link:hover {
+    color: var(--blue-deep);
+  }
+  .drawer__num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--blue);
+  }
+  .drawer__desc {
+    margin-left: auto;
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--ink-faint);
+    max-width: 44%;
+    text-align: right;
+  }
+  .drawer__foot {
+    margin-top: auto;
+    padding-top: 22px;
+  }
+  .drawer__auth {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .drawer__auth b {
+    color: var(--ink);
+  }
+  .drawer__user {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+  }
+  .drawer__user b {
+    font-size: 20px;
+  }
+  .drawer__login {
+    width: 100%;
+    text-align: center;
+  }
+  .drawer__hint {
+    margin: 10px 0 0;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drawer,
+    .drawer-overlay,
+    .drawer__link {
+      transition: none;
+    }
+    .drawer-root.is-open .drawer__link {
+      transition-delay: 0ms;
+    }
+    .drawer__link {
+      opacity: 1;
+      transform: none;
+    }
+  }
+

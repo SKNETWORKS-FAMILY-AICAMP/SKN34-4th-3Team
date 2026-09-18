@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1080">
+  <defs>
+    <style>
+      .cls-1, .cls-2 {
+        fill: #fff;
+      }
+
+      .cls-3 {
+        fill: #7f9188;
+      }
+
+      .cls-4, .cls-5 {
+        fill: #e1f0f9;
+      }
+
+      .cls-6 {
+        fill: #c3f4cf;
+      }
+
+      .cls-7, .cls-8 {
+        fill: #b5d4e2;
+      }
+
+      .cls-5 {
+        stroke: #dee8ee;
+      }
+
+      .cls-9 {
+        stroke-dasharray: 0 0 12 9;
+        stroke-width: 3.5px;
+      }
+
+      .cls-9, .cls-10, .cls-11, .cls-12 {
+        fill: none;
+      }
+
+      .cls-9, .cls-10, .cls-12 {
+        stroke-linecap: round;
+      }
+
+      .cls-9, .cls-12 {
+        stroke: #16845d;
+        stroke-linejoin: round;
+      }
+
+      .cls-10 {
+        stroke: #7f9188;
+      }
+
+      .cls-10, .cls-11, .cls-13, .cls-8 {
+        stroke-width: 2.5px;
+      }
+
+      .cls-11, .cls-13, .cls-8 {
+        stroke: #477688;
+      }
+
+      .cls-14 {
+        fill: #eaf5ef;
+      }
+
+      .cls-15 {
+        fill: #e8f7eb;
+      }
+
+      .cls-16 {
+        letter-spacing: -.03em;
+      }
+
+      .cls-12 {
+        stroke-width: 2.25px;
+      }
+
+      .cls-17 {
+        fill: #143f31;
+      }
+
+      .cls-18 {
+        fill: #fcfdfc;
+      }
+
+      .cls-19 {
+        fill: #15241d;
+        font-size: 28px;
+      }
+
+      .cls-19, .cls-20 {
+        font-family: MalgunGothicBold, 'Malgun Gothic';
+        font-weight: bold;
+        isolation: isolate;
+      }
+
+      .cls-13 {
+        fill: #e9f3f7;
+      }
+
+      .cls-21 {
+        letter-spacing: 0em;
+      }
+
+      .cls-2 {
+        stroke: #dce6e0;
+        stroke-width: 1.5px;
+      }
+
+      .cls-22 {
+        letter-spacing: -.02em;
+      }
+
+      .cls-23 {
+        letter-spacing: 0em;
+      }
+
+      .cls-24 {
+        fill: #16845d;
+      }
+
+      .cls-25 {
+        fill: #eef4f0;
+      }
+
+      .cls-20 {
+        fill: #33463d;
+        font-size: 20px;
+      }
+    </style>
+  </defs>
+  <rect class="cls-18" width="1440" height="1080"/>
+  <circle class="cls-17" cx="131.13" cy="455" r="34"/>
+  <circle class="cls-1" cx="131.13" cy="444" r="8"/>
+  <path class="cls-1" d="M115.13,471c0-10.67,5.33-16,16-16s16,5.33,16,16h-32Z"/>
+  <text class="cls-20" transform="translate(106.16 512.32)"><tspan x="0" y="0">USER</tspan></text>
+  <path class="cls-25" d="M291.54,214h100c11.05,0,20,8.95,20,20h0c0,11.05-8.95,20-20,20h-100c-11.05,0-20-8.95-20-20h0c0-11.05,8.95-20,20-20Z"/>
+  <text class="cls-20" transform="translate(299.15 241)"><tspan x="0" y="0">Lap</tspan><tspan class="cls-21" x="33.63" y="0">t</tspan><tspan x="41.23" y="0">op 1</tspan></text>
+  <rect class="cls-15" x="271.54" y="278" width="564" height="608" rx="24" ry="24"/>
+  <circle class="cls-7" cx="319.54" cy="330" r="26"/>
+  <g>
+    <rect class="cls-24" x="307.54" y="325.2" width="6" height="6"/>
+    <rect class="cls-24" x="314.74" y="325.2" width="6" height="6"/>
+    <rect class="cls-24" x="321.94" y="325.2" width="6" height="6"/>
+    <rect class="cls-24" x="314.74" y="318" width="6" height="6"/>
+    <path class="cls-24" d="M303.94,332.4h30c-1.6,8-6.8,12-15.6,12s-13.6-4-14.4-12Z"/>
+  </g>
+  <text class="cls-19" transform="translate(359.54 340)"><tspan x="0" y="0">Doc</tspan><tspan class="cls-22" x="51.87" y="0">k</tspan><tspan x="66.98" y="0">er Compose</tspan></text>
+  <rect class="cls-2" x="343.54" y="400" width="420" height="110" rx="22" ry="22"/>
+  <g>
+    <circle class="cls-4" cx="399.54" cy="455" r="28"/>
+    <path class="cls-12" d="M387.04,448.75l12.5-7.5,12.5,7.5v13.75l-12.5,7.5-12.5-7.5v-13.75Zm0,0l12.5,7.5,12.5-7.5m-12.5,7.5v13.75"/>
+  </g>
+  <text class="cls-19" transform="translate(445.54 467.13)"><tspan x="0" y="0">F</tspan><tspan class="cls-23" x="14.68" y="0">r</tspan><tspan x="25.57" y="0">on</tspan><tspan class="cls-21" x="59.95" y="0">t</tspan><tspan x="70.59" y="0">end</tspan></text>
+  <rect class="cls-2" x="343.54" y="560" width="420" height="110" rx="22" ry="22"/>
+  <g>
+    <circle class="cls-14" cx="399.54" cy="615" r="28"/>
+    <path class="cls-12" d="M387.04,608.75l12.5-7.5,12.5,7.5v13.75l-12.5,7.5-12.5-7.5v-13.75Zm0,0l12.5,7.5,12.5-7.5m-12.5,7.5v13.75"/>
+  </g>
+  <text class="cls-19" transform="translate(445.54 626.48)"><tspan x="0" y="0">Bac</tspan><tspan class="cls-22" x="46.69" y="0">k</tspan><tspan x="61.8" y="0">end</tspan></text>
+  <rect class="cls-2" x="343.54" y="720" width="420" height="110" rx="22" ry="22"/>
+  <g>
+    <circle class="cls-6" cx="399.54" cy="775" r="28"/>
+    <path class="cls-12" d="M387.04,768.75l12.5-7.5,12.5,7.5v13.75l-12.5,7.5-12.5-7.5v-13.75Zm0,0l12.5,7.5,12.5-7.5m-12.5,7.5v13.75"/>
+  </g>
+  <text class="cls-19" transform="translate(445.54 785.71)"><tspan x="0" y="0">LLM</tspan></text>
+  <path class="cls-10" d="M184.54,455h149"/>
+  <polygon class="cls-3" points="343.54 455 333.54 449.5 333.54 460.5 343.54 455"/>
+  <path class="cls-10" d="M553.54,510v40"/>
+  <polygon class="cls-3" points="553.54 560 548.04 550 559.04 550 553.54 560"/>
+  <path class="cls-10" d="M543.5,672.9v35.35"/>
+  <polygon class="cls-3" points="543.5 717.1 538.64 708.26 548.36 708.26 543.5 717.1"/>
+  <path class="cls-10" d="M563.57,717.1v-35.35"/>
+  <polygon class="cls-3" points="563.57 672.9 568.43 681.74 558.71 681.74 563.57 672.9"/>
+  <path class="cls-25" d="M976.71,512.58h100c11.05,0,20,8.95,20,20h0c0,11.05-8.95,20-20,20h-100c-11.05,0-20-8.95-20-20h0c0-11.05,8.95-20,20-20Z"/>
+  <text class="cls-20" transform="translate(984.32 539.58)"><tspan x="0" y="0">Lap</tspan><tspan class="cls-21" x="33.63" y="0">t</tspan><tspan x="41.23" y="0">op 2</tspan></text>
+  <rect class="cls-5" x="956.71" y="574" width="260" height="252" rx="24" ry="24"/>
+  <g>
+    <path class="cls-8" d="M1021.13,643.49v76.51c0,11.32,29.36,20.49,65.58,20.49s65.58-9.18,65.58-20.49v-76.51"/>
+    <path class="cls-11" d="M1021.13,681.74c0,11.32,29.36,20.49,65.58,20.49s65.58-9.18,65.58-20.49"/>
+    <ellipse class="cls-13" cx="1086.71" cy="643.49" rx="65.58" ry="20.49"/>
+  </g>
+  <text class="cls-19" transform="translate(1010.24 794.03)"><tspan class="cls-16" x="0" y="0">P</tspan><tspan x="16.28" y="0">os</tspan><tspan class="cls-21" x="46.57" y="0">t</tspan><tspan x="57.2" y="0">g</tspan><tspan class="cls-23" x="74.73" y="0">r</tspan><tspan x="85.61" y="0">eSQL</tspan></text>
+  <path class="cls-9" d="M775.74,615h94.71m0,80h76.65m-171.35,80h94.71v-160"/>
+  <polygon class="cls-24" points="764.6 615 778.35 607.5 778.35 622.5 764.6 615"/>
+  <polygon class="cls-24" points="764.6 775 778.35 767.5 778.35 782.5 764.6 775"/>
+  <polygon class="cls-24" points="957.4 695 943.65 687.5 943.65 702.5 957.4 695"/>
+</svg>
