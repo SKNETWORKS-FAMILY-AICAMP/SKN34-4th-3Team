@@ -27,7 +27,7 @@
 ```bash
 cd Backend
 uv sync
-uv run uvicorn main:app --host 127.0.0.1 --port 8000
+uv run uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --lifespan off
 ```
 
 Docker Compose에서는 `Backend/Dockerfile`이 같은 명령(`uv run uvicorn ... --host 0.0.0.0`)으로 뜬다.
@@ -38,7 +38,7 @@ Docker Compose에서는 `Backend/Dockerfile`이 같은 명령(`uv run uvicorn ..
 
 ## REST API 방식
 
-- **스타일:** REST + JSON (FastAPI)
+- **스타일:** REST + JSON (Django + Django Ninja)
 - **인증:** JWT 스타일 Access Token + `Authorization: Bearer <token>` (stateless)
 - **Refresh Token / 세션 쿠키 / OAuth / 소셜 로그인:** 사용하지 않음
 - **토큰 형식:** `tok_{payload}.{signature}` (HMAC-SHA256, 표준 JWT 라이브러리 아님)
@@ -239,12 +239,13 @@ Content-Type: application/json
 
 ```
 Backend/
-  main.py          # FastAPI 앱, CORS, 라우터 등록
-  api/             # REST 라우트
+  manage.py        # Django 관리 명령 (check 등)
+  config/          # Django 설정(settings), NinjaAPI·라우터 등록·/health(api.py), ASGI 진입점·기동 처리(asgi.py)
+  api/             # REST 라우트 (Ninja Router), 인증(deps.py)
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
   core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  tests/           # 표준 unittest 5개 파일
+  tests/           # 표준 unittest 6개 파일
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```

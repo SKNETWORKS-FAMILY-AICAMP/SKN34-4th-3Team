@@ -4,7 +4,7 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 
 ## Backend
 * **Language:** Python 3.13
-* **Framework:** FastAPI
+* **Framework:** Django + Django Ninja (ASGI, uvicorn). ORM은 쓰지 않고 raw SQL(`Backend/core/repo.py`)
 * **Architecture:** Controller–Service–Model
 * **Directory:** `Backend/api`, `Backend/services`, `Backend/schemas`
 * **Communication:** REST API
@@ -57,7 +57,7 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 
 ## Test
 * **LLM:** pytest. `LLM/tests/` 아래 테스트 파일 32개(354건, 2026-09-15 기준 346 passed·8 failed — 원본 PDF 부재 등 로컬 데이터 의존). `LLM/pyproject.toml`의 `testpaths = ["tests"]`
-* **Backend:** 표준 `unittest`. `Backend/tests/` 아래 5개 파일(32건). `uv run python -m unittest discover tests`
+* **Backend:** 표준 `unittest`. `Backend/tests/` 아래 6개 파일(42건). `uv run python -m unittest discover tests`
 * **Frontend:** 자동 테스트 없음
 * **Lint / Formatter:** 설정된 것 없음
 

@@ -1,9 +1,7 @@
 import logging
 import threading
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from ninja import NinjaAPI
 
 from api import admin, auth, calendar, chat, expenses, notifications, policies, stats, tax, users
 from core.config import APP_DESCRIPTION, APP_NAME, APP_VERSION, LLM_API_URL, OPENAPI_TAGS
@@ -12,6 +10,25 @@ from core.llm_client import ensure_index_ready, llm_status
 from core.postgres import postgres_status
 
 storage_mode = "pending"
+
+api = NinjaAPI(
+    title=APP_NAME,
+    version=APP_VERSION,
+    description=APP_DESCRIPTION,
+    docs_url="/docs",
+    openapi_extra={"tags": OPENAPI_TAGS},
+)
+
+api.add_router("/auth", auth.router)
+api.add_router("/users", users.router)
+api.add_router("/chat", chat.router)
+api.add_router("/calendar", calendar.router)
+api.add_router("/tax", tax.router)
+api.add_router("/expenses", expenses.router)
+api.add_router("", policies.router)
+api.add_router("/admin", admin.router)
+api.add_router("/notifications", notifications.router)
+api.add_router("", stats.router)
 
 
 def _warm_up_llm() -> None:
@@ -28,45 +45,15 @@ def _warm_up_llm() -> None:
         log.warning("LLM index warm-up error: %s", type(exc).__name__)
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
+def startup() -> None:
     global storage_mode
     storage_mode = init_db()
     # 재색인이 최대 180초라 기동을 막지 않도록 별도 스레드로 돌린다.
     threading.Thread(target=_warm_up_llm, name="llm-warmup", daemon=True).start()
-    yield
 
 
-app = FastAPI(
-    title=APP_NAME,
-    version=APP_VERSION,
-    description=APP_DESCRIPTION,
-    openapi_tags=OPENAPI_TAGS,
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(chat.router)
-app.include_router(calendar.router)
-app.include_router(tax.router)
-app.include_router(expenses.router)
-app.include_router(policies.router)
-app.include_router(admin.router)
-app.include_router(notifications.router)
-app.include_router(stats.router)
-
-
-@app.get("/health", tags=["상태"], summary="서버 상태 확인")
-def health():
+@api.get("/health", tags=["상태"], summary="서버 상태 확인")
+def health(request):
     llm = llm_status()
     postgres = postgres_status()
     policy_count = 0
@@ -87,9 +74,3 @@ def health():
         "ports": {"backend": 8000, "llm": 8001},
         "llmUrl": LLM_API_URL,
     }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

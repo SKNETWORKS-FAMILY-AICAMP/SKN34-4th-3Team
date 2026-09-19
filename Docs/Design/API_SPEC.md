@@ -1,6 +1,6 @@
 # API 명세서
 
-`Docs/Design/FUNCTIONAL_SPEC.md`의 기능(FS-xx)을 REST API로 제공하는 문서다. 아래 엔드포인트는 `Backend/api/` 아래에 구현돼 있으며(`/health`만 `Backend/main.py`), 이 문서는 설계안이 아니라 현재 구현 기준의 계약이다.
+`Docs/Design/FUNCTIONAL_SPEC.md`의 기능(FS-xx)을 REST API로 제공하는 문서다. 아래 엔드포인트는 `Backend/api/` 아래에 구현돼 있으며(`/health`만 `Backend/config/api.py`), 이 문서는 설계안이 아니라 현재 구현 기준의 계약이다.
 
 - Base URL: `http://localhost:8000` (로컬 개발 기준)
 - 인증 방식: JWT 스타일 Access Token + `Authorization: Bearer <token>` (SPA 방식, stateless). 로그인(`/auth/login`, `/admin/auth/login`) 성공 시 `accessToken` 하나만 발급(Refresh Token 없음), 프론트는 `localStorage`(`changeup.accessToken`)에 저장 후 매 요청 `Authorization: Bearer <token>` 헤더로 전달. 토큰에 `role`(`user`/`admin`) 포함, 관리자 API는 `role=admin` 추가 검증. 만료는 `TOKEN_TTL_SECONDS`(기본 7일). 로그아웃은 클라이언트에서 토큰 삭제만 수행(서버 측 무효화 없음).
@@ -130,7 +130,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## system — 서비스 상태
 
-설계 초안에는 없던 그룹이다. `Backend/main.py`가 직접 정의한다.
+설계 초안에는 없던 그룹이다. `Backend/config/api.py`가 직접 정의한다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
