@@ -137,7 +137,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | GET | /health | 연결 상태 조회 | **불필요** | - | 아래 참고 | FS-28 |
 | GET | /docs | Swagger UI | **불필요** | - | HTML | - |
 
-`GET /health` 응답 필드는 `status`, `storage`(`postgres` \| `sqlite`), `dbPath`, `postgres`, `pgvector`, `ragChunks`, `policies`, `llm`, `ragReady`, `ports`, `llmUrl`이다.
+`GET /health` 응답 필드는 `status`, `storage`(항상 `postgres`), `dbPath`, `postgres`, `pgvector`, `ragChunks`, `policies`, `llm`, `ragReady`, `ports`, `llmUrl`이다.
 `setup.sh`가 기동 확인에 `storage`와 `ragReady`를 쓴다.
 
 ## notifications — 알림

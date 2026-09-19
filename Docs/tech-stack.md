@@ -30,7 +30,7 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 * **Vector Store:** pgvector (PostgreSQL extension). `rag_documents.embedding`은 `VECTOR(1536)`이며 HNSW + `vector_cosine_ops` 인덱스를 둠
 * 관계형 데이터와 벡터 데이터 통합 관리
 * LLM 세금 질문 Semantic Cache도 같은 DB의 `tax_rag_cache` 테이블(`DB/app_extras.sql`)에 저장
-* Backend는 Postgres 연결에 실패하면 SQLite(`Backend/data/app.db`)로 폴백해 계속 뜬다. `GET /health`의 `storage`로 어느 쪽인지 확인
+* Backend는 Postgres 전용이다. 기동 시 연결에 실패하면 RuntimeError로 기동을 중단한다
 
 ## Frontend
 * **Framework:** React 18.3 + Vite 5.4

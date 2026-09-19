@@ -1137,7 +1137,7 @@ sequenceDiagram
     participant WU as llm-warmup 스레드
     participant LLM as LLM 서비스
 
-    BE->>BE: init_db() — Postgres 연결, 실패 시 SQLite 폴백
+    BE->>BE: init_db() — Postgres 연결, 실패 시 기동 중단
     BE->>WU: 데몬 스레드 시작
     BE-->>BE: 기동 완료 (요청 수신 시작)
     WU->>LLM: GET /rag/ready (3초)

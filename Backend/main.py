@@ -70,11 +70,10 @@ def health():
     llm = llm_status()
     postgres = postgres_status()
     policy_count = 0
-    if storage_mode == "postgres":
-        try:
-            policy_count = int(scalar("SELECT COUNT(*) FROM policies") or 0)
-        except Exception:
-            policy_count = 0
+    try:
+        policy_count = int(scalar("SELECT COUNT(*) FROM policies") or 0)
+    except Exception:
+        policy_count = 0
     return {
         "status": "ok",
         "storage": storage_mode,
