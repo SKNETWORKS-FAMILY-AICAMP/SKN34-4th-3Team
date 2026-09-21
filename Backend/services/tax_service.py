@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 from core.llm_client import explain_tax_reduction
@@ -54,10 +54,7 @@ def check_tax_reduction(user_id: int) -> dict:
     user = repo.get_user(user_id)
     profile = repo.get_profile(user_id)
     if not user or not user.get("age") or not profile or not profile.get("founded_at"):
-        raise HTTPException(
-            status_code=400,
-            detail="개인정보와 사업자 정보(나이, 창업일)가 있어야 판정할 수 있습니다.",
-        )
+        raise HttpError(400, "개인정보와 사업자 정보(나이, 창업일)가 있어야 판정할 수 있습니다.")
 
     reasons: list[str] = []
     eligible = True
@@ -112,7 +109,7 @@ def check_tax_reduction(user_id: int) -> dict:
 def latest_tax_reduction(user_id: int) -> dict:
     result = repo.latest_tax_reduction(user_id)
     if not result:
-        raise HTTPException(status_code=404, detail="판정 결과가 없습니다.")
+        raise HttpError(404, "판정 결과가 없습니다.")
     return {
         "eligible": result["eligible"],
         "reasons": result["reasons"] or [],

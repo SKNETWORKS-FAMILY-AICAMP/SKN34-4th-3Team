@@ -1,7 +1,7 @@
 import logging
 from datetime import date
 
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 from core.llm_client import rag_answer
@@ -199,7 +199,7 @@ def send_message(
     roadmap_step: str | None = None,
 ) -> dict:
     if category not in SUGGESTED:
-        raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
+        raise HttpError(400, "지원하지 않는 카테고리입니다.")
     # 현재 질문은 question으로만 보낸다. 저장은 LLM 응답 이후라 여기서는 중복되지 않는다.
     history = _conversation_history(user_id, category)
     rag = rag_answer(
@@ -275,7 +275,7 @@ def get_sources(message_id: int, user_id: int) -> list[dict]:
     # 남의 메시지는 존재 사실 자체를 숨기려고 403이 아니라 404로 답한다.
     # 관리자 예외는 두지 않는다. 관리자 토큰의 id는 사용자 메시지와 일치하지 않는다.
     if not message or message.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="메시지를 찾을 수 없습니다.")
+        raise HttpError(404, "메시지를 찾을 수 없습니다.")
     return repo.chat_sources(message_id)
 
 

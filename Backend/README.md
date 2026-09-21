@@ -15,7 +15,7 @@
 | **Backend (이 폴더)** | **8000** | `http://127.0.0.1:8000` |
 | LLM | 8001 | `http://127.0.0.1:8001` (선택) |
 | Frontend | 5173 | `http://127.0.0.1:5173` → `/api`를 8000으로 프록시 |
-| Postgres | 5432 | 선택. 없으면 SQLite |
+| Postgres | 5432 | 필수 |
 
 - API 시험 화면: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) (서버를 켠 뒤에만 열림)
 - 연결 상태: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
@@ -27,7 +27,7 @@
 ```bash
 cd Backend
 uv sync
-uv run uvicorn main:app --host 127.0.0.1 --port 8000
+uv run uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --lifespan off
 ```
 
 Docker Compose에서는 `Backend/Dockerfile`이 같은 명령(`uv run uvicorn ... --host 0.0.0.0`)으로 뜬다.
@@ -38,7 +38,7 @@ Docker Compose에서는 `Backend/Dockerfile`이 같은 명령(`uv run uvicorn ..
 
 ## REST API 방식
 
-- **스타일:** REST + JSON (FastAPI)
+- **스타일:** REST + JSON (Django + Django Ninja)
 - **인증:** JWT 스타일 Access Token + `Authorization: Bearer <token>` (stateless)
 - **Refresh Token / 세션 쿠키 / OAuth / 소셜 로그인:** 사용하지 않음
 - **토큰 형식:** `tok_{payload}.{signature}` (HMAC-SHA256, 표준 JWT 라이브러리 아님)
@@ -74,8 +74,7 @@ Content-Type: application/json
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `DATABASE_URL` | `postgresql://admin:admin1234@127.0.0.1:5432/startup_platform` | Postgres. 연결 실패 시 SQLite |
-| `SQLITE_PATH` | `Backend/data/app.db` | 폴백 DB 파일 |
+| `DATABASE_URL` | `postgresql://admin:admin1234@127.0.0.1:5432/startup_platform` | Postgres. 연결 실패 시 기동 중단 |
 | `LLM_API_URL` | `http://127.0.0.1:8001` | LLM 내부 API |
 | `LLM_TIMEOUT_SECONDS` | `25` | 개별 제한이 없는 LLM 호출의 기본 제한 시간 |
 | `LLM_TIMEOUT_READY` / `_CHAT_POLICY` / `_CHAT_TAX` | `3` / `45` / `120` | `/rag/ready`, `/rag/chat`(policy·roadmap / tax·expense·saving) |
@@ -91,7 +90,7 @@ Content-Type: application/json
 
 | 상황 | 동작 |
 |------|------|
-| Postgres 없음 | 1.5초 간격 8회 재시도 후 `Backend/data/app.db` (SQLite)에 저장 |
+| Postgres 없음 | 1.5초 간격 8회 재시도 후 RuntimeError로 기동 중단 |
 | Postgres 연결됨 | 기동 시 `DB/app_extras.sql`을 파일이 있으면 best-effort로 적용(실패 문장은 무시)하고 데모 데이터 시드 |
 | LLM 꺼짐 / OpenAI 키 없음 | 챗봇은 **목업 문구**, 세액감면 근거는 고정 문구. 공고 요약은 캐시가 없으면 404, 붙여넣기 요약은 503. RAG 재색인은 **502** |
 | SMTP 없음 | 메일 실발송 없이 알림함 API만 동작 |
@@ -240,13 +239,13 @@ Content-Type: application/json
 
 ```
 Backend/
-  main.py          # FastAPI 앱, CORS, 라우터 등록
-  api/             # REST 라우트
+  manage.py        # Django 관리 명령 (check 등)
+  config/          # Django 설정(settings), NinjaAPI·라우터 등록·/health(api.py), ASGI 진입점·기동 처리(asgi.py)
+  api/             # REST 라우트 (Ninja Router), 인증(deps.py)
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
-  core/            # 설정, 토큰, SQLite/Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  data/            # SQLite 폴백 파일 (gitignore 대상일 수 있음)
-  tests/           # 표준 unittest 5개 파일
+  core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
+  tests/           # 표준 unittest 6개 파일
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```

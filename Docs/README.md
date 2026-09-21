@@ -124,7 +124,7 @@ flowchart LR
 
 ```
 .
-├── Backend/         # API 서버 (FastAPI, :8000)
+├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
 ├── DB/              # DB 스키마와 수집 스크립트
