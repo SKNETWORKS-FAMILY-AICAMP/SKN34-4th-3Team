@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     retrieval_mode: Literal["dense", "hybrid"] = "hybrid"
     hybrid_dense_candidate_k: int = 20
     hybrid_bm25_candidate_k: int = 20
+    nori_retrieval_pool_k: int = 40
     hybrid_rrf_k: int = 60
     max_question_length: int = 1000
     max_context_characters: int = 12000
@@ -219,6 +220,8 @@ class Settings(BaseSettings):
             raise ValueError("HYBRID_DENSE_CANDIDATE_K must be at least 1")
         if self.hybrid_bm25_candidate_k < 1:
             raise ValueError("HYBRID_BM25_CANDIDATE_K must be at least 1")
+        if self.nori_retrieval_pool_k < self.cohere_rerank_candidate_k:
+            raise ValueError("NORI_RETRIEVAL_POOL_K must be >= COHERE_RERANK_CANDIDATE_K")
         if self.hybrid_rrf_k < 1:
             raise ValueError("HYBRID_RRF_K must be at least 1")
         if self.cohere_rerank_candidate_k < 1:

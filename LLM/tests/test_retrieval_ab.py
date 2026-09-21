@@ -3,7 +3,7 @@ import sys
 
 from src.evaluation.retrieval_ab import (
     _parse_args,
-    RequestIntervalLimiter,
+    evaluate_retrievers,
     load_holdout250_policy_cases,
     load_retrieval_cases,
     policy_level_rrf,
@@ -77,10 +77,14 @@ class _FakeIndices:
 class _FakeElasticsearch:
     indices = _FakeIndices()
 
+    def __init__(self) -> None:
+        self.search_kwargs: dict[str, object] = {}
+
     def count(self, *, index: str) -> dict[str, int]:
         return {"count": 1}
 
-    def search(self, **_: object) -> dict[str, object]:
+    def search(self, **kwargs: object) -> dict[str, object]:
+        self.search_kwargs = kwargs
         return {
             "hits": {
                 "hits": [
@@ -105,19 +109,49 @@ class _FakeElasticsearch:
 def test_elasticsearch_bm25_maps_hit_to_common_search_contract() -> None:
     from src.core.config import Settings
 
+    client = _FakeElasticsearch()
     search = ElasticsearchBM25Search(
-        Settings(_env_file=None), client=_FakeElasticsearch()  # type: ignore[arg-type]
+        Settings(_env_file=None), client=client  # type: ignore[arg-type]
     )
 
     assert search.ready() is True
-    results = search.search("청년 창업", require_policy_id=True)
+    results = search.search(
+        "청년 창업", require_policy_id=True, unique_policy_ids=True
+    )
 
     assert results[0]["chunk_id"] == "policy-7"
     assert results[0]["policy_id"] == 7
     assert results[0]["score"] == 4.2
+    assert client.search_kwargs["collapse"] == {"field": "policy_id"}
+    query = client.search_kwargs["query"]  # type: ignore[assignment]
+    multi_match = query["bool"]["must"][0]["multi_match"]  # type: ignore[index]
+    assert multi_match["type"] == "cross_fields"
+    assert multi_match["minimum_should_match"] == "25%"
 
 
-def test_cli_enables_rerank_by_default(monkeypatch, tmp_path) -> None:
+def test_elasticsearch_bm25_applies_cross_fields_and_minimum_should_match() -> None:
+    from src.core.config import Settings
+
+    client = _FakeElasticsearch()
+    search = ElasticsearchBM25Search(
+        Settings(_env_file=None), client=client  # type: ignore[arg-type]
+    )
+
+    search.search(
+        "청년 창업",
+        require_policy_id=True,
+        unique_policy_ids=True,
+        multi_match_type="cross_fields",
+        minimum_should_match="30%",
+    )
+
+    query = client.search_kwargs["query"]  # type: ignore[assignment]
+    multi_match = query["bool"]["must"][0]["multi_match"]  # type: ignore[index]
+    assert multi_match["type"] == "cross_fields"
+    assert multi_match["minimum_should_match"] == "30%"
+
+
+def test_cli_is_retrieval_only(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         sys,
         "argv",
@@ -126,9 +160,8 @@ def test_cli_enables_rerank_by_default(monkeypatch, tmp_path) -> None:
 
     args = _parse_args()
 
-    assert args.with_rerank is True
     assert args.cases is None
-    assert args.rerank_min_interval_seconds == 1.6
+    assert args.no_rerank is False
 
 
 def test_holdout250_policy_subset_contains_only_63_policy_cases() -> None:
@@ -139,7 +172,7 @@ def test_holdout250_policy_subset_contains_only_63_policy_cases() -> None:
     assert all(case["case_id"].startswith("holdout-policy-") for case in cases)
 
 
-def test_markdown_report_contains_final_comparison_and_case_rankings() -> None:
+def test_markdown_report_contains_summary_without_case_rankings() -> None:
     metrics = {
         "precision_at_k": 0.2,
         "recall_at_k": 1.0,
@@ -153,55 +186,92 @@ def test_markdown_report_contains_final_comparison_and_case_rankings() -> None:
         "case_count": 1,
         "top_k": 5,
         "candidate_k": 20,
-        "with_rerank": True,
-        "rerank_min_interval_seconds": 1.6,
+        "rerank_call_count": 0,
         "memory_bm25": metrics,
         "elasticsearch_bm25": {**metrics, "recall_at_k": 0.5},
-        "memory_bm25_rerank": metrics,
-        "elasticsearch_bm25_rerank": {**metrics, "mrr": 1.0},
-        "cases": [
-            {
-                "case_id": "policy|1",
-                "relevant_policy_ids": [7],
-                "memory_bm25": {
-                    "rerank": {
-                        "ranking": [8, 7],
-                        "metrics": {"hit_at_k": 1.0},
-                    }
-                },
-                "elasticsearch_bm25": {
-                    "rerank": {
-                        "ranking": [7, 8],
-                        "metrics": {"hit_at_k": 1.0},
-                    }
-                },
-            }
-        ],
+        "memory_hybrid": metrics,
+        "elasticsearch_hybrid": {**metrics, "mrr": 1.0},
+        "memory_hybrid_candidate": {"recall_at_k": 0.8, "hit_at_k": 0.9},
+        "elasticsearch_hybrid_candidate": {
+            "recall_at_k": 0.9,
+            "hit_at_k": 1.0,
+        },
+        "hit_comparison": {
+            "memory_only": 0,
+            "nori_only": 0,
+            "both_hit": 1,
+            "both_miss": 0,
+        },
+        "cases": [],
     }
 
     markdown = render_markdown_report(report)
 
-    assert "# 검색 방식 A/B 평가 보고서" in markdown
+    assert "# Nori POS Analyzer 검색 A/B 평가 보고서" in markdown
     assert "평가셋: test-policy-suite" in markdown
     assert "| MRR | 0.5000 | 1.0000 | +0.5000 |" in markdown
-    assert "policy\\|1" in markdown
-    assert "8, 7" in markdown
+    assert "| Recall@20 | 0.8000 | 0.9000 | +0.1000 |" in markdown
+    assert "문항별 Hybrid 결과" not in markdown
+    assert "Cohere 호출: 0회" in markdown
+    assert "사용자 사전: 미사용" in markdown
 
 
-def test_request_interval_limiter_waits_between_consecutive_calls() -> None:
-    current_time = [10.0]
-    requested_sleeps: list[float] = []
+def test_evaluate_retrievers_reports_bm25_and_hybrid_without_rerank(monkeypatch) -> None:
+    import src.evaluation.retrieval_ab as module
 
-    def clock() -> float:
-        return current_time[0]
+    class _FakeDenseSearch:
+        def __init__(self, **_: object) -> None:
+            pass
 
-    def sleeper(seconds: float) -> None:
-        requested_sleeps.append(seconds)
-        current_time[0] += seconds
+        def get_chunks(self) -> list[dict[str, object]]:
+            return [_result("dense-1", 1)]
 
-    limiter = RequestIntervalLimiter(1.6, clock=clock, sleeper=sleeper)
+        def search(self, *_: object, **__: object) -> list[dict[str, object]]:
+            return [_result("dense-1", 1)]
 
-    assert limiter.wait() == 0.0
-    current_time[0] += 0.4
-    assert limiter.wait() == 1.2
-    assert requested_sleeps == [1.2]
+    class _FakeMemoryBM25:
+        def __init__(self, _: object) -> None:
+            pass
+
+        def search(self, *_: object, **__: object) -> list[dict[str, object]]:
+            return [_result("memory-1", 1)]
+
+    class _FakeElasticsearchBM25:
+        def __init__(self, _: object) -> None:
+            pass
+
+        def ready(self) -> bool:
+            return True
+
+        def search(self, *_: object, **__: object) -> list[dict[str, object]]:
+            return [_result("elastic-1", 1)]
+
+    monkeypatch.setattr(module, "get_embedding_model", lambda: object())
+    monkeypatch.setattr(module, "PostgresVectorSearch", _FakeDenseSearch)
+    monkeypatch.setattr(module, "BM25Search", _FakeMemoryBM25)
+    monkeypatch.setattr(module, "ElasticsearchBM25Search", _FakeElasticsearchBM25)
+
+    class _Settings:
+        hybrid_rrf_k = 60
+        elasticsearch_index_alias = "rag-documents"
+
+    report = evaluate_retrievers(
+        [
+            {
+                "case_id": "policy-1",
+                "question": "청년 창업 지원",
+                "relevant_policy_ids": [1],
+            }
+        ],
+        settings=_Settings(),  # type: ignore[arg-type]
+        top_k=1,
+        candidate_k=1,
+    )
+
+    assert report["rerank_call_count"] == 0
+    assert report["memory_bm25"]["hit_at_k"] == 1.0
+    assert report["elasticsearch_bm25"]["hit_at_k"] == 1.0
+    assert report["memory_hybrid"]["hit_at_k"] == 1.0
+    assert report["elasticsearch_hybrid"]["hit_at_k"] == 1.0
+    assert report["memory_hybrid_candidate"]["recall_at_k"] == 1.0
+    assert report["elasticsearch_hybrid_candidate"]["hit_at_k"] == 1.0

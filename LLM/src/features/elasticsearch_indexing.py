@@ -13,6 +13,36 @@ from src.core.database import connect_database
 
 logger = logging.getLogger(__name__)
 _SAFE_INDEX_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+# 조사·어미·접속어·기호와 의미가 어근에 남는 파생 접미사만 제거한다.
+# 세금·법령 검색의 부정/범위 의미를 보존하기 위해 VX, VCN, MAG, MM, XPN, XSN은
+# 제거하지 않는다.
+NORI_SEARCH_STOP_TAGS = (
+    "EC",
+    "EF",
+    "EP",
+    "ETM",
+    "ETN",
+    "IC",
+    "JC",
+    "JKB",
+    "JKC",
+    "JKG",
+    "JKO",
+    "JKQ",
+    "JKS",
+    "JKV",
+    "JX",
+    "MAJ",
+    "SC",
+    "SE",
+    "SF",
+    "SP",
+    "SSC",
+    "SSO",
+    "SY",
+    "XSA",
+    "XSV",
+)
 
 
 class ElasticsearchSourceDocument(TypedDict):
@@ -53,12 +83,27 @@ def nori_index_definition() -> dict[str, Any]:
                         "decompound_mode": "mixed",
                     }
                 },
+                "filter": {
+                    "korean_search_pos": {
+                        "type": "nori_part_of_speech",
+                        "stoptags": list(NORI_SEARCH_STOP_TAGS),
+                    }
+                },
                 "analyzer": {
-                    "korean_nori_analyzer": {
+                    "korean_nori_index_analyzer": {
                         "type": "custom",
                         "tokenizer": "korean_nori_tokenizer",
                         "char_filter": ["html_strip"],
                         "filter": ["lowercase", "nori_readingform"],
+                    },
+                    "korean_nori_search_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "korean_nori_tokenizer",
+                        "filter": [
+                            "korean_search_pos",
+                            "lowercase",
+                            "nori_readingform",
+                        ],
                     }
                 },
             },
@@ -72,12 +117,14 @@ def nori_index_definition() -> dict[str, Any]:
                 "policy_id": {"type": "long"},
                 "title": {
                     "type": "text",
-                    "analyzer": "korean_nori_analyzer",
+                    "analyzer": "korean_nori_index_analyzer",
+                    "search_analyzer": "korean_nori_search_analyzer",
                     "fields": {"keyword": {"type": "keyword", "ignore_above": 512}},
                 },
                 "content": {
                     "type": "text",
-                    "analyzer": "korean_nori_analyzer",
+                    "analyzer": "korean_nori_index_analyzer",
+                    "search_analyzer": "korean_nori_search_analyzer",
                 },
                 "source": {"type": "keyword", "ignore_above": 2048},
             },
@@ -256,7 +303,7 @@ def reindex_postgres_to_elasticsearch(
         request_timeout=resolved_settings.elasticsearch_request_timeout,
     )
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    index_name = f"{alias}-{timestamp}"
+    index_name = f"{alias}-nori-v3-xsv-xsa-{timestamp}"
     created = False
     try:
         es.indices.create(index=index_name, **nori_index_definition())

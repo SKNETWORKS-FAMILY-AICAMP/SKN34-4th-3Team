@@ -1,4 +1,8 @@
-from src.features.elasticsearch_indexing import iter_bulk_actions, nori_index_definition
+from src.features.elasticsearch_indexing import (
+    NORI_SEARCH_STOP_TAGS,
+    iter_bulk_actions,
+    nori_index_definition,
+)
 
 
 def test_nori_index_definition_applies_analyzer_to_searchable_text() -> None:
@@ -8,8 +12,25 @@ def test_nori_index_definition_applies_analyzer_to_searchable_text() -> None:
     properties = definition["mappings"]["properties"]
 
     assert tokenizer == {"type": "nori_tokenizer", "decompound_mode": "mixed"}
-    assert properties["title"]["analyzer"] == "korean_nori_analyzer"
-    assert properties["content"]["analyzer"] == "korean_nori_analyzer"
+    assert "user_dictionary" not in tokenizer
+    assert "user_dictionary_rules" not in tokenizer
+    pos_filter = definition["settings"]["analysis"]["filter"]["korean_search_pos"]
+    assert pos_filter == {
+        "type": "nori_part_of_speech",
+        "stoptags": list(NORI_SEARCH_STOP_TAGS),
+    }
+    assert "XPN" not in pos_filter["stoptags"]
+    assert "VX" not in pos_filter["stoptags"]
+    assert "VCN" not in pos_filter["stoptags"]
+    assert "MAG" not in pos_filter["stoptags"]
+    assert "MM" not in pos_filter["stoptags"]
+    assert "XSN" not in pos_filter["stoptags"]
+    assert "XSA" in pos_filter["stoptags"]
+    assert "XSV" in pos_filter["stoptags"]
+    assert properties["title"]["analyzer"] == "korean_nori_index_analyzer"
+    assert properties["title"]["search_analyzer"] == "korean_nori_search_analyzer"
+    assert properties["content"]["analyzer"] == "korean_nori_index_analyzer"
+    assert properties["content"]["search_analyzer"] == "korean_nori_search_analyzer"
     assert properties["document_id"]["type"] == "keyword"
 
 

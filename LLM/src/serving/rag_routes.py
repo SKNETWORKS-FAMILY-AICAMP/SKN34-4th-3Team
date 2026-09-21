@@ -67,6 +67,8 @@ from src.serving.schemas import (
 from src.serving.errors import upstream_http_exception
 from src.vectorstores.base import VectorSearch
 from src.vectorstores.hybrid import HybridSearch
+from src.vectorstores.elasticsearch import ElasticsearchBM25Search
+from src.vectorstores.nori_hybrid import NoriHybridSearch, merge_unique_sources
 from src.vectorstores.postgres import PostgresVectorSearch, RagDocumentNotFoundError
 
 
@@ -97,7 +99,7 @@ class RagRuntime:
         self.index_lock = asyncio.Lock()
         self._cache_lock = RLock()
         self._vector_search: VectorSearch | None = None
-        self._hybrid_search: HybridSearch | None = None
+        self._hybrid_search: HybridSearch | NoriHybridSearch | None = None
         self._hybrid_settings: Settings | None = None
         self._graph: CompiledStateGraph | None = None
         self._graph_settings: Settings | None = None
@@ -156,20 +158,39 @@ class RagRuntime:
             )
         return self._vector_search
 
-    def require_hybrid_index(self, settings: Settings) -> HybridSearch:
+    def require_hybrid_index(self, settings: Settings) -> HybridSearch | NoriHybridSearch:
         """준비된 Dense 인덱스를 기존 BM25·RRF 검색과 결합해 반환한다."""
         with self._cache_lock:
             if self._hybrid_search is None or self._hybrid_settings is not settings:
                 vector_search = self.require_index()
-                self._hybrid_search = (
-                    vector_search if isinstance(vector_search, HybridSearch) else HybridSearch(
-                        dense_search=vector_search,
-                        chunks=vector_search.get_chunks(),
-                        dense_candidate_k=settings.hybrid_dense_candidate_k,
-                        bm25_candidate_k=settings.hybrid_bm25_candidate_k,
-                        rrf_k=settings.hybrid_rrf_k,
-                    )
+                dense_search = (
+                    vector_search.dense_search
+                    if isinstance(vector_search, HybridSearch)
+                    and hasattr(vector_search, "_dense_search")
+                    else vector_search
                 )
+                if isinstance(dense_search, PostgresVectorSearch):
+                    self._hybrid_search = NoriHybridSearch(
+                        dense_search=dense_search,
+                        bm25_search=ElasticsearchBM25Search(settings),
+                        retrieval_pool_k=settings.nori_retrieval_pool_k,
+                        rerank_candidate_k=settings.cohere_rerank_candidate_k,
+                        rrf_k=settings.hybrid_rrf_k,
+                        exact_legal_search=(
+                            vector_search.search_legal_reference
+                            if isinstance(vector_search, HybridSearch) else None
+                        ),
+                    )
+                else:
+                    self._hybrid_search = (
+                        vector_search if isinstance(vector_search, HybridSearch) else HybridSearch(
+                            dense_search=vector_search,
+                            chunks=vector_search.get_chunks(),
+                            dense_candidate_k=settings.hybrid_dense_candidate_k,
+                            bm25_candidate_k=settings.hybrid_bm25_candidate_k,
+                            rrf_k=settings.hybrid_rrf_k,
+                        )
+                    )
                 self._hybrid_settings = settings
             return self._hybrid_search
 
@@ -850,9 +871,14 @@ async def _retrieve_tax_evidence(
         if exact_reference is not None
         else []
     )
+    merged_documents = (
+        merge_unique_sources(exact_documents, rrf_documents, unit="tax")
+        if isinstance(hybrid_search, NoriHybridSearch)
+        else merge_evidence(exact_documents, rrf_documents)
+    )
     tax_documents = [
         document
-        for document in merge_evidence(exact_documents, rrf_documents)
+        for document in merged_documents
         if document["policy_id"] is None
         and document["score"] >= settings.min_relevance_score
     ]

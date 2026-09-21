@@ -5,13 +5,12 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 from statistics import mean
-from time import perf_counter, sleep
-from typing import Any, Callable, Literal, TypedDict
+from time import perf_counter
+from typing import Any, Literal, TypedDict
 
 from src.core.config import Settings, get_settings
 from src.evaluation.metrics import retrieval_metrics
 from src.models import get_embedding_model
-from src.rag.reranker import CohereRerankError, rerank_documents
 from src.vectorstores.elasticsearch import ElasticsearchBM25Search
 from src.vectorstores.hybrid import BM25Search
 from src.vectorstores.postgres import PostgresVectorSearch
@@ -37,34 +36,12 @@ class RankingMetrics:
     average_latency_ms: float
 
 
-class RequestIntervalLimiter:
-    """외부 API 요청 시작 간 최소 간격을 보장하는 단순 rate limiter."""
+@dataclass(frozen=True, slots=True)
+class CandidateMetrics:
+    """후보 정책 집합의 평균 Recall과 Hit."""
 
-    def __init__(
-        self,
-        minimum_interval_seconds: float,
-        *,
-        clock: Callable[[], float] = perf_counter,
-        sleeper: Callable[[float], None] = sleep,
-    ) -> None:
-        if minimum_interval_seconds < 0:
-            raise ValueError("minimum_interval_seconds must not be negative")
-        self._minimum_interval_seconds = minimum_interval_seconds
-        self._clock = clock
-        self._sleeper = sleeper
-        self._last_request_started: float | None = None
-
-    def wait(self) -> float:
-        """필요한 만큼 대기하고 실제 대기 요청 시간을 초 단위로 반환한다."""
-        now = self._clock()
-        wait_seconds = 0.0
-        if self._last_request_started is not None:
-            elapsed = now - self._last_request_started
-            wait_seconds = max(0.0, self._minimum_interval_seconds - elapsed)
-            if wait_seconds:
-                self._sleeper(wait_seconds)
-        self._last_request_started = self._clock()
-        return wait_seconds
+    recall_at_k: float
+    hit_at_k: float
 
 
 def policy_level_rrf(
@@ -157,14 +134,12 @@ def evaluate_retrievers(
     settings: Settings,
     top_k: int,
     candidate_k: int,
-    with_rerank: bool,
     suite_name: str = "custom",
-    rerank_min_interval_seconds: float = 1.6,
 ) -> dict[str, Any]:
-    """기존 BM25와 Elasticsearch BM25를 동일 Dense 결과로 A/B 평가한다.
+    """BM25 단독과 동일 Dense를 공유한 Hybrid 검색을 A/B 평가한다.
 
-    LangGraph Router, 근거 충분성 Judge와 최종 답변 LLM은 호출하지 않는다.
-    Dense query embedding은 문항당 한 번만 생성해 두 실험군이 공유한다.
+    Cohere/Rerank, LangGraph Router/Judge와 최종 답변 LLM은 호출하지 않는다.
+    Dense query embedding은 문항당 한 번만 생성해 두 Hybrid 실험군이 공유한다.
     """
     dense_search = PostgresVectorSearch(
         embedding=get_embedding_model(),
@@ -178,9 +153,6 @@ def evaluate_retrievers(
             "Run the indexing command first."
         )
 
-    rerank_limiter = RequestIntervalLimiter(rerank_min_interval_seconds)
-    total_throttle_wait_seconds = 0.0
-
     rows: list[dict[str, Any]] = []
     for case in cases:
         question = case["question"]
@@ -191,63 +163,57 @@ def evaluate_retrievers(
             question,
             source_types=("policy", "announcement"),
             require_policy_id=True,
+            unique_policy_ids=True,
             top_k=candidate_k,
         )
         dense_ms = (perf_counter() - dense_started) * 1000
 
         branch_results: dict[str, dict[str, Any]] = {}
-        for name, lexical_search in (
-            ("memory_bm25", memory_bm25),
-            ("elasticsearch_bm25", elasticsearch_bm25),
+        for prefix, lexical_search in (
+            ("memory", memory_bm25),
+            ("elasticsearch", elasticsearch_bm25),
         ):
-            branch_started = perf_counter()
+            lexical_started = perf_counter()
             lexical_results = lexical_search.search(
                 question,
                 source_types=("policy", "announcement"),
                 require_policy_id=True,
+                unique_policy_ids=True,
                 top_k=candidate_k,
             )
+            lexical_ms = (perf_counter() - lexical_started) * 1000
+            lexical_ranking = _policy_ids(lexical_results, top_k)
+            branch_results[f"{prefix}_bm25"] = _stage_result(
+                lexical_ranking, relevant, top_k, lexical_ms
+            )
+
+            fusion_started = perf_counter()
             fused = policy_level_rrf(
                 dense_results,
                 lexical_results,
                 rrf_k=settings.hybrid_rrf_k,
                 top_k=candidate_k,
             )
-            retrieval_ms = dense_ms + (perf_counter() - branch_started) * 1000
-            pre_rerank_ids = _policy_ids(fused, top_k)
-            branch: dict[str, Any] = {
-                "ranking": pre_rerank_ids,
-                "metrics": _case_metrics(pre_rerank_ids, relevant, top_k),
-                "latency_ms": retrieval_ms,
-                "dense_candidates": _policy_ids(dense_results, candidate_k),
-                "bm25_candidates": _policy_ids(lexical_results, candidate_k),
-            }
-            if with_rerank:
-                total_throttle_wait_seconds += rerank_limiter.wait()
-                rerank_started = perf_counter()
-                try:
-                    reranked = rerank_documents(
-                        question,
-                        fused,
-                        top_n=top_k,
-                        settings=settings,
-                    )
-                except CohereRerankError as exc:
-                    raise RuntimeError(f"Rerank failed for {case['case_id']}: {exc}") from exc
-                rerank_ids = _policy_ids(reranked, top_k)
-                branch["rerank"] = {
-                    "ranking": rerank_ids,
-                    "metrics": _case_metrics(rerank_ids, relevant, top_k),
-                    "latency_ms": retrieval_ms
-                    + (perf_counter() - rerank_started) * 1000,
-                }
-            branch_results[name] = branch
+            fusion_ms = (perf_counter() - fusion_started) * 1000
+            hybrid_candidate_ranking = _policy_ids(fused, candidate_k)
+            hybrid_result = _stage_result(
+                hybrid_candidate_ranking[:top_k],
+                relevant,
+                top_k,
+                dense_ms + lexical_ms + fusion_ms,
+            )
+            hybrid_result["candidate_ranking"] = hybrid_candidate_ranking
+            hybrid_result["candidate_metrics"] = _candidate_metrics(
+                hybrid_candidate_ranking, relevant, candidate_k
+            )
+            branch_results[f"{prefix}_hybrid"] = hybrid_result
 
         rows.append(
             {
                 "case_id": case["case_id"],
                 "question": question,
                 "relevant_policy_ids": sorted(relevant),
+                "dense_candidates": _policy_ids(dense_results, candidate_k),
                 **branch_results,
             }
         )
@@ -257,25 +223,37 @@ def evaluate_retrievers(
         "case_count": len(rows),
         "top_k": top_k,
         "candidate_k": candidate_k,
-        "with_rerank": with_rerank,
-        "rerank_min_interval_seconds": (
-            rerank_min_interval_seconds if with_rerank else None
+        "analyzer_version": "nori-v2-pos",
+        "user_dictionary_applied": False,
+        "pos_filter_applied": True,
+        "index_search_analyzers_separated": True,
+        "rerank_used": False,
+        "rerank_call_count": 0,
+        "memory_bm25": asdict(_aggregate(rows, "memory_bm25")),
+        "elasticsearch_bm25": asdict(_aggregate(rows, "elasticsearch_bm25")),
+        "memory_hybrid": asdict(_aggregate(rows, "memory_hybrid")),
+        "elasticsearch_hybrid": asdict(_aggregate(rows, "elasticsearch_hybrid")),
+        "memory_hybrid_candidate": asdict(
+            _aggregate_candidate(rows, "memory_hybrid")
         ),
-        "rerank_throttle_wait_seconds": total_throttle_wait_seconds,
-        "memory_bm25": asdict(_aggregate(rows, "memory_bm25", top_k)),
-        "elasticsearch_bm25": asdict(
-            _aggregate(rows, "elasticsearch_bm25", top_k)
+        "elasticsearch_hybrid_candidate": asdict(
+            _aggregate_candidate(rows, "elasticsearch_hybrid")
         ),
+        "hit_comparison": _hit_comparison(rows),
         "cases": rows,
     }
-    if with_rerank:
-        report["memory_bm25_rerank"] = asdict(
-            _aggregate(rows, "memory_bm25", top_k, stage="rerank")
-        )
-        report["elasticsearch_bm25_rerank"] = asdict(
-            _aggregate(rows, "elasticsearch_bm25", top_k, stage="rerank")
-        )
     return report
+
+
+def _stage_result(
+    ranking: list[int], relevant: set[int], top_k: int, latency_ms: float
+) -> dict[str, Any]:
+    """문항별 순위, 정확도와 지연시간을 공통 구조로 반환한다."""
+    return {
+        "ranking": ranking,
+        "metrics": _case_metrics(ranking, relevant, top_k),
+        "latency_ms": latency_ms,
+    }
 
 
 def _policy_ids(results: list[dict[str, Any]], limit: int) -> list[int]:
@@ -305,14 +283,27 @@ def _case_metrics(ranking: list[int], relevant: set[int], top_k: int) -> dict[st
     }
 
 
+def _candidate_metrics(
+    ranking: list[int], relevant: set[int], candidate_k: int
+) -> dict[str, float]:
+    """고유 정책 후보 순위의 Recall@candidate_k와 Hit@candidate_k를 계산한다."""
+    relevant_hits = set(ranking[:candidate_k]) & relevant
+    return {
+        "recall_at_k": len(relevant_hits) / len(relevant) if relevant else 0.0,
+        "hit_at_k": float(bool(relevant_hits)),
+    }
+
+
 def _aggregate(
     rows: list[dict[str, Any]],
-    branch: Literal["memory_bm25", "elasticsearch_bm25"],
-    top_k: int,
-    *,
-    stage: Literal["rerank"] | None = None,
+    stage: Literal[
+        "memory_bm25",
+        "elasticsearch_bm25",
+        "memory_hybrid",
+        "elasticsearch_hybrid",
+    ],
 ) -> RankingMetrics:
-    values = [row[branch][stage] if stage else row[branch] for row in rows]
+    values = [row[stage] for row in rows]
     return RankingMetrics(
         precision_at_k=mean(value["metrics"]["precision_at_k"] for value in values),
         recall_at_k=mean(value["metrics"]["recall_at_k"] for value in values),
@@ -323,108 +314,107 @@ def _aggregate(
     )
 
 
+def _aggregate_candidate(
+    rows: list[dict[str, Any]],
+    stage: Literal["memory_hybrid", "elasticsearch_hybrid"],
+) -> CandidateMetrics:
+    values = [row[stage]["candidate_metrics"] for row in rows]
+    return CandidateMetrics(
+        recall_at_k=mean(value["recall_at_k"] for value in values),
+        hit_at_k=mean(value["hit_at_k"] for value in values),
+    )
+
+
+def _hit_comparison(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """두 Hybrid 방식의 문항별 Hit/Miss 교차 건수를 계산한다."""
+    counts = {"memory_only": 0, "nori_only": 0, "both_hit": 0, "both_miss": 0}
+    for row in rows:
+        memory_hit = bool(row["memory_hybrid"]["metrics"]["hit_at_k"])
+        nori_hit = bool(row["elasticsearch_hybrid"]["metrics"]["hit_at_k"])
+        if memory_hit and nori_hit:
+            counts["both_hit"] += 1
+        elif memory_hit:
+            counts["memory_only"] += 1
+        elif nori_hit:
+            counts["nori_only"] += 1
+        else:
+            counts["both_miss"] += 1
+    return counts
+
+
 def render_markdown_report(report: dict[str, Any]) -> str:
-    """A/B 평가 JSON 결과를 사람이 읽기 쉬운 Markdown 보고서로 변환한다."""
+    """BM25 단독·Hybrid A/B 결과를 Markdown 보고서로 변환한다."""
+    hit = report["hit_comparison"]
     lines = [
-        "# 검색 방식 A/B 평가 보고서",
+        "# Nori POS Analyzer 검색 A/B 평가 보고서",
         "",
         "## 평가 설정",
         "",
-        f"- 평가셋: {report.get('suite', 'custom')}",
+        f"- 평가셋: {report['suite']}",
         f"- 평가 문항: {report['case_count']}건",
-        f"- 최종 평가 순위: Top-{report['top_k']}",
-        f"- RRF 후보 수: {report['candidate_k']}",
-        f"- Rerank 포함: {'예' if report['with_rerank'] else '아니요'}",
-        f"- Cohere 최소 호출 간격: {report.get('rerank_min_interval_seconds') or 0}초",
-        "- 기존 방식: Dense + 메모리 BM25 + 정책 단위 RRF + Rerank",
-        "- 개선 방식: Dense + Elasticsearch Nori BM25 + 정책 단위 RRF + Rerank",
-        "- 최종 자연어 답변 생성 및 LLM 근거 충분성 판단: 미실행",
+        f"- Top-K: {report['top_k']}",
+        f"- candidate_k: {report['candidate_k']}",
+        "- Cohere Rerank: 미사용",
+        f"- Cohere 호출: {report['rerank_call_count']}회",
+        "- 기존 방식: Dense + Memory BM25 + 정책 단위 RRF",
+        "- 개선 방식: Dense + Elasticsearch Nori POS BM25 + 정책 단위 RRF",
+        "- 후보 구성: 각 검색기에서 중복 없는 policy_id 20개",
+        "- 사용자 사전: 미사용",
+        "- custom nori_part_of_speech: 적용",
+        "- index/search analyzer: 분리 적용",
+        "- 최종 답변·LangGraph Router·Judge: 미실행",
         "- 주의: 기존 평가에 노출된 개발용 A/B subset이며 신규 홀드아웃 성능이 아님",
         "",
-        "## 최종 결과",
+        "## BM25 단독 성능",
         "",
+        *_markdown_metric_table(
+            report["memory_bm25"],
+            report["elasticsearch_bm25"],
+            "기존 Memory BM25",
+            "개선 Nori BM25",
+        ),
+        "",
+        "## Hybrid 성능",
+        "",
+        *_markdown_metric_table(
+            report["memory_hybrid"],
+            report["elasticsearch_hybrid"],
+            "기존 Hybrid",
+            "개선 Nori Hybrid",
+        ),
+        "",
+        f"## Hybrid 고유 정책 후보 Top-{report['candidate_k']} 성능",
+        "",
+        *_markdown_candidate_metric_table(report),
+        "",
+        "## Hybrid Hit@5 비교 요약",
+        "",
+        f"- 기존만 성공: {hit['memory_only']}건",
+        f"- 개선 Nori만 성공: {hit['nori_only']}건",
+        f"- 둘 다 성공: {hit['both_hit']}건",
+        f"- 둘 다 실패: {hit['both_miss']}건",
     ]
-    final_memory_key = (
-        "memory_bm25_rerank" if report["with_rerank"] else "memory_bm25"
-    )
-    final_elastic_key = (
-        "elasticsearch_bm25_rerank"
-        if report["with_rerank"]
-        else "elasticsearch_bm25"
-    )
-    lines.extend(
-        _markdown_metric_table(
-            report[final_memory_key],
-            report[final_elastic_key],
-        )
-    )
-    if report["with_rerank"]:
-        lines.extend(
-            [
-                "",
-                "## Rerank 전 결과",
-                "",
-                *_markdown_metric_table(
-                    report["memory_bm25"],
-                    report["elasticsearch_bm25"],
-                ),
-            ]
-        )
-
-    lines.extend(
-        [
-            "",
-            "## 문항별 최종 순위",
-            "",
-            "| Case | 정답 정책 ID | 기존 방식 Top-K | Elasticsearch 방식 Top-K | 기존 Hit | ES Hit |",
-            "|---|---|---|---|---:|---:|",
-        ]
-    )
-    stage = "rerank" if report["with_rerank"] else None
-    for case in report["cases"]:
-        memory = case["memory_bm25"][stage] if stage else case["memory_bm25"]
-        elastic = (
-            case["elasticsearch_bm25"][stage]
-            if stage
-            else case["elasticsearch_bm25"]
-        )
-        relevant = ", ".join(map(str, case["relevant_policy_ids"]))
-        memory_ranking = ", ".join(map(str, memory["ranking"])) or "-"
-        elastic_ranking = ", ".join(map(str, elastic["ranking"])) or "-"
-        lines.append(
-            f"| {_markdown_cell(case['case_id'])} | {relevant} | {memory_ranking} | "
-            f"{elastic_ranking} | {int(memory['metrics']['hit_at_k'])} | "
-            f"{int(elastic['metrics']['hit_at_k'])} |"
-        )
-    lines.extend(
-        [
-            "",
-            "## 해석 주의사항",
-            "",
-            "- 두 방식은 동일한 Dense 검색 결과를 공유한다.",
-            "- 최종 비교는 Rerank가 포함된 결과를 기준으로 한다.",
-            "- Elasticsearch는 원천 문서 단위, 기존 검색은 청크 단위이므로 정책 ID 단위로 중복을 제거해 평가한다.",
-            "- 본 보고서는 검색 정확도 평가이며 최종 LLM 답변 품질을 측정하지 않는다.",
-            "",
-        ]
-    )
+    lines.extend(["", "## 결과 해석", "", *_interpretation_lines(report), ""])
     return "\n".join(lines)
 
 
 def _markdown_metric_table(
-    memory: dict[str, float], elastic: dict[str, float]
+    memory: dict[str, float],
+    elastic: dict[str, float],
+    memory_label: str,
+    elastic_label: str,
 ) -> list[str]:
     """기존·Elasticsearch 지표와 개선 폭을 Markdown 표로 만든다."""
     labels = (
-        ("Precision@K", "precision_at_k"),
-        ("Recall@K", "recall_at_k"),
+        ("Precision@5", "precision_at_k"),
+        ("Recall@5", "recall_at_k"),
         ("MRR", "mrr"),
-        ("MAP@K", "map_at_k"),
-        ("Hit@K", "hit_at_k"),
+        ("MAP@5", "map_at_k"),
+        ("Hit@5", "hit_at_k"),
         ("평균 지연시간(ms)", "average_latency_ms"),
     )
     rows = [
-        "| 지표 | 기존 방식 | Elasticsearch 방식 | 차이(ES-기존) |",
+        f"| 지표 | {memory_label} | {elastic_label} | 차이(Nori-기존) |",
         "|---|---:|---:|---:|",
     ]
     for label, key in labels:
@@ -435,6 +425,46 @@ def _markdown_metric_table(
             f"{elastic_value - memory_value:+.4f} |"
         )
     return rows
+
+
+def _markdown_candidate_metric_table(report: dict[str, Any]) -> list[str]:
+    """고유 정책 candidate_k 기준 Hybrid Recall과 Hit 표를 만든다."""
+    candidate_k = report["candidate_k"]
+    memory = report["memory_hybrid_candidate"]
+    elastic = report["elasticsearch_hybrid_candidate"]
+    rows = [
+        "| 지표 | 기존 Hybrid | 개선 Nori Hybrid | 차이(Nori-기존) |",
+        "|---|---:|---:|---:|",
+    ]
+    for label, key in (
+        (f"Recall@{candidate_k}", "recall_at_k"),
+        (f"Hit@{candidate_k}", "hit_at_k"),
+    ):
+        difference = float(elastic[key]) - float(memory[key])
+        rows.append(
+            f"| {label} | {float(memory[key]):.4f} | "
+            f"{float(elastic[key]):.4f} | {difference:+.4f} |"
+        )
+    return rows
+
+
+def _interpretation_lines(report: dict[str, Any]) -> list[str]:
+    """Hybrid 주요 지표 차이를 방향 그대로 기술한다."""
+    lines: list[str] = []
+    for label, key in (
+        ("Recall@5", "recall_at_k"),
+        ("MRR", "mrr"),
+        ("MAP@5", "map_at_k"),
+        ("Hit@5", "hit_at_k"),
+    ):
+        difference = (
+            float(report["elasticsearch_hybrid"][key])
+            - float(report["memory_hybrid"][key])
+        )
+        direction = "개선" if difference > 0 else "하락" if difference < 0 else "동일"
+        lines.append(f"- Hybrid {label}: {direction} ({difference:+.4f})")
+    lines.append("- 이 정책 평가 결과만으로 세금 검색 성능을 결론내리지 않는다.")
+    return lines
 
 
 def _markdown_cell(value: object) -> str:
@@ -456,18 +486,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--candidate-k", type=int, default=20)
     parser.add_argument(
-        "--rerank-min-interval-seconds",
-        type=float,
-        default=1.6,
-        help="Minimum interval between Cohere calls. Default 1.6s (about 37.5/min).",
-    )
-    parser.add_argument(
         "--no-rerank",
-        action="store_false",
-        dest="with_rerank",
-        help="Disable Cohere rerank only for intermediate retrieval diagnostics.",
+        action="store_true",
+        help="Explicit marker retained for this retrieval-only experiment.",
     )
-    parser.set_defaults(with_rerank=True)
     return parser.parse_args()
 
 
@@ -476,10 +498,6 @@ def main() -> None:
     args = _parse_args()
     if args.top_k < 1 or args.candidate_k < args.top_k:
         raise ValueError("candidate-k must be greater than or equal to top-k")
-    if args.rerank_min_interval_seconds < 1.5:
-        raise ValueError(
-            "rerank-min-interval-seconds must be at least 1.5 to stay at or below 40/min"
-        )
     settings = get_settings()
     if args.cases is None:
         cases = load_holdout250_policy_cases()
@@ -492,9 +510,7 @@ def main() -> None:
         settings=settings,
         top_k=args.top_k,
         candidate_k=args.candidate_k,
-        with_rerank=args.with_rerank,
         suite_name=suite_name,
-        rerank_min_interval_seconds=args.rerank_min_interval_seconds,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from elasticsearch import Elasticsearch
 
@@ -42,6 +42,10 @@ class ElasticsearchBM25Search:
         policy_id: int | None = None,
         source_types: tuple[str, ...] | None = None,
         require_policy_id: bool = False,
+        unique_policy_ids: bool = False,
+        unique_source_ids: bool = False,
+        multi_match_type: Literal["best_fields", "most_fields", "cross_fields"] = "cross_fields",
+        minimum_should_match: str | int | None = "25%",
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Nori 분석 필드에 multi-match BM25 검색을 수행한다.
@@ -51,6 +55,11 @@ class ElasticsearchBM25Search:
             policy_id: 특정 정책으로 제한할 선택적 ID.
             source_types: 허용할 원천 문서 유형.
             require_policy_id: True이면 정책과 연결된 문서만 검색.
+            unique_policy_ids: True이면 policy_id별 최상위 문서만 반환.
+            multi_match_type: Elasticsearch multi_match 결합 방식. 기본값은
+                Nori 평가로 선택한 cross_fields.
+            minimum_should_match: 문서가 충족해야 하는 최소 Query 토큰 조건.
+                기본값은 Nori 평가로 선택한 25%.
             top_k: 반환할 최대 문서 수.
 
         Returns:
@@ -69,6 +78,28 @@ class ElasticsearchBM25Search:
         if require_policy_id:
             filters.append({"exists": {"field": "policy_id"}})
 
+        search_options: dict[str, Any] = {}
+        if unique_policy_ids and unique_source_ids:
+            raise ValueError("choose one unique result unit")
+        if unique_policy_ids:
+            if not require_policy_id:
+                raise ValueError(
+                    "unique_policy_ids requires require_policy_id=True"
+                )
+            search_options["collapse"] = {"field": "policy_id"}
+        if unique_source_ids:
+            if source_types is None or len(source_types) != 1:
+                raise ValueError("unique_source_ids requires one source_type filter")
+            search_options["collapse"] = {"field": "source_id"}
+
+        multi_match: dict[str, Any] = {
+            "query": query,
+            "fields": ["title^2", "content"],
+            "type": multi_match_type,
+        }
+        if minimum_should_match is not None:
+            multi_match["minimum_should_match"] = minimum_should_match
+
         response = self._client.search(
             index=self._index,
             size=top_k,
@@ -76,16 +107,13 @@ class ElasticsearchBM25Search:
                 "bool": {
                     "must": [
                         {
-                            "multi_match": {
-                                "query": query,
-                                "fields": ["title^2", "content"],
-                                "type": "best_fields",
-                            }
+                            "multi_match": multi_match
                         }
                     ],
                     "filter": filters,
                 }
             },
+            **search_options,
         )
         return [_hit_to_result(hit) for hit in response["hits"]["hits"]]
 
