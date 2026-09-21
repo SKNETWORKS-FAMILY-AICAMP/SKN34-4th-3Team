@@ -1,9 +1,8 @@
-"""Row-level SQL access. Postgres first, SQLite fallback. Never TRUNCATE shared tables."""
+"""Row-level SQL access on Postgres. Never TRUNCATE shared tables."""
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import time
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -14,178 +13,10 @@ from core.config import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
     DATABASE_URL,
-    DATA_DIR,
     DEMO_EMAIL,
     DEMO_PASSWORD,
-    SQLITE_PATH,
 )
 from core.security import hash_password
-
-ENGINE = "sqlite"
-_pg_available = False
-
-SQLITE_DDL = """
-CREATE TABLE IF NOT EXISTS admin_users (
-    id INTEGER PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    name TEXT,
-    age INTEGER,
-    region TEXT,
-    phone TEXT,
-    status TEXT DEFAULT 'active',
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS business_profiles (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER UNIQUE,
-    business_type TEXT,
-    industry TEXT,
-    business_registered_at TEXT,
-    founded_at TEXT
-);
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    category TEXT,
-    question TEXT,
-    answer TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS answer_sources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER,
-    title TEXT,
-    url TEXT,
-    excerpt TEXT
-);
-CREATE TABLE IF NOT EXISTS tax_info (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    tax_type TEXT,
-    details TEXT,
-    updated_at TEXT
-);
-CREATE TABLE IF NOT EXISTS policies (
-    id INTEGER PRIMARY KEY,
-    admin_id INTEGER,
-    title TEXT NOT NULL,
-    region TEXT,
-    industry TEXT,
-    target TEXT,
-    benefit TEXT,
-    eligibility_rule TEXT,
-    source TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS calendar_events (
-    id INTEGER PRIMARY KEY,
-    event_type TEXT NOT NULL,
-    business_type TEXT,
-    policy_id INTEGER,
-    user_id INTEGER,
-    title TEXT,
-    due_date TEXT,
-    description TEXT
-);
-CREATE TABLE IF NOT EXISTS reminders (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    event_id INTEGER,
-    notify_at TEXT,
-    created_at TEXT,
-    dispatched INTEGER DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS tax_reduction_results (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    eligible INTEGER,
-    reasons TEXT,
-    legal_basis TEXT,
-    judged_at TEXT
-);
-CREATE TABLE IF NOT EXISTS receipts (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    image_url TEXT,
-    status TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS receipt_extractions (
-    id INTEGER PRIMARY KEY,
-    receipt_id INTEGER UNIQUE,
-    date TEXT,
-    vendor TEXT,
-    amount INTEGER,
-    items TEXT
-);
-CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY,
-    receipt_id INTEGER,
-    user_id INTEGER,
-    category TEXT,
-    amount INTEGER,
-    date TEXT,
-    deductible INTEGER,
-    deductible_confidence REAL,
-    deductible_basis TEXT
-);
-CREATE TABLE IF NOT EXISTS announcements (
-    id INTEGER PRIMARY KEY,
-    policy_id INTEGER,
-    raw_content TEXT,
-    source_url TEXT,
-    apply_start_date TEXT,
-    apply_end_date TEXT,
-    apply_method TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS announcement_summaries (
-    id INTEGER PRIMARY KEY,
-    announcement_id INTEGER UNIQUE,
-    target TEXT,
-    benefit TEXT,
-    period TEXT,
-    documents TEXT,
-    notes TEXT,
-    source TEXT,
-    llm_used INTEGER DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS saved_policies (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    policy_id INTEGER,
-    saved_at TEXT,
-    UNIQUE (user_id, policy_id)
-);
-CREATE TABLE IF NOT EXISTS tax_documents (
-    id INTEGER PRIMARY KEY,
-    admin_id INTEGER,
-    title TEXT,
-    law_name TEXT,
-    content TEXT,
-    source TEXT,
-    created_at TEXT
-);
-CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY,
-    user_id INTEGER,
-    kind TEXT,
-    title TEXT,
-    body TEXT,
-    channel TEXT,
-    status TEXT,
-    read_flag INTEGER DEFAULT 0,
-    created_at TEXT
-);
-"""
 
 _DATE_KEYS = {
     "due_date",
@@ -225,17 +56,8 @@ def postgres_connect():
         return None
 
 
-def _sqlite_connect() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(SQLITE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def _adapt(sql: str) -> str:
-    if ENGINE == "postgres":
-        return sql.replace("?", "%s")
-    return sql
+    return sql.replace("?", "%s")
 
 
 def _iso(value) -> str | None:
@@ -289,28 +111,11 @@ def _row(item) -> dict:
     return data
 
 
-def flag(value: bool):
-    if ENGINE == "postgres":
-        return bool(value)
-    return 1 if value else 0
-
-
 @contextmanager
 def connection():
-    if ENGINE == "postgres":
-        conn = postgres_connect()
-        if conn is None:
-            raise RuntimeError("Postgres 연결에 실패했습니다.")
-        try:
-            yield conn
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-        return
-    conn = _sqlite_connect()
+    conn = postgres_connect()
+    if conn is None:
+        raise RuntimeError("Postgres 연결에 실패했습니다.")
     try:
         yield conn
         conn.commit()
@@ -340,14 +145,11 @@ def execute(sql: str, params: tuple = ()) -> None:
 def insert(sql: str, params: tuple = ()) -> int:
     with connection() as conn:
         query = sql.rstrip().rstrip(";")
-        if ENGINE == "postgres":
-            if "RETURNING" not in query.upper():
-                query = f"{query} RETURNING id"
-            cur = conn.execute(_adapt(query), params)
-            row = cur.fetchone()
-            return int(dict(row)["id"])
+        if "RETURNING" not in query.upper():
+            query = f"{query} RETURNING id"
         cur = conn.execute(_adapt(query), params)
-        return int(cur.lastrowid)
+        row = cur.fetchone()
+        return int(dict(row)["id"])
 
 
 def scalar(sql: str, params: tuple = ()):
@@ -363,9 +165,7 @@ def dumps(value) -> str:
 
 def db_path() -> str:
     """진단용 DB 위치. 자격증명은 노출하지 않는다."""
-    if ENGINE == "postgres":
-        return masked_database_url()
-    return str(Path(SQLITE_PATH).resolve())
+    return masked_database_url()
 
 
 def masked_database_url() -> str:
@@ -378,20 +178,6 @@ def masked_database_url() -> str:
     port = parsed.port or 5432
     name = (parsed.path or "").lstrip("/") or "unknown"
     return f"{host}:{port}/{name}"
-
-
-def _migrate_sqlite(conn: sqlite3.Connection) -> None:
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
-    if "status" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
-    if "phone" not in columns:
-        conn.execute("ALTER TABLE users ADD COLUMN phone TEXT")
-    reminder_columns = {row[1] for row in conn.execute("PRAGMA table_info(reminders)")}
-    if "dispatched" not in reminder_columns:
-        conn.execute("ALTER TABLE reminders ADD COLUMN dispatched INTEGER DEFAULT 0")
-    calendar_columns = {row[1] for row in conn.execute("PRAGMA table_info(calendar_events)")}
-    if "user_id" not in calendar_columns:
-        conn.execute("ALTER TABLE calendar_events ADD COLUMN user_id INTEGER")
 
 
 def _apply_extras(conn) -> None:
@@ -486,32 +272,18 @@ def _seed() -> None:
 
 
 def init_db() -> str:
-    global ENGINE, _pg_available
     conn = None
     for _ in range(8):
         conn = postgres_connect()
         if conn is not None:
             break
         time.sleep(1.5)
-    if conn is not None:
-        try:
-            _apply_extras(conn)
-            conn.commit()
-            ENGINE = "postgres"
-            _pg_available = True
-        finally:
-            conn.close()
-        _seed()
-        return "postgres"
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    sqlite = _sqlite_connect()
+    if conn is None:
+        raise RuntimeError("Postgres 연결 실패. DATABASE_URL 확인")
     try:
-        sqlite.executescript(SQLITE_DDL)
-        _migrate_sqlite(sqlite)
-        sqlite.commit()
+        _apply_extras(conn)
+        conn.commit()
     finally:
-        sqlite.close()
-    ENGINE = "sqlite"
-    _pg_available = False
+        conn.close()
     _seed()
-    return "sqlite"
+    return "postgres"

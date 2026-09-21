@@ -1,9 +1,12 @@
 """chat_service.send_message: 사용자별 대화 문맥 전달 계약."""
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from fastapi import HTTPException
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+from ninja.errors import HttpError  # noqa: E402
 
 from services import chat_service
 
@@ -268,7 +271,7 @@ class ExistingContractTest(unittest.TestCase):
         with patch.object(chat_service, "repo", repo), patch.object(
             chat_service, "rag_answer"
         ) as rag_answer:
-            with self.assertRaises(HTTPException):
+            with self.assertRaises(HttpError):
                 chat_service.send_message(1, "unknown", "질문")
         repo.recent_chats.assert_not_called()
         rag_answer.assert_not_called()

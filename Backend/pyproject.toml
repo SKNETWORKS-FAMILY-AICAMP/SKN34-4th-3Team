@@ -5,10 +5,11 @@ description = "청년·1인 창업자 맞춤형 AI 행정·재정 지원 플랫�
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "python-multipart>=0.0.12",
     "psycopg[binary]>=3.2.0",
+    "django>=6.1.1",
+    "django-ninja>=1.7.1",
+    "django-cors-headers>=4.9.0",
 ]
 
 [tool.uv]

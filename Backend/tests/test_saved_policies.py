@@ -1,9 +1,12 @@
 """policy_service 관심 정책 저장·해제 계약."""
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from fastapi import HTTPException
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+from ninja.errors import HttpError  # noqa: E402
 
 from services import policy_service
 
@@ -13,7 +16,7 @@ class SavePolicyTest(unittest.TestCase):
         repo = MagicMock()
         repo.get_policy.return_value = None
         with patch.object(policy_service, "repo", repo):
-            with self.assertRaises(HTTPException) as ctx:
+            with self.assertRaises(HttpError) as ctx:
                 policy_service.save_policy(1, 999)
         self.assertEqual(ctx.exception.status_code, 404)
         repo.save_policy.assert_not_called()
