@@ -2,11 +2,12 @@ import base64
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
 
 from api.deps import get_current_user
 from schemas.expenses import (
     DeductibilityResponse,
+    ExpenseAnalysisResponse,
     ExpenseCategoryUpdate,
     ExpenseListResponse,
     ReceiptCreateResponse,
@@ -35,7 +36,18 @@ async def upload_receipt(
         filename,
         image_base64=image_b64,
         mime_type=image.content_type or "image/jpeg",
+        image_bytes=content or None,
     )
+
+
+@router.get("/receipts/{receipt_id}/image", summary="영수증 원본 이미지")
+def receipt_image(
+    receipt_id: int = Path(description="영수증 ID"),
+    current: dict = Depends(get_current_user),
+):
+    """업로드 당시 원본 이미지를 그대로 돌려준다. 나중에 어떤 영수증을 올렸는지 다시 확인할 때 쓴다."""
+    data, mime_type = expense_service.get_receipt_image(receipt_id, current["id"])
+    return Response(content=data, media_type=mime_type)
 
 
 @router.get(
@@ -83,6 +95,19 @@ def delete_expense(
 ):
     expense_service.delete_expense(expense_id, current["id"])
     return {"deleted": True}
+
+
+@router.get(
+    "/{expense_id}/analysis",
+    response_model=ExpenseAnalysisResponse,
+    summary="영수증 판독·판단 과정",
+)
+def analysis(
+    expense_id: int = Path(description="지출 ID"),
+    current: dict = Depends(get_current_user),
+):
+    """OCR이 읽은 항목과 판정에 이르는 단계를 돌려준다. LLM을 부르지 않아 즉시 응답한다."""
+    return expense_service.analysis(expense_id, current["id"])
 
 
 @router.get(

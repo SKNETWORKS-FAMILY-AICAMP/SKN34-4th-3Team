@@ -223,6 +223,13 @@ class ReceiptExtractionResponse(BaseModel):
     amount: int | None = Field(default=None, ge=0)
     items: list[str] = Field(default_factory=list)
     category: str | None = None
+    proofType: Literal[
+        "tax_invoice", "card_receipt", "cash_receipt", "simple_receipt", "unknown"
+    ] = "unknown"
+    dateText: str | None = None
+    vendorText: str | None = None
+    amountText: str | None = None
+    proofEvidence: str | None = None
     source: Literal["vision"] = "vision"
     llmUsed: bool = True
 

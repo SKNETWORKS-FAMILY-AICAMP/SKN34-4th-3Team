@@ -810,6 +810,11 @@ async def adapter_receipt_ocr(
             category=(
                 generated.category.strip() if generated.category else None
             ),
+            proofType=generated.proof_type,
+            dateText=(generated.date_text or "").strip() or None,
+            vendorText=(generated.vendor_text or "").strip() or None,
+            amountText=(generated.amount_text or "").strip() or None,
+            proofEvidence=(generated.proof_evidence or "").strip() or None,
         )
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
         raise HTTPException(

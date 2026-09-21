@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api.js';
-import { loadStoredUser, loadRoadmapDone, saveRoadmapDone, ROADMAP_KEY } from './utils.js';
+import { loadStoredUser } from './utils.js';
 import { DEFAULT_BIZ, DEFAULT_REGION, USER_STORE_KEY } from './constants.js';
 import { ScrollProgress, FloatingThemeToggle } from './components/common.jsx';
 import { Nav } from './components/Nav.jsx';
@@ -16,8 +16,6 @@ export function App() {
   const [pageKey, setPageKey] = useState('tax');
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
-  // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
-  const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
 
@@ -58,19 +56,6 @@ export function App() {
   }, []);
 
   const userId = user && user.id;
-
-  // 계정이 바뀌면 그 계정의 진행률로 교체한다. 로그아웃이면 비운다(비로그인 체크는 버림).
-  useEffect(() => {
-    setRoadmapDone(userId ? loadRoadmapDone(userId) : {});
-  }, [userId]);
-
-  // 저장 effect 대신 setter 에서 저장한다 — 계정 전환 직후 이전 상태가 새 계정 키에 덮어써지지 않게.
-  const updateRoadmapDone = (fn) =>
-    setRoadmapDone((d) => {
-      const next = typeof fn === 'function' ? fn(d) : fn;
-      if (userId) saveRoadmapDone(userId, next);
-      return next;
-    });
 
   useEffect(() => {
     if (!userId) {
@@ -158,7 +143,6 @@ export function App() {
           }}
           onNavigate={handleNavigate}
           onLoginClick={handleLoginClick}
-          roadmapDone={roadmapDone}
           savedPolicies={savedPolicies}
           onToggleSavedPolicy={toggleSavedPolicy}
           onOpenRoadmap={() => handleNavigate('roadmap')}
@@ -180,8 +164,6 @@ export function App() {
           onHome={() => setView('home')}
           onLoginClick={handleLoginClick}
           onNavigate={handleNavigate}
-          roadmapDone={roadmapDone}
-          setRoadmapDone={updateRoadmapDone}
           savedPolicies={savedPolicies}
           onToggleSavedPolicy={toggleSavedPolicy}
         />

@@ -229,24 +229,3 @@ export const loadStoredUser = () => {
     return null;
   }
 };
-
-// 창업 로드맵 진행률 — 서버 저장이 없어 이 브라우저에 계정별로 남긴다.
-
-export const ROADMAP_KEY = (userId) => `changeup:roadmap-done:${userId}`;
-
-export const loadRoadmapDone = (userId) => {
-  try {
-    const obj = JSON.parse(localStorage.getItem(ROADMAP_KEY(userId)) || '{}');
-    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
-  } catch (e) {
-    return {};
-  }
-};
-
-export const saveRoadmapDone = (userId, obj) => {
-  try {
-    localStorage.setItem(ROADMAP_KEY(userId), JSON.stringify(obj));
-  } catch (e) {
-    /* 저장 불가 환경은 무시 */
-  }
-};

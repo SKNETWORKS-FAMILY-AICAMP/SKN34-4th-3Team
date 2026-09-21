@@ -5,7 +5,7 @@ import { RoadmapGuide } from './RoadmapGuide.jsx';
 import { TaxAssistantPage } from './TaxAssistantPage.jsx';
 import { AnnouncementAnalyzer } from './AnnouncementAnalyzer.jsx';
 
-export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadmapDone, setRoadmapDone, savedPolicies = [], onToggleSavedPolicy }) {
+export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, savedPolicies = [], onToggleSavedPolicy }) {
   const meta =
     {
       roadmap: { title: '창업 로드맵' },
@@ -28,8 +28,6 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
           {pageKey === 'roadmap' && (
             <RoadmapGuide
               user={user}
-              done={roadmapDone}
-              setDone={setRoadmapDone}
               onRequireLogin={onLoginClick}
             />
           )}

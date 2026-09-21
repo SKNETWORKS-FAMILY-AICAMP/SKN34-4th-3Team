@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import date as DateValue
+from typing import Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage
@@ -54,6 +55,14 @@ class ReceiptExtractionGeneration(_GeneratedOutput):
     amount: int | None = Field(default=None, ge=0)
     items: list[str] = Field(default_factory=list)
     category: str | None = None
+    proof_type: Literal[
+        "tax_invoice", "card_receipt", "cash_receipt", "simple_receipt", "unknown"
+    ] = "unknown"
+    # 값을 읽어낸 근거: 영수증에 인쇄된 글자를 그대로 옮긴 것. 화면에서 "이 문구를 보고 판단했다"를 보여준다.
+    date_text: str | None = None
+    vendor_text: str | None = None
+    amount_text: str | None = None
+    proof_evidence: str | None = None
 
 
 LEGAL_BASIS_PROMPT = ChatPromptTemplate.from_messages(
@@ -208,8 +217,28 @@ async def extract_receipt(
                         "text": (
                             "영수증 이미지에서 직접 확인되는 거래일, 상호, 총액, 품목을 "
                             "추출하세요. 확인할 수 없는 값은 null 또는 빈 배열로 반환하고 "
-                            "값을 추정하지 마세요. category는 확인된 품목을 바탕으로 짧은 "
-                            "한국어 지출 분류를 반환하세요."
+                            "값을 추정하지 마세요. category는 확인된 품목·상호를 바탕으로 "
+                            "다음 중 정확히 하나만 반환하세요: 사무용품, 통신비, 차량유지비, "
+                            "광고선전비, 임차료, 복리후생비, 접대비, 교육·도서, 기타. "
+                            "식당·카페 영수증은 복리후생비로 하고(거래처 접대인지는 이미지로 "
+                            "알 수 없습니다), 어디에도 확실히 맞지 않으면 기타로 하세요.\n\n"
+                            "추가로 proof_type에 이 증빙의 종류를 판별해 다음 중 하나로 "
+                            "반환하세요(이미지에 실제로 보이는 표시만 근거로 판단하고, "
+                            "짐작하지 마세요):\n"
+                            "- tax_invoice: '세금계산서' 또는 '계산서'라는 문서 제목이 보임\n"
+                            "- card_receipt: '신용카드 매출전표', 카드 승인번호, 카드사명 등"
+                            "카드 결제 표시가 보임\n"
+                            "- cash_receipt: '현금영수증'이라는 문서 제목이나 현금영수증 "
+                            "승인번호가 보임\n"
+                            "- simple_receipt: 위 표시 없이 품목·금액만 있는 일반 "
+                            "간이영수증으로 보임\n"
+                            "- unknown: 이미지가 흐리거나 잘려서 증빙 종류를 판별할 수 없음\n\n"
+                            "또한 값을 읽어낸 근거를 남기세요. date_text, vendor_text, "
+                            "amount_text에는 각각 거래일·상호·총액을 읽은 자리의 인쇄 글자를 "
+                            "이미지에 보이는 그대로 옮기고(예: '합계 45,000원'), proof_evidence에는 "
+                            "proof_type을 그렇게 판단한 근거 문구(예: '신용카드 매출전표', "
+                            "'승인번호 12345678')를 그대로 옮기세요. 이미지에 없는 글자는 "
+                            "절대 만들지 말고 null로 두세요."
                         ),
                     },
                     {

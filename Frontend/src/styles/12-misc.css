@@ -74,8 +74,7 @@
     display: flex;
     flex-direction: column;
   }
-  .fp--wide .rz--nav,
-  .fp--wide .rg2__prog {
+  .fp--wide .rz--nav {
     flex: none;
   }
   /* 한 화면에 다 들어가게 단계 스트립을 한 번 더 조인다 */
@@ -110,9 +109,6 @@
     margin-top: 13px;
     font-size: 14px;
   }
-  .fp--wide .rg2__prog {
-    margin: 0 0 8px;
-  }
   .fp--wide .rg2__cols {
     flex: 1;
     min-height: 0;
@@ -121,8 +117,8 @@
   .fp--wide .rg2__tasks {
     gap: 8px;
   }
-  .fp--wide .rg2__taskrow {
-    padding: 10px 14px;
+  .fp--wide .rg2__taskbtn {
+    padding: 9px 12px;
   }
   .fp--wide .rg2__taskinfo {
     padding: 10px 14px;
@@ -132,10 +128,6 @@
   }
   .fp--wide .rg2__taskwhy {
     line-height: 1.65;
-  }
-  .fp--wide .rg2__taskmeta {
-    margin-top: 8px;
-    padding-top: 8px;
   }
   .fp--wide .rg2__goal {
     margin-bottom: 10px;

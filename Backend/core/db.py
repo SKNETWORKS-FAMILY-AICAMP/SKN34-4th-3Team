@@ -269,7 +269,7 @@ def _row(item) -> dict:
     for key in _DT_KEYS:
         if key in data:
             data[key] = _parse_dt(data[key]) if data[key] else None
-    for key in ("eligible", "deductible", "dispatched", "llm_used", "read_flag"):
+    for key in ("eligible", "deductible", "dispatched", "llm_used", "read_flag", "proof_valid"):
         if key in data and data[key] is not None:
             data[key] = bool(data[key])
     if "read_flag" in data:
@@ -284,6 +284,16 @@ def _row(item) -> dict:
             data["items"] = json.loads(data["items"] or "[]")
         except json.JSONDecodeError:
             data["items"] = []
+    if "read_meta" in data:
+        try:
+            data["read_meta"] = json.loads(data["read_meta"]) if data["read_meta"] else {}
+        except (TypeError, json.JSONDecodeError):
+            data["read_meta"] = {}
+    if "missing_fields" in data and isinstance(data["missing_fields"], str):
+        try:
+            data["missing_fields"] = json.loads(data["missing_fields"] or "[]")
+        except json.JSONDecodeError:
+            data["missing_fields"] = []
     if "legal_basis" in data and "legalBasis" not in data:
         data["legalBasis"] = data.get("legal_basis")
     return data
@@ -392,6 +402,23 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     calendar_columns = {row[1] for row in conn.execute("PRAGMA table_info(calendar_events)")}
     if "user_id" not in calendar_columns:
         conn.execute("ALTER TABLE calendar_events ADD COLUMN user_id INTEGER")
+    extraction_columns = {row[1] for row in conn.execute("PRAGMA table_info(receipt_extractions)")}
+    if "proof_type" not in extraction_columns:
+        conn.execute("ALTER TABLE receipt_extractions ADD COLUMN proof_type TEXT")
+    if "read_meta" not in extraction_columns:
+        conn.execute("ALTER TABLE receipt_extractions ADD COLUMN read_meta TEXT")
+    expense_columns = {row[1] for row in conn.execute("PRAGMA table_info(expenses)")}
+    if "deductible_tier" not in expense_columns:
+        conn.execute("ALTER TABLE expenses ADD COLUMN deductible_tier TEXT")
+    if "proof_valid" not in expense_columns:
+        conn.execute("ALTER TABLE expenses ADD COLUMN proof_valid INTEGER")
+    if "missing_fields" not in expense_columns:
+        conn.execute("ALTER TABLE expenses ADD COLUMN missing_fields TEXT")
+    receipt_columns = {row[1] for row in conn.execute("PRAGMA table_info(receipts)")}
+    if "image_data" not in receipt_columns:
+        conn.execute("ALTER TABLE receipts ADD COLUMN image_data BLOB")
+    if "mime_type" not in receipt_columns:
+        conn.execute("ALTER TABLE receipts ADD COLUMN mime_type TEXT")
 
 
 def _apply_extras(conn) -> None:

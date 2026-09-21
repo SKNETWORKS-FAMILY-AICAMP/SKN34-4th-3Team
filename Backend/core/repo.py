@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import json
+from datetime import date, datetime, timezone
 
 from core import db
 
@@ -309,24 +310,84 @@ def insert_notification(user_id: int, kind: str, title: str, body: str, channel:
     )
 
 
-def insert_receipt(user_id: int, filename: str) -> int:
+def insert_receipt(
+    user_id: int,
+    filename: str,
+    *,
+    image_bytes: bytes | None = None,
+    mime_type: str | None = None,
+) -> int:
     return db.insert(
-        "INSERT INTO receipts(user_id,image_url,status,created_at) VALUES (?,?,?,?)",
-        (user_id, filename, "done", db._iso(datetime.now())),
+        "INSERT INTO receipts(user_id,image_url,status,created_at,image_data,mime_type) VALUES (?,?,?,?,?,?)",
+        # 서버 시간대와 무관하게 UTC로 저장한다. 읽는 쪽(expense_service)이 UTC로 표시해 브라우저가 현지 시각으로 바꾼다.
+        (user_id, filename, "done", db._iso(datetime.now(timezone.utc).replace(tzinfo=None)), image_bytes, mime_type),
     )
 
 
-def insert_extraction(receipt_id: int, spent, vendor: str, amount: int, items: list) -> int:
-    return db.insert(
-        "INSERT INTO receipt_extractions(receipt_id,date,vendor,amount,items) VALUES (?,?,?,?,?)",
-        (receipt_id, db._iso(spent), vendor, amount, db.dumps(items)),
+def get_receipt_meta(receipt_id: int) -> dict | None:
+    return db.fetchone("SELECT id, user_id, created_at FROM receipts WHERE id = ?", (receipt_id,))
+
+
+def get_receipt_image(receipt_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT id, user_id, image_data, mime_type FROM receipts WHERE id = ?", (receipt_id,)
     )
 
 
-def insert_expense(receipt_id: int, user_id: int, category: str, amount: int, spent, deductible: bool, confidence: float, basis: str) -> int:
+def insert_extraction(
+    receipt_id: int,
+    spent,
+    vendor: str,
+    amount: int,
+    items: list,
+    proof_type: str = "unknown",
+    read_meta: dict | None = None,
+) -> int:
     return db.insert(
-        "INSERT INTO expenses(receipt_id,user_id,category,amount,date,deductible,deductible_confidence,deductible_basis) VALUES (?,?,?,?,?,?,?,?)",
-        (receipt_id, user_id, category, amount, db._iso(spent), db.flag(deductible), confidence, basis),
+        "INSERT INTO receipt_extractions(receipt_id,date,vendor,amount,items,proof_type,read_meta) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (
+            receipt_id,
+            db._iso(spent),
+            vendor,
+            amount,
+            db.dumps(items),
+            proof_type,
+            json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
+        ),
+    )
+
+
+def insert_expense(
+    receipt_id: int,
+    user_id: int,
+    category: str,
+    amount: int,
+    spent,
+    deductible: bool,
+    confidence: float,
+    basis: str,
+    tier: str,
+    proof_valid: bool | None,
+    missing_fields: list,
+) -> int:
+    return db.insert(
+        "INSERT INTO expenses(receipt_id,user_id,category,amount,date,deductible,"
+        "deductible_confidence,deductible_basis,deductible_tier,proof_valid,missing_fields) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            receipt_id,
+            user_id,
+            category,
+            amount,
+            db._iso(spent),
+            db.flag(deductible),
+            confidence,
+            basis,
+            tier,
+            None if proof_valid is None else db.flag(proof_valid),
+            db.dumps(missing_fields),
+        ),
     )
 
 
@@ -346,10 +407,29 @@ def list_expenses(user_id: int) -> list[dict]:
     return db.fetchall("SELECT * FROM expenses WHERE user_id = ?", (user_id,))
 
 
-def update_expense(expense_id: int, category: str, deductible: bool, confidence: float, basis: str) -> None:
+def update_expense(
+    expense_id: int,
+    category: str,
+    deductible: bool,
+    confidence: float,
+    basis: str,
+    tier: str,
+    proof_valid: bool | None,
+    missing_fields: list,
+) -> None:
     db.execute(
-        "UPDATE expenses SET category=?, deductible=?, deductible_confidence=?, deductible_basis=? WHERE id=?",
-        (category, db.flag(deductible), confidence, basis, expense_id),
+        "UPDATE expenses SET category=?, deductible=?, deductible_confidence=?, deductible_basis=?, "
+        "deductible_tier=?, proof_valid=?, missing_fields=? WHERE id=?",
+        (
+            category,
+            db.flag(deductible),
+            confidence,
+            basis,
+            tier,
+            None if proof_valid is None else db.flag(proof_valid),
+            db.dumps(missing_fields),
+            expense_id,
+        ),
     )
 
 
