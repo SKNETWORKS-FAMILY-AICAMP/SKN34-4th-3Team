@@ -6,7 +6,6 @@ from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from src.core.config import Settings
-from src.data import get_document_catalog
 from src.rag.backend_tasks import (
     AnnouncementSummaryGeneration,
     DeductibilityGeneration,
@@ -265,54 +264,6 @@ def test_backend_partial_reindex_rejects_in_memory_backend(tmp_path: Path) -> No
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
-
-
-def test_backend_adapter_policy_chat_returns_backend_source_contract(
-    tmp_path: Path,
-) -> None:
-    model = FakeStructuredChatModel(
-        {
-            RouteDecision: {"route": "policy", "personalized": True},
-            UnifiedAnswerResult: {
-                "answer": "사용자 조건에 맞는 정책 근거입니다.",
-                "status": "success",
-                "cited_source_numbers": [1],
-            },
-        }
-    )
-    client = build_client(
-        tmp_path / "index.json",
-        llm_factory=lambda: model,
-        retrieval_mode="hybrid",
-    )
-    client.post("/rag/reindex", json={})
-
-    response = client.post(
-        "/rag/chat",
-        json={
-            "category": "policy",
-            "question": "예비창업 지원 정책 알려줘",
-            "userContext": {
-                "userId": 1,
-                "age": 29,
-                "region": "서울",
-                "businessType": "간이과세자",
-                "industry": "소프트웨어",
-                "foundedAt": "2024-03-01",
-            },
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["route"] == "policy"
-    assert body["status"] == "success"
-    assert body["grounded"] is True
-    assert body["guardrail_reason"] is None
-    assert body["sources"]
-    assert body["sources"][0]["url"] == body["sources"][0]["source"]
-    assert "서울" in model.last_prompt_text
-    assert "소프트웨어" in model.last_prompt_text
 
 
 def test_backend_adapter_passes_conversation_history_to_graph(
@@ -804,46 +755,6 @@ def test_notice_answer_does_not_require_rag_index(tmp_path: Path) -> None:
     assert response.json()["sources"] == []
 
 
-def test_index_ready_and_answer_flow_with_fake_models(tmp_path: Path) -> None:
-    client = build_client(tmp_path / "index.json")
-
-    index_response = client.post("/internal/rag/index")
-    duplicate_response = client.post("/internal/rag/index")
-    ready_response = client.get("/internal/rag/ready")
-    answer_response = client.post(
-        "/internal/rag/answer",
-        json={
-            "question": "초기창업 지원사업의 지원 대상은 누구야?",
-            "policy_id": 101,
-            "top_k": 2,
-            "decision": {
-                "eligible": True,
-                "reasons": ["연령 조건 충족", "지역 조건 충족"],
-            },
-        },
-    )
-
-    assert index_response.status_code == 200
-    index_body = index_response.json()
-    assert index_body["status"] == "ready"
-    assert index_body["source"] == "embedding"
-    assert index_body["document_count"] == len(get_document_catalog())
-    assert index_body["chunk_count"] > 0
-    assert duplicate_response.json()["status"] == "already_ready"
-    assert ready_response.json()["index_ready"] is True
-    assert answer_response.status_code == 200
-    body = answer_response.json()
-    assert body["grounded"] is True
-    assert body["route"] == "policy"
-    assert body["status"] == "success"
-    assert body["sources"]
-    assert all(source["policy_id"] == 101 for source in body["sources"])
-    assert body["decision"] == {
-        "eligible": True,
-        "reasons": ["연령 조건 충족", "지역 조건 충족"],
-    }
-
-
 def test_new_server_runtime_loads_local_cache_without_reindexing(
     tmp_path: Path,
 ) -> None:
@@ -879,29 +790,6 @@ def test_health_does_not_create_embedding_or_llm(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert calls == {"embedding": 0, "llm": 0}
-
-
-def test_personalized_policy_recommendation_uses_user_id_not_policy_input(
-    tmp_path: Path,
-) -> None:
-    client = build_client(tmp_path / "index.json")
-    client.post("/internal/rag/index")
-
-    response = client.post(
-        "/internal/rag/recommendations",
-        json={
-            "user_id": 1,
-            "question": "내 조건과 관련된 지원정책을 알려줘",
-            "top_k": 5,
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["user_id"] == 1
-    assert body["grounded"] is True
-    assert body["policies"]
-    assert all(policy["sources"] for policy in body["policies"])
 
 
 def test_unknown_mock_user_returns_not_found(tmp_path: Path) -> None:

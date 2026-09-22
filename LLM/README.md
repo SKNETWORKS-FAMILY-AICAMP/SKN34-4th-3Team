@@ -581,8 +581,8 @@ uv run pytest
 ```
 
 테스트는 Fake Embedding과 Fake Chat Model을 사용하며 OpenAI, LangSmith 또는
-실제 DB에 접속하지 않는다. 다만 원본 PDF(`src/data/RAG_data`)가 필요한 일부 테스트는
-파일이 없으면 실패한다(2026-09-15 로컬 실행: 354건 중 346 passed, 8 failed).
+실제 DB에 접속하지 않는다. 저장소에 없는 초기 `src/data/RAG_data` PDF 20개를
+전제로 한 테스트는 2026-09-22에 제거했다.
 
 ## Docker
 

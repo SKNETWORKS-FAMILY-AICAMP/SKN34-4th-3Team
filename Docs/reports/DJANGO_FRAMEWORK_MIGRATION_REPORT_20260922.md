@@ -86,11 +86,31 @@ LLM Django 뷰 → Pydantic 요청 검증 → RAG 함수/LangGraph → JSON 응�
 
 [`LLM/src/data/document_catalog.py`](../../LLM/src/data/document_catalog.py)와 `in_memory` 검색 경로에는 초기 `RAG_data` PDF catalog 처리가 남아 있다. **현재 Compose는 `VECTOR_STORE_BACKEND=postgres`로 고정**되어 운영 인덱스는 PostgreSQL의 정책·공고·세법 원천 데이터에서 준비된다. 초기 PDF 20개는 저장소에 없으며 운영 그래프의 입력이 아니다.
 
-사용자 결정에 따라 이 이전 개발·테스트 경로는 삭제하지 않았다. PDF가 없어서 실패하는 테스트 8개도 이 경로의 데이터 전제를 드러내는 상태로 남겼다. 따라서 **“Django HTTP 프레임워크 전환 완료”와 “전체 테스트 무조건 통과”는 서로 다른 주장**이다.
+2026-09-22 후속 정리에서 저장소에 없는 초기 PDF 20개를 전제로 한 테스트를 제거했다. 이전에 실패하던 테스트는 8개였고, 같은 원본 PDF에 의존하던 캐시 테스트도 함께 제거했다. `test_index_cache.py`는 전체가 해당 PDF에 의존하여 삭제했고, `test_document_indexing.py`, `test_pdf_loader.py`, `test_rag_api.py`에서는 해당 테스트만 제거했다. 임시 파일로 PDF 처리의 오류 경로를 확인하는 테스트와 PostgreSQL 운영 검색 코드는 유지했다. 과거의 테스트 실패 기록은 위 5절에 당시 검증 결과로 남아 있다.
 
 ## 7. 다음 작업자가 주의할 점
 
 1. 새 HTTP 기능은 Backend에서는 Django Ninja 라우터, LLM에서는 Django URL·뷰에 등록한다. 삭제된 `LLM/src/serving/app.py`나 FastAPI 데코레이터를 다시 사용하지 않는다.
 2. LLM 요청·응답 경로를 추가하면 `LLM/src/serving/django_config/urls.py`와 `LLM/src/serving/api_schema.py`를 함께 갱신하고 Django 계약 테스트를 추가한다.
 3. LLM `/health` 200은 프로세스 생존 신호이고, RAG 준비 여부는 `/rag/ready`의 `index_ready`로 판단한다. 첫 요청의 백그라운드 준비 중에는 잠시 `false`일 수 있다.
-4. PDF 20개 관련 테스트 실패를 운영 RAG 장애로 해석하지 않는다. 테스트 데이터 전환을 별도 작업으로 결정하기 전에는 초기 mock 경로를 유지한다.
+4. 초기 PDF 20개를 전제로 한 테스트는 제거했다. `in_memory` 개발 경로는 운영 Compose의 `postgres` 경로와 분리되어 있으며 이번 정리에서 운영 검색 코드는 수정하지 않았다.
+
+후속 검증: PDF 처리·RAG API·Elasticsearch 색인 관련 테스트 35개 통과, Django HTTP 테스트 8개 통과(각각 별도 실행). 두 묶음을 한 프로세스에서 연속 실행하면 기존 전역 RAG 런타임 상태가 남아 `test_health_ready_and_cors`가 실패하는 테스트 격리 문제가 확인되었다. 이번 정리는 운영 런타임 코드를 변경하지 않았다.
+
+
+## 8. 통합 환경의 Elasticsearch 초기 적재
+
+PostgreSQL 연결과 원본 데이터 준비가 완료되었다는 전제에서 시작한다. 새 Elasticsearch 볼륨에는 검색 문서가 없다. Elasticsearch의 클러스터 healthcheck는 서버 응답만 검사하므로 인덱스 문서가 없어도 통과한다.
+
+LLM 컨테이너에 있는 적재 명령을 한 번 실행한다. 이 명령은 연결된 PostgreSQL의 `policies`, `announcements`, `tax_documents`를 읽어 Nori Elasticsearch 인덱스를 만들고 `rag-documents` 별칭을 새 인덱스로 전환한다.
+
+```bash
+docker compose up -d --build elasticsearch llm
+docker compose exec -T llm /opt/llm-venv/bin/python -m src.features.elasticsearch_indexing
+docker compose exec -T elasticsearch curl -fsS http://localhost:9200/_alias/rag-documents
+docker compose exec -T elasticsearch curl -fsS http://localhost:9200/rag-documents/_count
+```
+
+적재 명령의 `indexed=...`가 0보다 크고 별칭 조회 및 `_count`가 성공하는지 확인한다. DB에 원본 문서가 없으면 적재 명령이 실패한다. DB 내용이 바뀌면 명령을 다시 실행해야 한다. `/rag/ready`의 `index_ready=true`와 Backend `/health`의 `ragReady=true`는 pgvector RAG 준비 상태이므로 Elasticsearch 문서 존재 여부를 보장하지 않는다.
+
+관련 코드: [`docker-compose.yml`](../../docker-compose.yml), [`LLM/src/features/elasticsearch_indexing.py`](../../LLM/src/features/elasticsearch_indexing.py).
