@@ -29,10 +29,13 @@ from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
 from src.rag.backend_tasks import (
     extract_receipt,
+    extract_receipt_from_ocr,
+    generate_business_plan,
     generate_deductibility,
     generate_legal_basis,
     summarize_announcement,
 )
+from src.features.receipt_ocr import MIN_TEXT_CHARACTERS, OcrResult, OcrUnavailableError, run_ocr
 from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
@@ -43,6 +46,8 @@ from src.rag.tax_cache import TaxRagCache
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
+    BusinessPlanRequest,
+    BusinessPlanResponse,
     BackendUserContext,
     DeductibilityRequest,
     DeductibilityResponse,
@@ -727,6 +732,48 @@ async def adapter_deductibility(
 
 
 @adapter_router.post(
+    "/business-plan",
+    response_model=BusinessPlanResponse,
+)
+async def adapter_business_plan(
+    request_body: BusinessPlanRequest,
+    rag_runtime: RagRuntime = Depends(get_runtime),
+) -> BusinessPlanResponse:
+    """사용자가 입력한 사업 정보만으로 PSST 사업계획서 초안을 생성한다. 법령 근거는 쓰지 않는다."""
+    try:
+        generated = await generate_business_plan(
+            rag_runtime.llm_factory(),
+            business_name=request_body.businessName,
+            tagline=request_body.tagline,
+            target_customer=request_body.targetCustomer,
+            problem_input=request_body.problem,
+            solution_input=request_body.solution,
+            differentiator=request_body.differentiator,
+            team_input=request_body.team,
+            target_program=request_body.targetProgram,
+            extra_notes=request_body.extraNotes,
+        )
+        return BusinessPlanResponse(
+            problem=generated.problem,
+            solution=generated.solution,
+            scaleUp=generated.scale_up,
+            team=generated.team,
+            summary=generated.summary,
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan generation failed.",
+        ) from exc
+
+
+@adapter_router.post(
     "/summarize-announcement",
     response_model=AnnouncementSummaryResponse,
 )
@@ -776,7 +823,10 @@ async def adapter_receipt_ocr(
     image: UploadFile = File(...),
     rag_runtime: RagRuntime = Depends(get_runtime),
 ) -> ReceiptExtractionResponse:
-    """4 MiB 이하 영수증 이미지를 Vision 구조화 출력으로 추출한다."""
+    """4 MiB 이하 영수증 이미지를 OCR로 읽고 LLM으로 정리한다.
+
+    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때만 Vision 입력으로 대신한다.
+    """
     media_type = (image.content_type or "").casefold()
     if media_type not in SUPPORTED_RECEIPT_MEDIA_TYPES:
         raise HTTPException(
@@ -794,14 +844,26 @@ async def adapter_receipt_ocr(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="receipt image must not exceed 4 MiB",
         )
-    image_data_url = (
-        f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
-    )
+
+    ocr: OcrResult | None = None
     try:
-        generated = await extract_receipt(
-            rag_runtime.llm_factory(),
-            image_data_url=image_data_url,
-        )
+        candidate = await run_in_threadpool(run_ocr, raw_image)
+        if candidate.text_length >= MIN_TEXT_CHARACTERS:
+            ocr = candidate
+    except OcrUnavailableError:
+        ocr = None
+
+    try:
+        llm = rag_runtime.llm_factory()
+        if ocr is not None:
+            generated = await extract_receipt_from_ocr(llm, ocr_text=ocr.as_prompt_text())
+            source, confidence = "ocr_llm", round(ocr.mean_confidence, 1)
+        else:
+            image_data_url = (
+                f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
+            )
+            generated = await extract_receipt(llm, image_data_url=image_data_url)
+            source, confidence = "vision", None
         return ReceiptExtractionResponse(
             date=generated.date,
             vendor=generated.vendor.strip() if generated.vendor else None,
@@ -815,6 +877,8 @@ async def adapter_receipt_ocr(
             vendorText=(generated.vendor_text or "").strip() or None,
             amountText=(generated.amount_text or "").strip() or None,
             proofEvidence=(generated.proof_evidence or "").strip() or None,
+            ocrConfidence=confidence,
+            source=source,
         )
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
         raise HTTPException(

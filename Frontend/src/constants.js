@@ -223,6 +223,8 @@ export const ROADMAP_TASKS = {
 export const NAV_MENU = [
   { key: 'roadmap', label: '창업 로드맵', desc: '아이디어부터 스케일업까지' },
   { key: 'tax', label: 'AI 세무 Assistant', desc: '세액감면 자동 판정·경비처리' },
+  { key: 'expenses', label: '지출관리', desc: '영수증 OCR·경비 인정 판정' },
+  { key: 'bizplan', label: '사업계획서', desc: 'AI로 PSST 구조 초안 작성' },
   { key: 'gov', label: '공고지원 AI', desc: '공고 적합도·서류·초안을 AI와 상담' },
   { key: 'mypage', label: '마이페이지', desc: '내 맞춤 대시보드' },
 ];
@@ -275,8 +277,6 @@ export const MP_MENU = [
   { group: '저장한 것' },
   { key: 'saved', label: '공고 · 정책', sub: true },
   { key: 'docs', label: '서류', sub: true },
-  { divider: true },
-  { key: 'expenses', label: '지출관리 · 영수증' },
   { divider: true },
   { key: 'settings', label: '설정' },
 ];

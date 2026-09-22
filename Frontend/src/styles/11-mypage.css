@@ -672,6 +672,35 @@
   .exp-ded--bad {
     color: var(--red);
   }
+  .exp-listhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .exp-listhead__count {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .exp-excel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--card, transparent);
+    color: var(--green);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .exp-excel:hover {
+    border-color: var(--green);
+    background: color-mix(in srgb, var(--green) 10%, transparent);
+  }
   .exp-upload {
     border: 1px dashed var(--line-strong);
     border-radius: 10px;
@@ -688,24 +717,173 @@
     opacity: 0.6;
     cursor: default;
   }
-  .exp-analyzing {
+  /* ---- 영수증 인식 중: AI 분석 진행 화면 ---- */
+  .exp-ai {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 22px 20px 20px;
+    margin-bottom: 14px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: var(--surface-solid);
+    box-shadow: 0 18px 50px rgba(47, 123, 240, 0.12);
+    animation: expAiIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .exp-ai__glow {
+    position: absolute;
+    z-index: -1;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    filter: blur(40px);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .exp-ai__glow--a {
+    top: -100px;
+    left: calc(50% - 190px);
+    background: radial-gradient(closest-side, #5c9dff, transparent);
+    animation: expAiDrift 6s ease-in-out infinite alternate;
+  }
+  .exp-ai__glow--b {
+    top: -80px;
+    left: calc(50% - 30px);
+    background: radial-gradient(closest-side, #a78bfa, transparent);
+    animation: expAiDrift 7s ease-in-out infinite alternate-reverse;
+  }
+  /* 작은 로딩 아이콘: 회전하는 그라데이션 링 + 숨 쉬는 중심 */
+  .exp-ai__orb {
+    position: relative;
+    width: 46px;
+    height: 46px;
+  }
+  .exp-ai__orb-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(92, 157, 255, 0.4);
+  }
+  .exp-ai__orb-ring::before {
+    content: '';
+    position: absolute;
+    inset: -60%;
+    background: conic-gradient(from 0deg, #5c9dff, #a78bfa, #34d399, #5c9dff);
+    animation: expAiSpin 1.6s linear infinite;
+  }
+  .exp-ai__orb-ring::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: var(--surface-solid);
+  }
+  .exp-ai__orb-core {
+    position: absolute;
+    inset: 15px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #5c9dff, #a78bfa);
+    animation: expAiBreathe 1.6s ease-in-out infinite;
+  }
+  .exp-ai__text {
+    text-align: center;
+  }
+  .exp-ai__title {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .exp-ai__sub {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .exp-ai__steps {
+    list-style: none;
+    margin: 0;
+    padding: 10px 14px;
+    width: min(100%, 280px);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--ground);
+  }
+  .exp-ai__steps li {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border: 1px dashed var(--line-strong);
-    border-radius: 10px;
-    background: var(--blue-wash);
-    margin-bottom: 14px;
+    gap: 11px;
+    font-size: 13px;
+    color: var(--ink-faint);
+    transition: color 0.3s;
   }
-  .exp-analyzing__thumb {
-    width: 56px;
-    height: 56px;
+  .exp-ai__steps li.is-active {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .exp-ai__steps li.is-done {
+    color: var(--ink-soft);
+  }
+  .exp-ai__dot {
+    position: relative;
     flex: none;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--ground);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--line-strong);
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .exp-ai__steps li.is-active .exp-ai__dot {
+    border-color: var(--line);
+    border-top-color: var(--blue);
+    animation: expAiSpin 0.8s linear infinite;
+  }
+  .exp-ai__steps li.is-done .exp-ai__dot {
+    border-color: transparent;
+    background: linear-gradient(135deg, #5c9dff, #34d399);
+  }
+  .exp-ai__steps li.is-done .exp-ai__dot::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 2.5px;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  @keyframes expAiIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes expAiSpin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes expAiBreathe {
+    0%, 100% { transform: scale(0.75); opacity: 0.75; }
+    50% { transform: scale(1.1); opacity: 1; }
+  }
+  @keyframes expAiDrift {
+    from { transform: translate(-18px, 0) scale(1); }
+    to { transform: translate(24px, 14px) scale(1.15); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .exp-ai,
+    .exp-ai__glow,
+    .exp-ai__orb-ring::before,
+    .exp-ai__orb-core,
+    .exp-ai__steps li.is-active .exp-ai__dot {
+      animation: none;
+    }
   }
   .exp-list--cards {
     display: flex;
@@ -1075,6 +1253,14 @@
   .exp-ana__ttl:first-child {
     margin-top: 0;
   }
+  .exp-ana__method {
+    margin: 0 0 8px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .exp-ana__method b {
+    color: var(--blue-deep);
+  }
   .exp-ana__fields {
     list-style: none;
     margin: 0;
@@ -1299,37 +1485,4 @@
     .nav__user {
       display: none;
     }
-  }
-
-
-  /* ---- 대시보드: 창업 로드맵 카드 ---- */
-  .mp-rmsteps {
-    list-style: none;
-    margin: 4px 0 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .mp-rmsteps li {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px 4px 5px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--ground);
-    font-size: 12px;
-    color: var(--ink-soft);
-  }
-  .mp-rmsteps__no {
-    width: 18px;
-    height: 18px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--blue-wash);
-    color: var(--blue-deep);
-    font-size: 10.5px;
-    font-weight: 700;
   }

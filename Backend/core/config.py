@@ -40,6 +40,7 @@ OPENAPI_TAGS = [
     {"name": "캘린더", "description": "세금·지원금 통합 일정"},
     {"name": "세무", "description": "세금 정보, 리마인더, 세액감면 Rule + LLM 근거"},
     {"name": "지출", "description": "영수증 OCR(LLM)과 경비 안내"},
+    {"name": "사업계획서", "description": "입력한 사업 정보로 PSST 구조 초안 생성(LLM)"},
     {"name": "지원정책", "description": "정책 검색, 추천, 자격 확인, 공고 요약, 관심 저장"},
     {"name": "관리자", "description": "관리자 로그인 및 데이터 관리"},
     {"name": "알림", "description": "앱 알림함, 메일 대기열, 브라우저 푸시"},
@@ -74,6 +75,7 @@ LLM_TIMEOUT_CHAT_TAX = float(os.getenv("LLM_TIMEOUT_CHAT_TAX", "120"))
 LLM_TIMEOUT_LEGAL_BASIS = float(os.getenv("LLM_TIMEOUT_LEGAL_BASIS", "30"))
 LLM_TIMEOUT_DEDUCTIBILITY = float(os.getenv("LLM_TIMEOUT_DEDUCTIBILITY", "30"))
 LLM_TIMEOUT_SUMMARIZE = float(os.getenv("LLM_TIMEOUT_SUMMARIZE", "45"))
+LLM_TIMEOUT_BIZPLAN = float(os.getenv("LLM_TIMEOUT_BIZPLAN", "60"))
 LLM_TIMEOUT_OCR = float(os.getenv("LLM_TIMEOUT_OCR", "60"))
 LLM_TIMEOUT_REINDEX = float(os.getenv("LLM_TIMEOUT_REINDEX", "180"))
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:admin1234@127.0.0.1:5432/startup_platform")

@@ -88,7 +88,8 @@ class ExpenseAnalysisResponse(BaseModel):
     lawNote: str | None = Field(default=None, description="개별 조문이 없는 항목의 안내")
     tier: DeductibilityTier
     tierLabel: str
-    ocrSource: str = Field(description="vision / mock / legacy")
+    ocrSource: str = Field(description="ocr_llm / vision / mock / legacy")
+    ocrConfidence: float | None = Field(default=None, description="OCR 인식 신뢰도 평균(%). ocr_llm일 때만 값이 있음")
 
 
 class ExpenseCategoryUpdate(BaseModel):

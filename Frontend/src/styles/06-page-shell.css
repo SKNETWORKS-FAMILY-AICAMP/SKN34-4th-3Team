@@ -93,6 +93,11 @@
     border-color: transparent;
     color: #fff;
   }
+  .rz--nav .rz__step.is-done .rz__ico {
+    background: #16a34a;
+    border-color: transparent;
+    color: #fff;
+  }
   .rz--nav .rz__phase {
     font-size: 10.5px;
   }
@@ -108,6 +113,14 @@
     flex-basis: 14px;
     margin-top: 22px;
     font-size: 17px;
+  }
+  .rg2__prog {
+    margin: 0 0 20px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  .rg2__prog b {
+    color: var(--blue-deep);
   }
   .rg2__cols {
     display: grid;
@@ -126,36 +139,48 @@
     display: grid;
     gap: 10px;
   }
-  .rg2__taskbtn {
-    width: 100%;
+  .rg2__taskrow {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     padding: 13px 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--surface-solid);
+  }
+  .rg2__taskrow:hover,
+  .rg2__task.is-open .rg2__taskrow {
+    border-color: var(--line-strong);
+  }
+  .rg2__task input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    flex: none;
+    accent-color: var(--blue);
+    cursor: pointer;
+  }
+  .rg2__taskbtn {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    background: transparent;
     font: inherit;
     font-size: 13px;
     color: var(--ink);
     text-align: left;
     cursor: pointer;
   }
-  .rg2__taskbtn:hover,
-  .rg2__task.is-open .rg2__taskbtn {
-    border-color: var(--line-strong);
+  .rg2__task.is-done .rg2__taskrow {
+    background: var(--ground);
   }
-  .rg2__no {
-    flex: none;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--blue-deep);
-    background: var(--blue-wash);
+  .rg2__task.is-done .rg2__tasktitle {
+    color: var(--ink-faint);
   }
   .rg2__tasktitle {
     flex: 1;
@@ -246,55 +271,29 @@
   .rg2__src a:hover {
     text-decoration: underline;
   }
-  .rg2__gradenote {
-    margin: 8px 0 0;
-    padding-top: 8px;
-    border-top: 1px dashed var(--line-strong);
-    font-size: 11.5px;
-    color: var(--ink-faint);
-  }
   .rg2__disc {
     margin: 14px 0 0;
     font-size: 11.5px;
     line-height: 1.6;
     color: var(--ink-faint);
   }
-  .rg2__taskcaret {
-    flex: none;
-    font-style: normal;
-    font-size: 15px;
-    line-height: 1;
-    color: var(--ink-faint);
-  }
-  .rg2__taskbtn:hover .rg2__taskcaret {
-    color: var(--blue);
-  }
   .rg2__goal {
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 6px 10px;
+    flex-direction: column;
+    gap: 3px;
     margin-bottom: 12px;
     padding: 11px 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--ground);
   }
-  .rg2__goallabel {
-    flex: none;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--blue-deep);
-  }
   .rg2__goaltext {
-    flex: 1;
-    min-width: 0;
     font-size: 13px;
     font-weight: 700;
+    line-height: 1.45;
     color: var(--ink);
   }
-  .rg2__goalspan {
-    flex: none;
+  .rg2__goalsub {
     font-size: 11.5px;
     color: var(--ink-faint);
   }
@@ -369,3 +368,9 @@
     border-color: var(--blue);
   }
 
+
+  /* ---- 지출관리 페이지: 카드 목록이 너무 넓게 퍼지지 않게 폭을 제한한다 ---- */
+  .exp-page {
+    max-width: 880px;
+    margin: 0 auto;
+  }

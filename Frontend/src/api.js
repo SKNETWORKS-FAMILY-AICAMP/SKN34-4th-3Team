@@ -289,6 +289,8 @@ export const api = {
   updateExpenseCategory: (expenseId, category, opt) => apiPatch(`/expenses/${expenseId}`, { category }, opt),
   deleteExpense: (expenseId, opt) => apiDelete(`/expenses/${expenseId}`, opt),
   expenseAnalysis: (expenseId, opt) => apiGet(`/expenses/${expenseId}/analysis`, opt),
+  // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
+  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

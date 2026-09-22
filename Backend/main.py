@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import admin, auth, calendar, chat, expenses, notifications, policies, stats, tax, users
+from api import admin, auth, bizplan, calendar, chat, expenses, notifications, policies, stats, tax, users
 from core.config import APP_DESCRIPTION, APP_NAME, APP_VERSION, LLM_API_URL, OPENAPI_TAGS
 from core.db import db_path, init_db, scalar
 from core.llm_client import ensure_index_ready, llm_status
@@ -59,6 +59,7 @@ app.include_router(chat.router)
 app.include_router(calendar.router)
 app.include_router(tax.router)
 app.include_router(expenses.router)
+app.include_router(bizplan.router)
 app.include_router(policies.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)

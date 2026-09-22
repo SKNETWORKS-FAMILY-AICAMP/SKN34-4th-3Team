@@ -47,6 +47,16 @@ class AnnouncementSummaryGeneration(_GeneratedOutput):
     notes: str
 
 
+class BusinessPlanGeneration(_GeneratedOutput):
+    """사용자가 입력한 정보만으로 작성한 PSST 사업계획서 초안."""
+
+    problem: str
+    solution: str
+    scale_up: str
+    team: str
+    summary: str
+
+
 class ReceiptExtractionGeneration(_GeneratedOutput):
     """영수증 이미지에서 확인한 필드."""
 
@@ -201,12 +211,97 @@ async def summarize_announcement(
     )
 
 
+_RECEIPT_CATEGORY_RULES = (
+    "category는 확인된 품목·상호를 바탕으로 다음 중 정확히 하나만 반환하세요: "
+    "사무용품, 통신비, 차량유지비, 광고선전비, 임차료, 복리후생비, 접대비, 교육·도서, 기타. "
+    "식당·카페 영수증은 복리후생비로 하고(거래처 접대인지는 알 수 없습니다), "
+    "어디에도 확실히 맞지 않으면 기타로 하세요."
+)
+
+_RECEIPT_PROOF_RULES = (
+    "proof_type에는 이 증빙의 종류를 판별해 다음 중 하나로 반환하세요"
+    "(실제로 보이는 표시만 근거로 판단하고 짐작하지 마세요):\n"
+    "- tax_invoice: '세금계산서' 또는 '계산서'라는 문서 제목이 보임\n"
+    "- card_receipt: '신용카드 매출전표', 카드 승인번호, 카드사명 등 카드 결제 표시가 보임\n"
+    "- cash_receipt: '현금영수증'이라는 문서 제목이나 현금영수증 승인번호가 보임\n"
+    "- simple_receipt: 위 표시 없이 품목·금액만 있는 일반 간이영수증으로 보임\n"
+    "- unknown: 증빙 종류를 판별할 수 없음"
+)
+
+
+BUSINESS_PLAN_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "예비창업패키지 등 정부 지원사업에 내는 사업계획서 초안을 PSST 구조로 작성하는 "
+            "보조 도구다. 사용자가 입력한 정보만 근거로 쓰고, 매출액·투자 유치액·이용자 수 같은 "
+            "구체적인 수치나 실적은 사용자가 주지 않았다면 만들어 내지 마세요. 대신 "
+            "'[직접 채워 주세요: 예상 매출액]'처럼 빈 자리로 표시하세요. 각 항목은 한국어로 "
+            "2~4문장, 존댓말로 쓰세요.\n\n"
+            "- problem: 어떤 고객이 어떤 문제를 겪고 있는지, 왜 지금 해결해야 하는지\n"
+            "- solution: 그 문제를 어떻게 해결하는지, 제품·서비스의 핵심 기능과 차별점\n"
+            "- scale_up: 목표 시장 크기와 고객 확보 방법, 수익모델을 어떻게 키울지\n"
+            "- team: 팀 구성과 이 팀이 이 사업을 해낼 수 있는 이유\n"
+            "- summary: 위 네 항목을 3문장으로 압축한 요약",
+        ),
+        (
+            "human",
+            "사업명: {business_name}\n한 줄 소개: {tagline}\n목표 고객: {target_customer}\n"
+            "핵심 문제: {problem_input}\n해결 방안: {solution_input}\n차별점: {differentiator}\n"
+            "팀 구성: {team_input}\n신청하려는 지원사업(선택): {target_program}\n"
+            "추가로 참고할 내용(선택): {extra_notes}",
+        ),
+    ]
+)
+
+
+async def generate_business_plan(
+    llm: BaseChatModel,
+    *,
+    business_name: str,
+    tagline: str,
+    target_customer: str,
+    problem_input: str,
+    solution_input: str,
+    differentiator: str,
+    team_input: str,
+    target_program: str,
+    extra_notes: str,
+) -> BusinessPlanGeneration:
+    """사용자가 입력한 사업 정보로 PSST 사업계획서 초안을 생성한다."""
+    chain = BUSINESS_PLAN_PROMPT | llm.with_structured_output(BusinessPlanGeneration)
+    result = BusinessPlanGeneration.model_validate(
+        await chain.ainvoke(
+            {
+                "business_name": business_name or "(입력 없음)",
+                "tagline": tagline or "(입력 없음)",
+                "target_customer": target_customer or "(입력 없음)",
+                "problem_input": problem_input or "(입력 없음)",
+                "solution_input": solution_input or "(입력 없음)",
+                "differentiator": differentiator or "(입력 없음)",
+                "team_input": team_input or "(입력 없음)",
+                "target_program": target_program or "(입력 없음)",
+                "extra_notes": extra_notes or "(없음)",
+            },
+            config={"run_name": "backend_business_plan"},
+        )
+    )
+    return result.model_copy(
+        update={
+            field_name: validate_generated_text(
+                getattr(result, field_name), field_name=field_name
+            )
+            for field_name in ("problem", "solution", "scale_up", "team", "summary")
+        }
+    )
+
+
 async def extract_receipt(
     llm: BaseChatModel,
     *,
     image_data_url: str,
 ) -> ReceiptExtractionGeneration:
-    """Vision 입력에서 영수증 필드를 추출한다."""
+    """Vision 입력에서 영수증 필드를 추출한다. OCR을 쓸 수 없을 때의 대비 경로다."""
     structured_model = llm.with_structured_output(ReceiptExtractionGeneration)
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -217,23 +312,11 @@ async def extract_receipt(
                         "text": (
                             "영수증 이미지에서 직접 확인되는 거래일, 상호, 총액, 품목을 "
                             "추출하세요. 확인할 수 없는 값은 null 또는 빈 배열로 반환하고 "
-                            "값을 추정하지 마세요. category는 확인된 품목·상호를 바탕으로 "
-                            "다음 중 정확히 하나만 반환하세요: 사무용품, 통신비, 차량유지비, "
-                            "광고선전비, 임차료, 복리후생비, 접대비, 교육·도서, 기타. "
-                            "식당·카페 영수증은 복리후생비로 하고(거래처 접대인지는 이미지로 "
-                            "알 수 없습니다), 어디에도 확실히 맞지 않으면 기타로 하세요.\n\n"
-                            "추가로 proof_type에 이 증빙의 종류를 판별해 다음 중 하나로 "
-                            "반환하세요(이미지에 실제로 보이는 표시만 근거로 판단하고, "
-                            "짐작하지 마세요):\n"
-                            "- tax_invoice: '세금계산서' 또는 '계산서'라는 문서 제목이 보임\n"
-                            "- card_receipt: '신용카드 매출전표', 카드 승인번호, 카드사명 등"
-                            "카드 결제 표시가 보임\n"
-                            "- cash_receipt: '현금영수증'이라는 문서 제목이나 현금영수증 "
-                            "승인번호가 보임\n"
-                            "- simple_receipt: 위 표시 없이 품목·금액만 있는 일반 "
-                            "간이영수증으로 보임\n"
-                            "- unknown: 이미지가 흐리거나 잘려서 증빙 종류를 판별할 수 없음\n\n"
-                            "또한 값을 읽어낸 근거를 남기세요. date_text, vendor_text, "
+                            "값을 추정하지 마세요. "
+                            + _RECEIPT_CATEGORY_RULES
+                            + "\n\n"
+                            + _RECEIPT_PROOF_RULES
+                            + "\n\n또한 값을 읽어낸 근거를 남기세요. date_text, vendor_text, "
                             "amount_text에는 각각 거래일·상호·총액을 읽은 자리의 인쇄 글자를 "
                             "이미지에 보이는 그대로 옮기고(예: '합계 45,000원'), proof_evidence에는 "
                             "proof_type을 그렇게 판단한 근거 문구(예: '신용카드 매출전표', "
@@ -251,7 +334,46 @@ async def extract_receipt(
     )
     result = await (prompt | structured_model).ainvoke(
         {},
-        config={"run_name": "backend_receipt_ocr"},
+        config={"run_name": "backend_receipt_vision"},
+    )
+    return ReceiptExtractionGeneration.model_validate(result)
+
+
+async def extract_receipt_from_ocr(
+    llm: BaseChatModel,
+    *,
+    ocr_text: str,
+) -> ReceiptExtractionGeneration:
+    """OCR이 읽은 글자만 보고 영수증 필드를 정리한다(이미지는 보지 않는다)."""
+    structured_model = llm.with_structured_output(ReceiptExtractionGeneration)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            HumanMessage(
+                content=(
+                    "아래는 영수증 이미지를 OCR로 읽은 결과입니다. 줄 번호와 줄별 신뢰도"
+                    "(%)가 붙어 있고 오인식이 섞여 있을 수 있습니다. 이 글자만 근거로 거래일, "
+                    "상호, 총액, 품목을 정리하세요. 확인할 수 없는 값은 null 또는 빈 배열로 "
+                    "반환하고 값을 추정하지 마세요. 숫자는 OCR 결과를 우선하되, 같은 글자가 "
+                    "다른 줄에서 다르게 읽혔거나 문맥상 명백한 오인식(예: 'O'와 '0')만 바로잡으세요. "
+                    "총액은 합계·결제금액처럼 최종 금액이 적힌 줄을 기준으로 하세요. "
+                    "items에는 상품·서비스 이름으로 뜻이 읽히는 줄만 넣으세요. 신뢰도가 낮고 "
+                    "뜻을 알 수 없게 깨진 글자(예: 'Be: A4SAl')는 품목으로 추측해 고치거나 "
+                    "넣지 말고 버리세요. "
+                    + _RECEIPT_CATEGORY_RULES
+                    + "\n\n"
+                    + _RECEIPT_PROOF_RULES
+                    + "\n\n또한 값을 읽어낸 근거를 남기세요. date_text, vendor_text, "
+                    "amount_text에는 각각 거래일·상호·총액이 적힌 OCR 줄의 글자를 그대로 "
+                    "옮기고(줄 번호와 신뢰도는 빼세요), proof_evidence에는 proof_type을 그렇게 "
+                    "판단한 근거 문구를 OCR 글자 그대로 옮기세요. OCR 결과에 없는 글자는 "
+                    "절대 만들지 말고 null로 두세요.\n\n[OCR 결과]\n" + ocr_text
+                )
+            )
+        ]
+    )
+    result = await (prompt | structured_model).ainvoke(
+        {},
+        config={"run_name": "backend_receipt_ocr_llm"},
     )
     return ReceiptExtractionGeneration.model_validate(result)
 

@@ -252,6 +252,7 @@ def create_receipt(
         # 못 읽은 값은 아래에서 기본값으로 채워지므로, 실제로 읽은 것인지 따로 기록해 둔다.
         read_meta = {
             "source": source,
+            "ocrConfidence": llm.get("ocrConfidence"),
             "read": {
                 "date": bool(llm.get("date")),
                 "vendor": bool(llm.get("vendor")),
@@ -546,6 +547,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
         "tier": tier,
         "tierLabel": TIER_LABELS[tier],
         "ocrSource": meta.get("source") or "legacy",
+        "ocrConfidence": meta.get("ocrConfidence"),
     }
 
 

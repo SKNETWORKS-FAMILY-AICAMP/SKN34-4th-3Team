@@ -215,6 +215,31 @@ class LegalBasisResponse(BaseModel):
     llmUsed: bool
 
 
+class BusinessPlanRequest(BaseModel):
+    """Backend가 전달하는 사업계획서 초안 생성 입력."""
+
+    businessName: str = ""
+    tagline: str = ""
+    targetCustomer: str = ""
+    problem: str = ""
+    solution: str = ""
+    differentiator: str = ""
+    team: str = ""
+    targetProgram: str = ""
+    extraNotes: str = ""
+
+
+class BusinessPlanResponse(BaseModel):
+    """PSST 구조의 사업계획서 초안."""
+
+    problem: str
+    solution: str
+    scaleUp: str
+    team: str
+    summary: str
+    llmUsed: bool
+
+
 class ReceiptExtractionResponse(BaseModel):
     """Vision 모델이 영수증에서 직접 확인한 필드."""
 
@@ -230,7 +255,10 @@ class ReceiptExtractionResponse(BaseModel):
     vendorText: str | None = None
     amountText: str | None = None
     proofEvidence: str | None = None
-    source: Literal["vision"] = "vision"
+    ocrConfidence: float | None = Field(
+        default=None, ge=0, le=100, description="OCR 인식 신뢰도 평균(%). Vision 경로는 None"
+    )
+    source: Literal["ocr_llm", "vision"] = "ocr_llm"
     llmUsed: bool = True
 
 

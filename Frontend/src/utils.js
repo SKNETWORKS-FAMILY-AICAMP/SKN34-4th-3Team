@@ -229,3 +229,25 @@ export const loadStoredUser = () => {
     return null;
   }
 };
+
+// 창업 로드맵 체크리스트 — 서버 저장이 없어 이 브라우저에 계정별로 남긴다.
+// 목표 내용을 근거 기반으로 교체하면서 항목이 달라졌으므로, 예전 체크 기록이 다른 목표에 붙지 않게 키에 버전(v2)을 둔다.
+
+export const ROADMAP_KEY = (userId) => `changeup:roadmap-done:v2:${userId}`;
+
+export const loadRoadmapDone = (userId) => {
+  try {
+    const obj = JSON.parse(localStorage.getItem(ROADMAP_KEY(userId)) || '{}');
+    return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  } catch (e) {
+    return {};
+  }
+};
+
+export const saveRoadmapDone = (userId, obj) => {
+  try {
+    localStorage.setItem(ROADMAP_KEY(userId), JSON.stringify(obj));
+  } catch (e) {
+    /* 저장 불가 환경은 무시 */
+  }
+};
