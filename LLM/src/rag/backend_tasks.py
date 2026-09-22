@@ -83,13 +83,20 @@ class BusinessPlanEvaluation(_GeneratedOutput):
     sections: list[BusinessPlanSectionScore]
 
 
+class ReceiptItemGeneration(_GeneratedOutput):
+    """영수증에서 확인한 품목 한 줄: 이름과 그 줄에 적힌 개별 금액."""
+
+    name: str
+    price: int | None = Field(default=None, ge=0)
+
+
 class ReceiptExtractionGeneration(_GeneratedOutput):
     """영수증 이미지에서 확인한 필드."""
 
     date: DateValue | None = None
     vendor: str | None = None
     amount: int | None = Field(default=None, ge=0)
-    items: list[str] = Field(default_factory=list)
+    items: list[ReceiptItemGeneration] = Field(default_factory=list)
     category: str | None = None
     proof_type: Literal[
         "tax_invoice", "card_receipt", "cash_receipt", "simple_receipt", "unknown"
@@ -418,7 +425,12 @@ async def extract_receipt(
                         "text": (
                             "영수증 이미지에서 직접 확인되는 거래일, 상호, 총액, 품목을 "
                             "추출하세요. 확인할 수 없는 값은 null 또는 빈 배열로 반환하고 "
-                            "값을 추정하지 마세요. "
+                            "값을 추정하지 마세요. items는 품목마다 name(상품명)과 "
+                            "price(그 품목의 개별 금액)를 함께 반환하세요. 영수증에서 품목당 "
+                            "금액은 보통 품목명과 같은 줄 오른쪽 끝이나 바로 다음 줄에 적혀 "
+                            "있습니다. 이미지에서 품목명 옆·아래를 실제로 보고 화폐 금액(수량이 "
+                            "아닌, 보통 세 자리 이상이거나 쉼표가 있는 숫자)을 찾아 price로 "
+                            "쓰고, 찾지 못하면 null로 두세요. "
                             + _RECEIPT_CATEGORY_RULES
                             + "\n\n"
                             + _RECEIPT_PROOF_RULES
@@ -464,7 +476,14 @@ async def extract_receipt_from_ocr(
                     "총액은 합계·결제금액처럼 최종 금액이 적힌 줄을 기준으로 하세요. "
                     "items에는 상품·서비스 이름으로 뜻이 읽히는 줄만 넣으세요. 신뢰도가 낮고 "
                     "뜻을 알 수 없게 깨진 글자(예: 'Be: A4SAl')는 품목으로 추측해 고치거나 "
-                    "넣지 말고 버리세요. "
+                    "넣지 말고 버리세요. 품목마다 name(상품명)과 price(그 품목의 개별 금액)를 "
+                    "함께 반환하세요. 영수증에서 품목당 금액은 보통 (a) 품목명과 같은 줄 끝에 "
+                    "공백으로 떨어져 적히거나(예: '농심 올리브 짜파게티      4,980'), (b) 품목명 "
+                    "바로 다음 줄에 단독으로 적힙니다. 품목명 줄 근처(같은 줄 또는 바로 다음 줄)에서 "
+                    "1개 수량·품목 코드가 아니라 화폐 금액으로 보이는 숫자(보통 세 자리 이상이거나 "
+                    "쉼표가 있는 숫자)를 찾아 price로 쓰세요. 수량('1', '2개' 같은 한두 자리 숫자)을 "
+                    "price로 착각하지 마세요. 근처에서 금액을 찾지 못하면 price는 null로 두고, "
+                    "숫자를 지어내지 마세요. "
                     + _RECEIPT_CATEGORY_RULES
                     + "\n\n"
                     + _RECEIPT_PROOF_RULES

@@ -399,6 +399,30 @@ def get_extraction(receipt_id: int) -> dict | None:
     return db.fetchone("SELECT * FROM receipt_extractions WHERE receipt_id = ?", (receipt_id,))
 
 
+def update_extraction_items(receipt_id: int, items: list, read_meta: dict | None) -> None:
+    """OCR이 놓친 품목을 사용자가 직접 추가했을 때 품목 목록과 읽음 여부를 갱신한다."""
+    db.execute(
+        "UPDATE receipt_extractions SET items=?, read_meta=? WHERE receipt_id=?",
+        (
+            db.dumps(items),
+            json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
+            receipt_id,
+        ),
+    )
+
+
+def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | None) -> None:
+    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고쳤을 때 상호와 읽음 여부를 갱신한다."""
+    db.execute(
+        "UPDATE receipt_extractions SET vendor=?, read_meta=? WHERE receipt_id=?",
+        (
+            vendor,
+            json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
+            receipt_id,
+        ),
+    )
+
+
 def get_expense(expense_id: int) -> dict | None:
     return db.fetchone("SELECT * FROM expenses WHERE id = ?", (expense_id,))
 

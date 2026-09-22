@@ -75,6 +75,7 @@ from src.serving.schemas import (
     RagReindexRequest,
     ReadyResponse,
     ReceiptExtractionResponse,
+    ReceiptItemResponse,
     SourceResponse,
 )
 from src.serving.errors import ApiError, upstream_http_exception
@@ -992,7 +993,11 @@ async def adapter_receipt_ocr(
             date=generated.date,
             vendor=generated.vendor.strip() if generated.vendor else None,
             amount=generated.amount,
-            items=[item.strip() for item in generated.items if item.strip()],
+            items=[
+                ReceiptItemResponse(name=item.name.strip(), price=item.price)
+                for item in generated.items
+                if item.name.strip()
+            ],
             category=(
                 generated.category.strip() if generated.category else None
             ),

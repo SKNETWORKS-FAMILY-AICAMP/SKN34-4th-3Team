@@ -59,7 +59,7 @@ PROOF_LABELS = {
 
 TIER_LABELS = {
     "high": "인정 가능성 높음",
-    "ambiguous": "애매함 (확인 필요)",
+    "ambiguous": "확인 필요",
     "low": "인정 어려움",
 }
 
@@ -112,11 +112,26 @@ def _normalize_category(category: str | None) -> str | None:
     return LEGACY_CATEGORIES.get(category or "", category)
 
 
-def _classify(vendor: str, amount: int, hinted: str | None = None, items: list[str] | None = None) -> str:
+def _item_name(item) -> str:
+    """품목 한 줄에서 이름만 꺼낸다. {name,price} 딕셔너리와, 마이그레이션 전 문자열 데이터를 모두 받는다."""
+    return (item.get("name") or "") if isinstance(item, dict) else str(item or "")
+
+
+def _item_price(item) -> int | None:
+    return item.get("price") if isinstance(item, dict) else None
+
+
+def _normalize_items(items) -> list[dict]:
+    """저장된 품목을 응답 스키마({name,price})에 맞게 정리한다.
+    마이그레이션 전에는 문자열 목록으로 저장돼 있어 이름만 있고 price는 None이 된다."""
+    return [{"name": _item_name(i), "price": _item_price(i)} for i in (items or []) if _item_name(i).strip()]
+
+
+def _classify(vendor: str, amount: int, hinted: str | None = None, items: list | None = None) -> str:
     hinted = _normalize_category(hinted)
     if hinted in CATEGORY_RULES:
         return hinted
-    text = f"{vendor} {' '.join(items or [])}"
+    text = f"{vendor} {' '.join(_item_name(i) for i in (items or []))}"
     lowered = text.lower()
     for category, words in CATEGORY_KEYWORDS:
         if any(w.lower() in lowered for w in words):
@@ -270,7 +285,11 @@ def create_receipt(
     else:
         vendor = "샘플문구점" if "office" in filename.lower() else "강남카페"
         amount = 18000
-        items = ["아이스 아메리카노", "크루아상"] if "카페" in vendor else ["노트", "펜"]
+        items = (
+            [{"name": "아이스 아메리카노", "price": None}, {"name": "크루아상", "price": None}]
+            if "카페" in vendor
+            else [{"name": "노트", "price": None}, {"name": "펜", "price": None}]
+        )
         spent = date.today()
         proof_type = "unknown"
         category = _classify(vendor, amount, None, items)
@@ -314,7 +333,7 @@ def get_extraction(receipt_id: int, user_id: int) -> dict:
         "date": extraction.get("date"),
         "vendor": extraction.get("vendor"),
         "amount": extraction.get("amount"),
-        "items": extraction.get("items") or [],
+        "items": _normalize_items(extraction.get("items")),
         "proofType": proof_type,
         "proofTypeLabel": PROOF_LABELS.get(proof_type, proof_type),
         "ocrSource": "heuristic",
@@ -361,7 +380,7 @@ def list_expenses(
                 "proofTypeLabel": PROOF_LABELS.get(proof_type, proof_type),
                 "proofValid": e.get("proof_valid"),
                 "missingFields": e.get("missing_fields") or [],
-                "items": extraction.get("items") or [],
+                "items": _normalize_items(extraction.get("items")),
             }
         )
     return result
@@ -481,7 +500,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
          "read": read.get("date"), "evidence": evidence.get("date")},
         {"key": "amount", "label": "금액", "value": f"{amount:,}원" if read.get("amount") else None,
          "read": read.get("amount"), "evidence": evidence.get("amount")},
-        {"key": "items", "label": "품목", "value": ", ".join(items) if items else None,
+        {"key": "items", "label": "품목", "value": ", ".join(_item_name(i) for i in items) if items else None,
          "read": read.get("items"), "evidence": None},
         {"key": "proof", "label": "증빙 종류", "value": proof_label if read.get("proof") else None,
          "read": read.get("proof"), "evidence": evidence.get("proof")},
@@ -493,7 +512,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
     tier = _tier(deductible, confidence, proof_valid)
     pct = round(confidence * 100)
 
-    seen = ", ".join(items) if items else (vendor if read.get("vendor") else None)
+    seen = ", ".join(_item_name(i) for i in items) if items else (vendor if read.get("vendor") else None)
     rule_deductible, _, rule_basis = CATEGORY_RULES.get(category, CATEGORY_RULES["기타"])
 
     if proof_type == "unknown":
@@ -529,7 +548,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
             reasons.append(f"분류 신뢰도가 {pct}%로 낮고")
         if proof_valid is not True:
             reasons.append("증빙이 적격인지 확실하지 않아")
-        overall = " ".join(reasons) + " '애매함'으로 판정했어요. 빠진 정보를 채워 다시 확인해 보세요."
+        overall = " ".join(reasons) + " '확인 필요'로 판정했어요. 빠진 정보를 채워 다시 확인해 보세요."
 
     steps = [
         {"key": "proof", "title": "증빙 종류 확인", **step_proof},
@@ -541,6 +560,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
     laws, law_note = _legal_refs(category, proof_valid)
     return {
         "fields": fields,
+        "items": _normalize_items(items),
         "steps": steps,
         "laws": laws,
         "lawNote": law_note,
@@ -549,6 +569,50 @@ def analysis(expense_id: int, user_id: int) -> dict:
         "ocrSource": meta.get("source") or "legacy",
         "ocrConfidence": meta.get("ocrConfidence"),
     }
+
+
+def add_item(expense_id: int, user_id: int, name: str, price: int | None) -> dict:
+    """OCR이 놓친 품목을 사용자가 직접 추가하고, 갱신된 판독 결과를 돌려준다."""
+    expense = repo.get_expense(expense_id)
+    if not expense or expense["user_id"] != user_id:
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
+    text = (name or "").strip()
+    if not text:
+        raise HttpError(422, "추가할 품목을 입력해 주세요.")
+
+    extraction = repo.get_extraction(expense["receipt_id"]) or {}
+    items = list(extraction.get("items") or [])
+    items.append({"name": text, "price": price})
+
+    meta = dict(extraction.get("read_meta") or {})
+    read = dict(meta.get("read") or {})
+    read["items"] = True
+    meta["read"] = read
+
+    repo.update_extraction_items(expense["receipt_id"], items, meta)
+    return analysis(expense_id, user_id)
+
+
+def update_vendor(expense_id: int, user_id: int, vendor: str) -> dict:
+    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고치고, 갱신된 판독 결과를 돌려준다."""
+    expense = repo.get_expense(expense_id)
+    if not expense or expense["user_id"] != user_id:
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
+    text = (vendor or "").strip()
+    if not text:
+        raise HttpError(422, "상호를 입력해 주세요.")
+
+    extraction = repo.get_extraction(expense["receipt_id"]) or {}
+    meta = dict(extraction.get("read_meta") or {})
+    read = dict(meta.get("read") or {})
+    read["vendor"] = True
+    meta["read"] = read
+    evidence = dict(meta.get("evidence") or {})
+    evidence["vendor"] = None
+    meta["evidence"] = evidence
+
+    repo.update_extraction_vendor(expense["receipt_id"], text, meta)
+    return analysis(expense_id, user_id)
 
 
 def get_receipt_image(receipt_id: int, user_id: int) -> tuple[bytes, str]:

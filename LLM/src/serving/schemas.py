@@ -300,13 +300,20 @@ class BusinessPlanEvaluateResponse(BaseModel):
     llmUsed: bool
 
 
+class ReceiptItemResponse(BaseModel):
+    """품목 한 줄: 이름과 그 줄에 적힌 개별 금액."""
+
+    name: str
+    price: int | None = Field(default=None, ge=0)
+
+
 class ReceiptExtractionResponse(BaseModel):
     """Vision 모델이 영수증에서 직접 확인한 필드."""
 
     date: DateValue | None = None
     vendor: str | None = None
     amount: int | None = Field(default=None, ge=0)
-    items: list[str] = Field(default_factory=list)
+    items: list[ReceiptItemResponse] = Field(default_factory=list)
     category: str | None = None
     proofType: Literal[
         "tax_invoice", "card_receipt", "cash_receipt", "simple_receipt", "unknown"

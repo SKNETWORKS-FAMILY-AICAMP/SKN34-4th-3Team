@@ -619,6 +619,8 @@
     --exp-ok: #22c55e;
     --exp-check: #f59e0b;
     --exp-bad: #ef4444;
+    /* 전체 박스를 살짝 줄여서 웬만한 개수의 영수증은 스크롤 없이 다 보이게 한다. */
+    padding: 18px 20px;
   }
   .exp2 .exp-eyebrow {
     display: flex;
@@ -645,7 +647,9 @@
   /* ---- 지출관리: 좌측(업로드·통계·필터) / 우측(영수증 목록) 2단 레이아웃 ---- */
   .exp2__layout {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    /* minmax(0, 940px): 공간이 넉넉하면 940px, 화면이 좁으면 그만큼만 —
+       고정 940px과 달리 창이 좁을 때 가로 스크롤이 생기지 않는다. */
+    grid-template-columns: 280px minmax(0, 940px);
     gap: 24px;
     align-items: start;
   }
@@ -656,10 +660,12 @@
     top: 12px;
   }
   .exp2__main {
+    /* 폭은 위 grid-template-columns의 minmax(0, 940px)가 정한다: 공간이 있으면 940px,
+       화면이 좁으면 자동으로 줄어 가로 스크롤이 생기지 않는다. min-width:0은 안의
+       내용(표 등)이 길어도 칼럼이 그 이상 넓어지지 않게 막는 안전장치.
+       높이는 고정값으로 둬서, 필터를 누르거나 내용이 바뀌어도 박스 크기는 그대로다. */
     min-width: 0;
-    /* 왼쪽(업로드·통계·필터)은 화면 한 번에 다 보이게 두고, 목록이 길어질 때는
-       페이지 전체가 아니라 이 영역 안에서만 스크롤되게 높이를 뷰포트에 맞춘다. */
-    max-height: calc(100vh - 160px);
+    height: min(720px, calc(100vh - 160px));
     overflow-y: auto;
   }
   .exp2__mainhead {
@@ -673,6 +679,7 @@
       position: static;
     }
     .exp2__main {
+      height: auto;
       max-height: none;
       overflow-y: visible;
     }
@@ -1163,13 +1170,17 @@
   .exp-list--cards {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
   .exp-card {
+    /* flex 항목은 기본적으로 내용 최소 너비만큼 늘어날 수 있어, 안에 긴 내용(표·법령
+       텍스트 등)이 있는 섹션을 펼치면 카드 폭이 그때만 넓어져 보였다. 0으로 고정해
+       어떤 섹션을 펼쳐도 카드 폭이 항상 같게 한다. */
+    min-width: 0;
     border: 1px solid var(--line);
     border-left: 4px solid var(--line-strong);
     border-radius: 12px;
-    padding: 12px;
+    padding: 10px;
     background: var(--ground);
   }
   .exp-card--ok { border-left-color: #22c55e; }
@@ -1182,8 +1193,8 @@
   }
   .exp-card__thumb {
     position: relative;
-    width: 104px;
-    height: 132px;
+    width: 88px;
+    height: 110px;
     flex: none;
     padding: 0;
     border-radius: 8px;
@@ -1426,9 +1437,15 @@
     font-size: 12.5px;
     color: var(--ink-soft);
   }
+  .exp-card__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 2px;
+  }
   .exp-card__toggle {
     align-self: flex-start;
-    margin-top: 2px;
     padding: 5px 10px;
     border: 1px solid var(--line-strong);
     border-radius: 8px;
@@ -1438,6 +1455,23 @@
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
+  }
+  .exp-card__delete {
+    flex: none;
+    padding: 5px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--surface-solid);
+    color: var(--ink-faint);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .exp-card__delete:hover {
+    border-color: var(--red);
+    color: var(--red);
+    background: color-mix(in srgb, var(--red) 8%, var(--surface-solid));
   }
   .exp-fold {
     border: 1px solid var(--line);
@@ -1603,6 +1637,182 @@
     font-size: 11.5px;
     overflow-wrap: anywhere;
   }
+
+  /* ---- 지출관리: 품목·금액을 표로, "+ 품목 추가" 폼 ---- */
+  .exp-ana__field--items .exp-ana__val {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .exp-ana__itemtable {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-weight: 400;
+  }
+  .exp-ana__itemtable th {
+    text-align: left;
+    padding: 2px 8px 4px 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--line);
+  }
+  .exp-ana__itemtable th:last-child,
+  .exp-ana__itemtable td:last-child {
+    text-align: right;
+    padding-right: 0;
+  }
+  .exp-ana__itemtable td {
+    padding: 4px 8px 4px 0;
+    font-size: 12px;
+    color: var(--ink);
+    border-bottom: 1px dashed var(--line);
+    overflow-wrap: anywhere;
+  }
+  .exp-ana__itemtable tr:last-child td {
+    border-bottom: none;
+  }
+  .exp-ana__itemtotal {
+    font-size: 12.5px;
+  }
+  .exp-ana__itemtotal b {
+    font-weight: 700;
+  }
+  .exp-ana__itemadd {
+    align-self: flex-start;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .exp-ana__itemadd:hover {
+    border-color: var(--blue);
+    color: var(--blue-deep);
+  }
+  /* 좁은 카드 안에서도 품목명·금액이 뭉개지지 않게 각각 자기 줄을 쓴다. */
+  .exp-ana__itemform {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--ground);
+  }
+  .exp-ana__itemform-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .exp-ana__itemform-lbl {
+    flex: none;
+    width: 42px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-faint);
+  }
+  .exp-ana__itemform-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    background: var(--surface-solid);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+  }
+  .exp-ana__itemform-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .exp-ana__itemform-actions button {
+    flex: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    padding: 5px 12px;
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .exp-ana__itemform-actions button[type='submit'] {
+    border-color: var(--blue);
+    color: #fff;
+    background: var(--blue);
+  }
+  .exp-ana__itemform-actions button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  /* ---- 지출관리: 상호 수정 ---- */
+  .exp-ana__editbtn {
+    margin-left: 8px;
+    border: none;
+    background: transparent;
+    color: var(--blue-deep);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .exp-ana__editbtn:hover {
+    text-decoration: underline;
+  }
+  .exp-ana__vendorform {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .exp-ana__vendorform input {
+    flex: 1;
+    min-width: 120px;
+    padding: 5px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    background: var(--surface-solid);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .exp-ana__vendorform button {
+    flex: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 7px;
+    padding: 4px 9px;
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .exp-ana__vendorform button[type='submit'] {
+    border-color: var(--blue);
+    color: #fff;
+    background: var(--blue);
+  }
+  .exp-ana__vendorform button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+  .exp-ana__vendorform .cal__err {
+    flex-basis: 100%;
+    margin: 2px 0 0;
+  }
+
   .exp-ana__steps {
     list-style: none;
     margin: 0;

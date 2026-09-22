@@ -1041,9 +1041,11 @@
     cursor: not-allowed;
   }
 
+  /* 세 칼럼 폭을 고정한다(5·10 단위). 내용이 길어져도 칼럼 폭 자체는 늘어나지 않고
+     각 칼럼 안에서 줄바꿈·스크롤된다. */
   .bp2__body {
     display: grid;
-    grid-template-columns: 208px minmax(0, 1fr) 320px;
+    grid-template-columns: 260px 420px 380px;
     gap: 18px;
     align-items: start;
   }
@@ -1051,15 +1053,23 @@
     .bp2__body {
       grid-template-columns: 1fr;
     }
+    .bp2__nav,
+    .bp2__main,
+    .bp-chat {
+      width: 100%;
+      height: auto;
+    }
   }
 
   .bp2__nav {
+    width: 260px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 16px;
     position: sticky;
     top: 12px;
-    max-height: calc(100vh - 160px);
+    height: calc(100vh - 180px);
     overflow-y: auto;
     border: 1px solid var(--line);
     border-radius: 14px;
@@ -1130,9 +1140,11 @@
   }
 
   .bp2__main {
+    width: 420px;
     min-width: 0;
-    max-height: calc(100vh - 160px);
+    height: calc(100vh - 180px);
     overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 24px;
@@ -1176,10 +1188,11 @@
 
   /* ---- 사업계획서: 아이디어 어시스턴트(우측 채팅) ---- */
   .bp-chat {
+    width: 380px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    height: 100%;
-    max-height: calc(100vh - 160px);
+    height: calc(100vh - 180px);
     border: 1px solid var(--line);
     border-radius: 14px;
     background: var(--surface-solid);
@@ -1189,7 +1202,7 @@
   }
   @media (max-width: 1080px) {
     .bp-chat {
-      max-height: 480px;
+      height: 480px;
       position: static;
     }
   }
@@ -1297,19 +1310,19 @@
     font-size: 12px;
     color: var(--ink-faint);
   }
+  /* .bp-chat__foot는 <form> 자기 자신이다(감싼 하위 form이 없음) — 여기 바로 가로 정렬을 건다.
+     입력창 + 전송 버튼이 한 줄로 나란히, 버튼이 입력창 오른쪽 끝에 붙는다. */
   .bp-chat__foot {
     border-top: 1px solid var(--line);
     padding: 10px 12px;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .bp-chat__foot form {
-    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
     gap: 8px;
   }
   .bp-chat__foot input {
     flex: 1;
+    min-width: 0;
     border: 1px solid transparent;
     border-radius: 999px;
     padding: 9px 14px;

@@ -12,7 +12,9 @@ from schemas.expenses import (
     DeductibilityResponse,
     ExpenseAnalysisResponse,
     ExpenseCategoryUpdate,
+    ExpenseItemCreate,
     ExpenseListResponse,
+    ExpenseVendorUpdate,
     ReceiptCreateResponse,
     ReceiptExtractionResponse,
 )
@@ -111,6 +113,34 @@ def analysis(
 ):
     """OCR이 읽은 항목과 판정에 이르는 단계를 돌려준다. LLM을 부르지 않아 즉시 응답한다."""
     return expense_service.analysis(expense_id, request.auth["id"])
+
+
+@router.post(
+    "/{expense_id}/items",
+    response=ExpenseAnalysisResponse,
+    summary="OCR이 놓친 품목 추가",
+)
+def add_item(
+    request,
+    body: ExpenseItemCreate,
+    expense_id: int = Path(description="지출 ID"),
+):
+    """OCR이 읽지 못한 품목을 사용자가 직접 추가하고, 갱신된 판독 결과를 돌려줍니다."""
+    return expense_service.add_item(expense_id, request.auth["id"], body.name, body.price)
+
+
+@router.patch(
+    "/{expense_id}/vendor",
+    response=ExpenseAnalysisResponse,
+    summary="상호 수정",
+)
+def update_vendor(
+    request,
+    body: ExpenseVendorUpdate,
+    expense_id: int = Path(description="지출 ID"),
+):
+    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고치고, 갱신된 판독 결과를 돌려줍니다."""
+    return expense_service.update_vendor(expense_id, request.auth["id"], body.vendor)
 
 
 @router.get(
