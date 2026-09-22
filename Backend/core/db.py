@@ -91,7 +91,7 @@ def _row(item) -> dict:
     for key in _DT_KEYS:
         if key in data:
             data[key] = _parse_dt(data[key]) if data[key] else None
-    for key in ("eligible", "deductible", "dispatched", "llm_used", "read_flag"):
+    for key in ("eligible", "deductible", "dispatched", "llm_used", "read_flag", "proof_valid"):
         if key in data and data[key] is not None:
             data[key] = bool(data[key])
     if "read_flag" in data:
@@ -106,6 +106,16 @@ def _row(item) -> dict:
             data["items"] = json.loads(data["items"] or "[]")
         except json.JSONDecodeError:
             data["items"] = []
+    if "read_meta" in data:
+        try:
+            data["read_meta"] = json.loads(data["read_meta"]) if data["read_meta"] else {}
+        except (TypeError, json.JSONDecodeError):
+            data["read_meta"] = {}
+    if "missing_fields" in data and isinstance(data["missing_fields"], str):
+        try:
+            data["missing_fields"] = json.loads(data["missing_fields"] or "[]")
+        except json.JSONDecodeError:
+            data["missing_fields"] = []
     if "legal_basis" in data and "legalBasis" not in data:
         data["legalBasis"] = data.get("legal_basis")
     return data

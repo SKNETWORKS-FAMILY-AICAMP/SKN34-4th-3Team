@@ -65,21 +65,43 @@
 
 `tax` 그룹에서 현재 살아 있는 화면이 부르는 경로는 없다. `/tax/business-type/diagnosis`(FS-09)·`/tax/info`(FS-10)·`/tax/calendar`·`/tax/reminders`(FS-12)는 호출자가 없고, `/tax/tax-reduction/check`(FS-13)의 유일한 호출자 `Frontend/src/pages/TaxTool.jsx`는 어느 화면에서도 렌더되지 않는 죽은 코드다(파일 2행 주석). 홈·마이페이지 캘린더는 `tax` 그룹이 아니라 `GET /calendar`를 쓴다.
 
-## expenses — 지출 분석 (추가 기능)
+## expenses — 지출 분석
 
-> **추가 기능(추후 개발)이다.** 아래 엔드포인트는 Backend에 구현돼 있으나 이를 부르는 화면이 없다(`Frontend/src/api.js`에 호출 함수 없음). `Docs/README.md` 8절 참고.
+지출관리 화면(`Frontend/src/pages/ExpenseTracker.jsx`)이 부른다. `GET /expenses/receipts/{receiptId}`만 화면에서 부르지 않는다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | /expenses/receipts | 영수증 등록(업로드, OCR 트리거) | 필요 | `multipart/form-data (image)` | `{ receiptId, status, ocrSource }` (`llm` \| `heuristic` \| `mock`) | FS-14 |
-| GET | /expenses/receipts/{receiptId} | 영수증 OCR 추출 결과 조회 | 필요 | - | `{ date, vendor, amount, items }` | FS-15 |
-| GET | /expenses | 지출 내역(분류 포함) 조회 | 필요 | `?from&to&category` | `{ expenses: [...] }` | FS-16 |
-| PATCH | /expenses/{expenseId} | 지출 분류 수정 | 필요 | `{ category }` (지원하지 않는 분류는 400) | `{ deductible, confidence, basis, llmUsed, sources }` | FS-16 |
+| POST | /expenses/receipts | 영수증 등록(업로드, OCR 트리거) | 필요 | `multipart/form-data (image)` | `{ receiptId, status, ocrSource, proofType, proofTypeLabel }` (`ocrSource`: `ocr_llm` \| `vision` \| `mock`) | FS-14 |
+| GET | /expenses/receipts/{receiptId} | 영수증 OCR 추출 결과 조회 | 필요 | - | `{ date, vendor, amount, items, proofType, proofTypeLabel, ocrSource }` | FS-15 |
+| GET | /expenses/receipts/{receiptId}/image | 업로드한 원본 이미지 | 필요 | - | 이미지 바이너리(업로드 때의 `Content-Type`). 본인 것이 아니거나 이미지가 없으면 404 | FS-14 |
+| GET | /expenses | 지출 내역(분류·판정 포함) 조회 | 필요 | `?from&to&category` | `{ expenses: [{ expenseId, receiptId, vendor, category, amount, date, uploadedAt, deductible, tier, tierLabel, proofType, proofTypeLabel, proofValid, missingFields, items }] }` | FS-16 |
+| PATCH | /expenses/{expenseId} | 지출항목 변경 후 재판정 | 필요 | `{ category }` (지원하지 않는 항목은 400) | `/deductibility`와 같음 | FS-16 |
 | DELETE | /expenses/{expenseId} | 지출 삭제 | 필요 | - | `{ deleted: true }` | FS-16 |
-| GET | /expenses/{expenseId}/deductibility | 경비처리 가능성 분석 결과 조회 | 필요 | - | `{ deductible, confidence, basis, llmUsed, sources }` | FS-17 |
+| GET | /expenses/{expenseId}/analysis | 읽은 항목·판단 단계·관련 법령(LLM 호출 없이 즉시 응답) | 필요 | - | `{ fields, steps, laws, lawNote, tier, tierLabel, ocrSource, ocrConfidence }` | FS-15, FS-17 |
+| GET | /expenses/{expenseId}/deductibility | 경비처리 가능성·세법 근거 | 필요 | - | `{ deductible, confidence, basis, llmUsed, sources, tier, tierLabel, proofType, proofTypeLabel, proofValid, missingFields }` | FS-17 |
 
 `POST /expenses/receipts`의 업로드 한도는 **4 MiB**이며 초과 시 `413`이다(`Backend/api/expenses.py`의 `MAX_RECEIPT_BYTES`).
 LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는다(그 밖의 형식은 `415`).
+
+- `category`: `사무용품`·`통신비`·`차량유지비`·`광고선전비`·`임차료`·`복리후생비`·`접대비`·`교육·도서`·`기타`
+- `tier`: `high`(인정 가능성 높음) \| `ambiguous`(애매함) \| `low`(인정 어려움). 신뢰도 0.7 이상이고 증빙이 적격이면 `high`
+- `proofType`: `tax_invoice` \| `card_receipt` \| `cash_receipt` \| `simple_receipt` \| `unknown`. `proofValid`는 적격증빙 여부이며 증빙 종류를 모르면 `null`
+- `analysis.fields[]`: `{ key, label, value, read, evidence }` — `read=false`면 못 읽은 값, `evidence`는 영수증 원문 인용
+- `analysis.steps[]`: `{ key, title, result, detail }` — `result`는 `pass`·`warn`·`fail`·`unknown`
+- `analysis.laws[]`: `{ law, article, title, point, who, url }` — `url`은 국가법령정보센터 링크
+- `ocrSource`(`analysis`): `ocr_llm` \| `vision` \| `mock` \| `legacy`(읽기 방식을 기록하기 전 영수증). `ocrConfidence`는 `ocr_llm`일 때만 값이 있는 평균 인식 신뢰도(%)
+
+## bizplan — 사업계획서
+
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 부른다. 세 경로 모두 결과를 서버에 저장하지 않으며 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`).
+
+| Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
+| --- | --- | --- | --- | --- | --- | --- |
+| POST | /bizplan/generate | 사업계획서 초안 생성 | 필요 | `{ businessName, tagline, targetCustomer, problem, solution, differentiator, team, targetProgram, extraNotes, templateText }` (전부 선택, `templateText` 6000자 이하) | `{ sections: [{ key, label, content }], summary, llmUsed }` | FS-29 |
+| POST | /bizplan/evaluate | AI 예비진단(자체 채점) | 필요 | `{ sections: [{ key, label, content }] }` (최대 20개) | `{ overallScore, overallComment, sections: [{ key, label, score, strengths, improvements }], llmUsed }` (점수 0~100) | FS-30 |
+| POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
+
+`templateText`를 비우면 `sections`는 PSST 4항목(`problem`·`solution`·`scaleUp`·`team`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다.
 
 ## policies — 지원정책 탐색
 

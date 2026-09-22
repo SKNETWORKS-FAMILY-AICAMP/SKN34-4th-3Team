@@ -7,6 +7,19 @@ ALTER TABLE reminders ADD COLUMN IF NOT EXISTS dispatched BOOLEAN DEFAULT false;
 
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS user_id INT REFERENCES users(id);
 
+-- 영수증 경비 인정 판정: 증빙 유형(세금계산서/카드전표/현금영수증/간이영수증), 적격 여부, 3단계 판정, 빠진 정보
+ALTER TABLE receipt_extractions ADD COLUMN IF NOT EXISTS proof_type VARCHAR(30);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS deductible_tier VARCHAR(20);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS proof_valid BOOLEAN;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS missing_fields TEXT;
+
+-- OCR이 실제로 읽은 항목(기본값으로 채운 것과 구분)과 영수증 원문 근거. JSON 문자열.
+ALTER TABLE receipt_extractions ADD COLUMN IF NOT EXISTS read_meta TEXT;
+
+-- 올린 영수증 원본 이미지를 나중에 다시 볼 수 있게 저장한다.
+ALTER TABLE receipts ADD COLUMN IF NOT EXISTS image_data BYTEA;
+ALTER TABLE receipts ADD COLUMN IF NOT EXISTS mime_type VARCHAR(50);
+
 ALTER TABLE announcements ADD COLUMN IF NOT EXISTS apply_method VARCHAR(255);
 
 ALTER TABLE announcement_summaries ADD COLUMN IF NOT EXISTS llm_used BOOLEAN DEFAULT false;

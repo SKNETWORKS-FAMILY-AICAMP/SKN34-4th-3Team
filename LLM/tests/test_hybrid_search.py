@@ -114,6 +114,26 @@ def test_bm25_applies_policy_filter() -> None:
     ]
 
 
+def test_bm25_can_return_unique_policy_candidates() -> None:
+    duplicate_policy_chunk = {
+        **CHUNKS[0],
+        "chunk_id": "policy-101-chunk-2",
+        "content": "초기 창업기업 지원 사업화 지원",
+    }
+    bm25_search = BM25Search([*CHUNKS, duplicate_policy_chunk])
+
+    results = bm25_search.search(
+        "지원",
+        require_policy_id=True,
+        unique_policy_ids=True,
+        top_k=3,
+    )
+
+    policy_ids = [result["policy_id"] for result in results]
+    assert len(policy_ids) == 3
+    assert len(set(policy_ids)) == 3
+
+
 def test_rrf_accumulates_duplicate_chunk_scores() -> None:
     dense_results = [
         _search_result(CHUNKS[0], score=0.9),

@@ -1,5 +1,10 @@
 FROM python:3.13-slim
 
+# 영수증 OCR(글자·위치·신뢰도 추출)용 Tesseract와 한국어 학습 데이터.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
@@ -18,4 +23,4 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8001
 
-CMD ["uv", "run", "--frozen", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uv", "run", "--frozen", "uvicorn", "src.serving.django_config.asgi:application", "--host", "0.0.0.0", "--port", "8001", "--lifespan", "off"]

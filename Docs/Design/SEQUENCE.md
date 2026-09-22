@@ -78,9 +78,9 @@ Service는 LLM을 부르기 전에 두 가지를 조립한다(`Backend/services/
 **실제 공고 조회는 Backend가 한다.** LLM은 넘겨받은 목록을 근거로 쓸 뿐 DB를 직접 뒤지지 않는다(`Docs/Design/LLM_API_SPEC_V1.md` 10절 역할 경계).
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 LLM이 답한 문장과 `status`를 그대로 보존하며 `status≠success`면 `needsConfirmation=true`로 표시한다. 목업 답변은 LLM에 닿지 못했거나 빈 답변일 때만 쓴다.
 
-## 3. 영수증 지출 분석 (FS-14 ~ FS-17, 추가 기능)
+## 3. 영수증 지출 분석 (FS-14 ~ FS-17)
 
-> 추가 기능(추후 개발). Backend·LLM 경로는 남아 있으나 이를 부르는 화면이 없다. `Docs/README.md` 8절 참고.
+지출관리 화면(`Frontend/src/pages/ExpenseTracker.jsx`)이 부른다. 여러 장을 고르면 화면이 한 장씩 차례로 `POST /expenses/receipts`를 보낸다.
 
 ```mermaid
 sequenceDiagram
@@ -93,26 +93,38 @@ sequenceDiagram
     FE->>API: POST /expenses/receipts (이미지 업로드, 4 MiB 이하)
     API->>SVC: 영수증 등록 요청
     SVC->>LLM: POST /ocr/receipt (60초)
+    LLM->>LLM: Tesseract OCR (이미지 보정·회전 재시도)
+    alt 읽은 글자 8자 이상
+        LLM->>LLM: OCR 글자만으로 LLM 해석 (source=ocr_llm)
+    else OCR 불가·글자 부족
+        LLM->>LLM: Vision LLM으로 대체 (source=vision)
+    end
     alt 추출 성공
-        LLM-->>SVC: 날짜·상호·금액·품목·분류
+        LLM-->>SVC: 날짜·상호·금액·품목·분류·증빙 종류·원문 근거·OCR 신뢰도
     else 실패·미연결
         SVC->>SVC: 고정 목 값 사용 (ocrSource=mock)
     end
-    SVC->>SVC: 규칙 기반 지출 분류 + 경비 가능성(CATEGORY_RULES)
-    SVC->>DB: Receipt(status: done), ReceiptExtraction, Expense 저장
+    SVC->>SVC: 지출항목 분류 + 적격증빙 판정 + 3단계 판정(CATEGORY_RULES)
+    SVC->>DB: Receipt(원본 이미지), ReceiptExtraction(read_meta), Expense(tier·proof_valid) 저장
     SVC-->>API: 처리 완료
-    API-->>FE: 200 OK (receiptId, status, ocrSource)
+    API-->>FE: 200 OK (receiptId, status, ocrSource, proofType)
 
-    Note over FE,API: 이후 경비처리 가능성 조회
+    Note over FE,API: 카드를 펼치면 판단 과정과 세법 근거 조회
+    FE->>API: GET /expenses/{expenseId}/analysis
+    API->>SVC: 조회 요청
+    SVC->>DB: 저장된 추출값·판정 조회
+    SVC-->>API: fields, steps, laws (LLM 호출 없음)
+    API-->>FE: 200 OK
     FE->>API: GET /expenses/{expenseId}/deductibility
     API->>SVC: 조회 요청
     SVC->>LLM: POST /rag/deductibility (30초)
     LLM-->>SVC: basis, sources, llmUsed
-    SVC-->>API: deductible, confidence, basis, llmUsed, sources
+    SVC->>DB: 판정 갱신 (llmUsed=true일 때만 규칙 판정 덮어씀)
+    SVC-->>API: deductible, confidence, basis, tier, proofValid, missingFields, sources
     API-->>FE: 200 OK
 ```
 
-영수증 등록(FS-14) 한 번에 OCR 추출(FS-15)과 규칙 기반 지출 분류(FS-16)가 끝나고, RAG 근거가 붙는 경비처리 가능성 설명(FS-17)은 조회 시점에 LLM을 부른다(`Backend/services/expense_service.py`).
+영수증 등록(FS-14) 한 번에 OCR 추출(FS-15)과 규칙 기반 지출 분류·판정(FS-16, FS-17)이 끝난다. 판단 과정(`/analysis`)은 저장값과 규칙만으로 즉시 응답하고, RAG 근거가 붙는 설명(`/deductibility`)만 조회 시점에 LLM을 부른다(`Backend/services/expense_service.py`). 지출항목을 바꾸는 `PATCH /expenses/{expenseId}`도 규칙 재판정 후 같은 `/deductibility` 흐름을 탄다.
 
 ## 4. 기동 시 RAG 인덱스 워밍업
 
@@ -143,6 +155,45 @@ sequenceDiagram
 데몬 스레드로 도는 이유는 워밍업이 기동을 막지 않게 하기 위해서다. `rag_documents`가 이미 임베딩을 갖고 있고 청크 content가 바뀌지 않았으면 `source: "cache"`(`status: "already_ready"`)로 로드되어 Embedding 재호출이 없다. 변경된 청크가 있으면 그만큼만 임베딩한다. `/rag/ready`에 닿지 못하면(LLM이 늦게 뜬 경우 등) 재색인하지 않으므로, compose는 llm 헬스체크 통과 뒤에 backend를 띄운다.
 
 **질의마다 준비 상태를 확인하던 예전 동작과 혼동하면 안 된다.** 그 왕복은 제거됐고(`Docs/STATUS.md` P0-2-1), 이것은 기동 시 한 번 도는 워밍업이다.
+
+## 5. 사업계획서 초안·예비진단·어시스턴트 (FS-29 ~ FS-31)
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Backend(api)
+    participant SVC as Backend(service)
+    participant LLM as LLM 서비스
+
+    FE->>API: POST /bizplan/generate { 기초 정보, 아이디어, templateText? }
+    API->>SVC: 초안 생성 요청
+    SVC->>LLM: POST /rag/business-plan (60초)
+    alt 응답 성공
+        LLM-->>SVC: sections, summary
+        SVC-->>API: 초안
+        API-->>FE: 200 OK
+    else 실패·미연결
+        SVC-->>API: HttpError 503
+        API-->>FE: 503
+    end
+    FE->>FE: localStorage에 입력값·초안 임시저장
+
+    Note over FE,LLM: 예비진단·어시스턴트도 같은 구조
+    FE->>API: POST /bizplan/evaluate { sections }
+    API->>SVC: 채점 요청
+    SVC->>LLM: POST /rag/business-plan-evaluate (60초)
+    LLM-->>SVC: overallScore, overallComment, sections
+    SVC-->>API: 예비진단 결과
+    API-->>FE: 200 OK
+    FE->>API: POST /bizplan/coach { question, sections, conversationHistory }
+    API->>SVC: 질문
+    SVC->>LLM: POST /rag/business-plan-coach (60초)
+    LLM-->>SVC: answer, inScope, redirect
+    SVC-->>API: 답변
+    API-->>FE: 200 OK
+```
+
+세 호출 모두 RAG 검색 그래프를 거치지 않는 단일 LLM 호출이고, Backend는 DB에 아무것도 저장하지 않는다(`Backend/services/bizplan_service.py`). 대화 기록도 화면이 들고 있다가 매 질문에 함께 보낸다.
 
 ## 관련 문서
 

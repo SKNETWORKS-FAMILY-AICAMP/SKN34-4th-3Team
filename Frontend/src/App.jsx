@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api.js';
-import { loadStoredUser, loadRoadmapDone, saveRoadmapDone, ROADMAP_KEY } from './utils.js';
+import { loadStoredUser, loadRoadmapDone, saveRoadmapDone } from './utils.js';
 import { DEFAULT_BIZ, DEFAULT_REGION, USER_STORE_KEY } from './constants.js';
 import { ScrollProgress, FloatingThemeToggle } from './components/common.jsx';
 import { Nav } from './components/Nav.jsx';
@@ -16,7 +16,7 @@ export function App() {
   const [pageKey, setPageKey] = useState('tax');
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
-  // 창업 로드맵 진행 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
+  // 창업 로드맵 체크 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
@@ -117,7 +117,7 @@ export function App() {
       goMyPage();
       return;
     }
-    setPageKey(key); // 'roadmap' | 'tax' | 'gov'
+    setPageKey(key); // 'roadmap' | 'tax' | 'expenses' | 'gov'
     setView('page');
     window.scrollTo(0, 0);
   };

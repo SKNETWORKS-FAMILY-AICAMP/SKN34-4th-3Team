@@ -3,6 +3,7 @@
 사용자 프로필과 질문을 바탕으로 전체 정책 문서에서 관련 정책을 탐색·요약하는
 내부 LLM 서비스다. 실제 자격 판정이 필요한 경우에는 Backend의 Rule 기반 결과를
 Source of Truth로 사용하며, 이 서비스는 판정값을 변경하지 않는다.
+HTTP API는 Django ASGI로 제공하며, 요청 라우팅·오류 처리·OpenAPI 문서도 Django 경로에서 처리한다.
 
 Backend(`Backend/core/llm_client.py`)가 Docker 내부 네트워크에서 호출하며 다음을 제공한다.
 
@@ -17,9 +18,9 @@ Backend(`Backend/core/llm_client.py`)가 Docker 내부 네트워크에서 호출
 - 세금 질문 Semantic Cache(`tax_rag_cache`)와 LangSmith tracing
 
 원본 PDF와 DB 원천 테이블은 읽기 전용으로 취급하고 가공 결과를 원본에 덮어쓰지 않는다.
-LLM 프로세스는 기동 시 검색기를 스스로 준비하지 않는다. Compose 기동에서는 Backend의
-워밍업 스레드가 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를 한 번
-호출한다. 변경된 Chunk가 있으면 이때 Embedding 비용이 발생할 수 있다.
+LLM 프로세스는 첫 HTTP 요청에서 검색기를 백그라운드로 준비한다. Backend도 기동 시
+`/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를 호출한다.
+변경된 Chunk가 있으면 이때 Embedding 비용이 발생할 수 있다.
 그래프 구조와 인수인계는 `LANGGRAPH_ARCHITECTURE.md`, 실행 절차는 `RUN_GUIDE.md`를 참고한다.
 
 ## 구조
@@ -29,7 +30,8 @@ LLM/
 ├── data/                  # 원본과 분리한 중간·가공·캐시 데이터
 ├── evaluation/            # 평가 케이스·실행 스크립트·결과(results/는 Git 제외)
 ├── models/                # 로컬 모델 자산을 위한 예약 영역
-├── main.py
+├── manage.py              # Django 설정 검사 등 관리 명령
+├── main.py                # Django ASGI 개발 실행기
 ├── src/
 │   ├── core/
 │   │   ├── config.py       # 환경변수 설정
@@ -76,8 +78,10 @@ LLM/
 │   │   ├── in_memory.py    # 프로세스 내부 테스트 Vector Store
 │   │   └── postgres.py     # 실제 PostgreSQL pgvector Search
 │   └── serving/
-│       ├── app.py          # FastAPI 애플리케이션
-│       ├── rag_routes.py   # API endpoint와 프로세스 runtime(그래프·클라이언트 캐시)
+│       ├── django_config/  # 운영 Django ASGI 설정·URL
+│       ├── django_views.py # Django HTTP 어댑터
+│       ├── api_schema.py   # Django API OpenAPI 문서
+│       ├── rag_routes.py   # 기존 RAG 처리 함수와 프로세스 runtime
 │       ├── schemas.py      # API 요청·응답 schema
 │       ├── errors.py       # HTTP 오류 코드·응답 형식
 │       └── tax_calculators_docstring.py # 세금 계산기 5종
@@ -524,7 +528,7 @@ Guardrail에서는 `out_of_scope`만 입력 차단으로 계산한다. `insuffic
 }
 ```
 
-FastAPI 서버를 실행한 상태에서 평가한다. 평가기는 정책 추천 전용 서비스를 우회하지
+Django ASGI 서버를 실행한 상태에서 평가한다. 평가기는 정책 추천 전용 서비스를 우회하지
 않고 `POST /internal/rag/answer`를 호출하므로 Router부터 Answer까지 실제 LangGraph
 실행 결과를 대상으로 검색, Guardrail, 지연시간 지표를 계산한다. 검색 순위는 응답의
 `sources[].policy_id` 순서를 사용한다.
@@ -556,11 +560,12 @@ Query Embedding과 LLM 호출이 발생하므로 실제 평가셋을 반복 실�
 ```bash
 cd LLM
 uv sync
-uv run uvicorn main:app --reload --port 8001
+uv run uvicorn src.serving.django_config.asgi:application --reload --port 8001 --lifespan off
 ```
 
 - Health Check: `http://localhost:8001/health`
-- OpenAPI 문서: `http://localhost:8001/docs`
+- API 문서: `http://localhost:8001/docs`
+- Django 시스템 검사: `uv run python manage.py check`
 
 또는 다음 명령으로 `HOST`, `PORT`, `RELOAD` 설정을 사용해 실행할 수 있다.
 
@@ -576,8 +581,8 @@ uv run pytest
 ```
 
 테스트는 Fake Embedding과 Fake Chat Model을 사용하며 OpenAI, LangSmith 또는
-실제 DB에 접속하지 않는다. 다만 원본 PDF(`src/data/RAG_data`)가 필요한 일부 테스트는
-파일이 없으면 실패한다(2026-09-15 로컬 실행: 354건 중 346 passed, 8 failed).
+실제 DB에 접속하지 않는다. 저장소에 없는 초기 `src/data/RAG_data` PDF 20개를
+전제로 한 테스트는 2026-09-22에 제거했다.
 
 ## Docker
 

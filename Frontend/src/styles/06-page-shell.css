@@ -143,12 +143,13 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 16px;
+    padding: 13px 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--surface-solid);
   }
-  .rg2__taskrow:hover {
+  .rg2__taskrow:hover,
+  .rg2__task.is-open .rg2__taskrow {
     border-color: var(--line-strong);
   }
   .rg2__task input {
@@ -175,42 +176,124 @@
     text-align: left;
     cursor: pointer;
   }
-  .rg2__taskcaret {
-    flex: none;
-    font-style: normal;
-    font-size: 15px;
-    line-height: 1;
+  .rg2__task.is-done .rg2__taskrow {
+    background: var(--ground);
+  }
+  .rg2__task.is-done .rg2__tasktitle {
     color: var(--ink-faint);
   }
-  .rg2__taskbtn:hover .rg2__taskcaret {
-    color: var(--blue);
+  .rg2__tasktitle {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .rg2__key {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid var(--red);
+    border-radius: 999px;
+    color: var(--red);
+    font-style: normal;
+    font-size: 10.5px;
+    font-weight: 700;
+    vertical-align: 1px;
+  }
+  .rg2__badge {
+    flex: none;
+    padding: 1px 8px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .rg2__badge--law { color: var(--blue-deep); }
+  .rg2__badge--pub { color: var(--green); }
+  .rg2__badge--method { color: var(--violet); }
+  .rg2__badge--ref { color: var(--ink-soft); }
+  .rg2__badge--unk { color: var(--red); }
+  .rg2__legend {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .rg2__legend summary {
+    cursor: pointer;
+    color: var(--blue-deep);
+    font-weight: 700;
+  }
+  .rg2__legend ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    display: grid;
+    gap: 7px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--ground);
+  }
+  .rg2__legend li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    line-height: 1.5;
+  }
+  .rg2__warn {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    color: var(--red);
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  .rg2__asof {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--amber);
+  }
+  .rg2__src {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+  }
+  .rg2__src a {
+    font-size: 12.5px;
+    color: var(--blue-deep);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .rg2__src a:hover {
+    text-decoration: underline;
+  }
+  .rg2__disc {
+    margin: 14px 0 0;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--ink-faint);
   }
   .rg2__goal {
     display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 6px 10px;
+    flex-direction: column;
+    gap: 3px;
     margin-bottom: 12px;
     padding: 11px 14px;
     border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--ground);
   }
-  .rg2__goallabel {
-    flex: none;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--blue-deep);
-  }
   .rg2__goaltext {
-    flex: 1;
-    min-width: 0;
     font-size: 13px;
     font-weight: 700;
+    line-height: 1.45;
     color: var(--ink);
   }
-  .rg2__goalspan {
-    flex: none;
+  .rg2__goalsub {
     font-size: 11.5px;
     color: var(--ink-faint);
   }
@@ -234,32 +317,9 @@
     line-height: 1.7;
     color: var(--ink-soft);
   }
-  .rg2__taskmeta {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin: 9px 0 0;
-    padding-top: 9px;
-    border-top: 1px dashed var(--line-strong);
-    font-size: 13px;
-  }
-  .rg2__taskmeta span {
-    color: var(--ink-faint);
-  }
-  .rg2__taskmeta b {
-    color: var(--ink);
-    font-weight: 700;
-  }
   @keyframes taskInfoIn {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: none; }
-  }
-  .rg2__task.is-done .rg2__taskrow {
-    background: var(--ground);
-  }
-  .rg2__task.is-done .rg2__taskbtn span {
-    color: var(--ink-faint);
-    text-decoration: line-through;
   }
   .rg2__chat {
     min-width: 0;
@@ -308,3 +368,15 @@
     border-color: var(--blue);
   }
 
+
+  /* ---- 지출관리·사업계획서 페이지: 다른 기능 페이지와 같은 .fp--wide 컨테이너
+     폭(1180px)을 그대로 쓴다. ---- */
+  .exp-page {
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  /* 지출관리는 안쪽에 .tool(공용, max-width:900px)을 한 번 더 두르고 있어서
+     exp-page보다 좁게 잘렸다 — 여기서만 풀어 exp-page 폭 그대로 쓰게 한다. */
+  .exp-page .tool {
+    max-width: none;
+  }
