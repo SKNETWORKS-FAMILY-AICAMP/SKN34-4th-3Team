@@ -795,7 +795,7 @@ def build_graph(
             for dense_result, bm25_result in zip(dense_lists, bm25_lists):
                 dense_docs = merge_evidence(dense_docs, dense_result)
                 bm25_docs = merge_evidence(bm25_docs, bm25_result)
-            rankings = [result for pair in zip(dense_lists, bm25_lists) for result in pair]
+            rankings = [result for pair in zip(dense_lists, bm25_lists) for result in pair if result]
             retrieved_docs = (
                 source_level_rrf(
                     rankings, unit="policy", rrf_k=settings_config.hybrid_rrf_k,

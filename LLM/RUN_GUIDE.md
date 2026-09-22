@@ -115,16 +115,17 @@ Invoke-RestMethod http://localhost:8001/rag/ready
 - Vector Store 설정
 
 `/rag/ready`의 `index_ready`는 DB에 Embedding이 존재한다는 의미가 아니다. 현재
-LLM 프로세스에 pgvector 검색기와 메모리 BM25 검색기가 준비됐다는 의미다.
+LLM 프로세스에 pgvector 검색기가 준비됐다는 의미다. PostgreSQL 검색 경로에서는
+Elasticsearch alias와 문서 수도 확인하며, ES가 준비되지 않았으면 `false`를 반환한다.
 LLM 서버는 첫 HTTP 요청에서 인덱스 준비를 백그라운드로 시작한다. 준비 중에는
 `index_ready=false`가 반환될 수 있으며, 준비가 끝나면 `true`로 바뀐다.
 
 ## 5. 검색기 준비
 
-LLM 프로세스는 기동 시 검색기를 스스로 준비하지 않는다. 저장소 루트에서 Docker Compose나
-`setup.sh`로 전체를 띄우면 Backend 워밍업 스레드가 `/rag/ready`를 확인하고 준비되지
-않았으면 `/rag/reindex`를 한 번 호출하므로 이 절차가 필요 없다. LLM만 따로 실행했거나
-LLM 컨테이너만 재시작했으면 직접 준비한다.
+LLM 프로세스는 첫 HTTP 요청에서 pgvector 검색기 준비를 시작한다. 저장소 루트에서 Docker Compose나
+`setup.sh`로 전체를 띄우면 Backend 워밍업 스레드도 `/rag/ready`를 확인하고 준비되지
+않았으면 `/rag/reindex`를 한 번 호출한다. LLM만 따로 실행했거나
+LLM 컨테이너만 재시작했으면 다음 명령으로 pgvector 준비를 확인할 수 있다.
 
 ```powershell
 $body = @{
@@ -159,6 +160,33 @@ Invoke-RestMethod `
 발생한다. 명확한 필요와 승인이 없으면 사용하지 않는다.
 
 준비 전 `/rag/chat`은 오류가 아니라 200 + `status=integration_unavailable`로 응답한다.
+
+### Elasticsearch 최초 적재 및 확인
+
+아래 명령은 **저장소 루트**에서 실행한다. PostgreSQL 연결과 원본 데이터
+(`policies`, `announcements`, `tax_documents`)는 이미 준비되어 있다고 가정한다.
+새 컴퓨터에서 Compose를 처음 실행하면 Elasticsearch 볼륨은 생성되지만 문서와
+`rag-documents` alias는 비어 있다. `/rag/reindex`는 pgvector와 ES를 함께 갱신하지만,
+`/internal/rag/index`는 ES 색인을 실행하지 않는다. Backend 워밍업이 `/rag/ready=false`를
+확인하면 `/rag/reindex`를 호출한다. Backend를 거치지 않고 LLM만 실행하는 경우에는
+아래 적재 명령을 직접 실행한다.
+
+```bash
+docker compose up -d --build elasticsearch llm
+docker compose exec -T llm /opt/llm-venv/bin/python -m src.features.elasticsearch_indexing
+docker compose exec -T elasticsearch curl -fsS http://localhost:9200/_alias/rag-documents
+docker compose exec -T elasticsearch curl -fsS http://localhost:9200/rag-documents/_count
+```
+
+색인 명령이 `indexed=... alias=rag-documents index=...`를 출력하고 `indexed`가
+0보다 커야 한다. alias 조회가 성공하고 `_count`의 `count`도 0보다 큰지 확인한다.
+원본 데이터가 없으면 색인 명령은 실패한다. DB 원본이 바뀌면 `/rag/reindex`를
+호출해 pgvector와 ES를 함께 갱신하거나 색인 명령을 다시 실행해 ES를 갱신한다.
+`documentIds`를 지정한 재색인도 원본 기준 pgvector 동기화와 ES 전체 재색인을 수행한다.
+따라서 부분 요청도 ES 전체 적재 시간과 비용이 든다. 재색인에 실패하면 API는 오류를
+반환하고 해당 LLM 프로세스는 ES 결과를 사용하지 않는다. ES 복구 후 `/rag/reindex`를
+다시 호출한다. 검색 중 ES 연결이 끊기면 로그에 오류를 남기고 pgvector Dense 결과로
+검색을 계속한다. ES 적재 명령은 새 물리 인덱스의 적재가 완료된 뒤 alias를 전환한다.
 
 ## 6. RAG 질문 테스트
 
@@ -242,9 +270,10 @@ uv run python main.py
 ### 모든 질문이 `no_result` 또는 `error`
 
 1. `/rag/ready`에서 `index_ready=true`인지 확인한다.
-2. 서버 로그의 `termination_reason`을 확인한다.
-3. DB 연결과 `rag_documents`의 ready Embedding을 확인한다.
-4. pgvector Query 타입 오류, OpenAI Structured Output 오류 여부를 확인한다.
+2. 5절의 명령으로 Elasticsearch alias와 문서 수를 확인한다.
+3. 서버 로그의 `termination_reason`을 확인한다.
+4. DB 연결과 `rag_documents`의 ready Embedding을 확인한다.
+5. pgvector Query 타입 오류, OpenAI Structured Output 오류 여부를 확인한다.
 
 ### Cohere 오류
 

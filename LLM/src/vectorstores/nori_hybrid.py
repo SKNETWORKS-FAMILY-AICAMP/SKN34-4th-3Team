@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from typing import Literal
+
+from elasticsearch import ApiError, TransportError
 
 from src.data.contracts import VectorSearchResult
 from src.vectorstores.elasticsearch import ElasticsearchBM25Search
 from src.vectorstores.postgres import PostgresVectorSearch
 
 SourceUnit = Literal["policy", "tax"]
+logger = logging.getLogger(__name__)
 
 
 def source_key(document: VectorSearchResult, unit: SourceUnit) -> tuple[str, int]:
@@ -74,6 +78,7 @@ class NoriHybridSearch:
         rerank_candidate_k: int = 20,
         rrf_k: int = 60,
         exact_legal_search: Callable[..., list[VectorSearchResult]] | None = None,
+        bm25_enabled: Callable[[], bool] | None = None,
     ) -> None:
         if rerank_candidate_k < 1 or retrieval_pool_k < rerank_candidate_k or rrf_k < 1:
             raise ValueError("require retrieval_pool_k >= rerank_candidate_k >= 1 and rrf_k >= 1")
@@ -83,6 +88,7 @@ class NoriHybridSearch:
         self.rerank_candidate_k = rerank_candidate_k
         self.rrf_k = rrf_k
         self._exact_legal_search = exact_legal_search
+        self._bm25_enabled = bm25_enabled or (lambda: True)
 
     def search_stages(
         self,
@@ -109,14 +115,23 @@ class NoriHybridSearch:
             "unique_source_ids": unit == "tax",
         }
         dense = self.dense_search.search(query, **options)
-        bm25 = self.bm25_search.search(query, **options)
+        if not self._bm25_enabled():
+            logger.warning("Elasticsearch index is out of sync; using PostgreSQL dense results")
+            bm25 = []
+        else:
+            try:
+                bm25 = self.bm25_search.search(query, **options)
+            except (ApiError, TransportError):
+                logger.exception("Elasticsearch BM25 search failed; using PostgreSQL dense results")
+                bm25 = []
         if len(dense) > self.retrieval_pool_k or len(bm25) > self.retrieval_pool_k:
             raise ValueError("backend exceeded retrieval pool")
         for ranking in (dense, bm25):
             keys = [source_key(document, unit) for document in ranking]
             if len(keys) != len(set(keys)):
                 raise ValueError("backend returned duplicate sources before RRF")
-        fused = source_level_rrf([dense, bm25], unit=unit, rrf_k=self.rrf_k, top_k=top_k)
+        rankings = [dense, bm25] if bm25 else [dense]
+        fused = source_level_rrf(rankings, unit=unit, rrf_k=self.rrf_k, top_k=top_k)
         return dense, bm25, fused
 
     def search(

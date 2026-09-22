@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 from collections.abc import Callable
 from functools import partial
 from threading import RLock
@@ -19,6 +20,7 @@ from src.data.postgres_repository import (
     get_user_profile as get_database_user_profile,
 )
 from src.features.document_processing import PdfDocumentError
+from src.features.elasticsearch_indexing import reindex_postgres_to_elasticsearch
 from src.features.indexing import (
     load_or_build_document_index,
     load_or_build_postgres_index,
@@ -70,6 +72,9 @@ from src.vectorstores.nori_hybrid import NoriHybridSearch, merge_unique_sources
 from src.vectorstores.postgres import PostgresVectorSearch, RagDocumentNotFoundError
 
 
+logger = logging.getLogger(__name__)
+
+
 class RagIndexNotReadyError(RuntimeError):
     """프로세스 내부 RAG 인덱스 준비 전에 답변을 요청할 때 발생한다."""
 
@@ -105,6 +110,7 @@ class RagRuntime:
         self.document_count = 0
         self.chunk_count = 0
         self.index_source: Literal["cache", "embedding"] | None = None
+        self.elasticsearch_synced = True
 
     @property
     def ready(self) -> bool:
@@ -178,6 +184,7 @@ class RagRuntime:
                             vector_search.search_legal_reference
                             if isinstance(vector_search, HybridSearch) else None
                         ),
+                        bm25_enabled=lambda: self.elasticsearch_synced,
                     )
                 else:
                     self._hybrid_search = (
@@ -243,7 +250,7 @@ async def ready(
     rag_runtime: RagRuntime,
     settings_config: Settings,
 ) -> ReadyResponse:
-    """외부 API 호출 없이 RAG 인덱스와 모델 설정 상태를 반환한다.
+    """pgvector와 Elasticsearch 검색 준비 상태 및 모델 설정을 반환한다.
 
     Args:
         rag_runtime: 현재 프로세스의 인덱스 상태를 보관하는 runtime.
@@ -252,9 +259,20 @@ async def ready(
     Returns:
         인덱스 준비 여부, 모델 설정 상태와 문서·Chunk 수.
     """
+    index_ready = rag_runtime.ready
+    if index_ready and settings_config.vector_store_backend == "postgres":
+        index_ready = rag_runtime.elasticsearch_synced
+        if index_ready:
+            try:
+                index_ready = await asyncio.to_thread(
+                    ElasticsearchBM25Search(settings_config).ready
+                )
+            except Exception:
+                logger.exception("Elasticsearch readiness check failed")
+                index_ready = False
     return ReadyResponse(
-        status="ready" if rag_runtime.ready else "not_ready",
-        index_ready=rag_runtime.ready,
+        status="ready" if index_ready else "not_ready",
+        index_ready=index_ready,
         llm_configured=settings_config.llm_configured,
         embedding_configured=settings_config.embedding_configured,
         langsmith_tracing=settings_config.langsmith_configured,
@@ -420,6 +438,7 @@ async def _prepare_index(
         try:
             embedding_model = rag_runtime.embedding_factory()
             if requested_ids:
+                rag_runtime.elasticsearch_synced = False
                 postgres_search = PostgresVectorSearch(
                     embedding=embedding_model,
                     settings=settings,
@@ -431,17 +450,25 @@ async def _prepare_index(
                         force=force,
                     )
                 )
-                total_document_count, total_chunk_count = await asyncio.to_thread(
-                    postgres_search.counts
+                source_index = await asyncio.to_thread(
+                    partial(
+                        load_or_build_postgres_index,
+                        embedding=embedding_model,
+                        settings=settings,
+                    )
                 )
-                runtime_search = _runtime_search(postgres_search, settings)
+                await asyncio.to_thread(reindex_postgres_to_elasticsearch, settings)
+                rag_runtime.elasticsearch_synced = True
+                runtime_search = _runtime_search(source_index.vector_search, settings)
                 index_source: Literal["cache", "embedding"] = (
-                    "embedding" if postgres_search.last_embedded_count else "cache"
+                    "embedding"
+                    if postgres_search.last_embedded_count or not source_index.loaded_from_cache
+                    else "cache"
                 )
                 rag_runtime.set_index(
                     runtime_search,
-                    document_count=total_document_count,
-                    chunk_count=total_chunk_count,
+                    document_count=source_index.document_count,
+                    chunk_count=source_index.chunk_count,
                     index_source=index_source,
                 )
                 return IndexResponse(
@@ -457,6 +484,8 @@ async def _prepare_index(
                 )
 
             if settings.vector_store_backend == "postgres":
+                if not allow_ready_shortcut:
+                    rag_runtime.elasticsearch_synced = False
                 cached_vector_index = await asyncio.to_thread(
                     partial(
                         load_or_build_postgres_index,
@@ -465,6 +494,9 @@ async def _prepare_index(
                         force=force,
                     )
                 )
+                if not allow_ready_shortcut:
+                    await asyncio.to_thread(reindex_postgres_to_elasticsearch, settings)
+                    rag_runtime.elasticsearch_synced = True
             else:
                 document_catalog = get_document_catalog()
                 cached_vector_index = await asyncio.to_thread(
