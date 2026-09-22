@@ -57,9 +57,9 @@ def dispatch_due_reminders() -> int:
 def notify_now(user_id: int, event_id: int) -> dict:
     event = repo.get_event(event_id)
     if not event:
-        from fastapi import HTTPException
+        from ninja.errors import HttpError
 
-        raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+        raise HttpError(404, "일정을 찾을 수 없습니다.")
     title = f"일정 알림: {event['title']}"
     body = f"{event['title']} 마감은 {event['due_date']}입니다."
     user = repo.get_user(user_id) or {}

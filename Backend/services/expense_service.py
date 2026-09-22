@@ -1,6 +1,6 @@
 from datetime import date, timezone
 
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 from core.llm_client import explain_expense, extract_receipt
@@ -307,7 +307,7 @@ def create_receipt(
 def get_extraction(receipt_id: int, user_id: int) -> dict:
     receipt = repo.get_receipt(receipt_id)
     if not receipt or receipt["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="영수증을 찾을 수 없습니다.")
+        raise HttpError(404, "영수증을 찾을 수 없습니다.")
     extraction = repo.get_extraction(receipt_id) or {}
     proof_type = extraction.get("proof_type") or "unknown"
     return {
@@ -370,9 +370,9 @@ def list_expenses(
 def update_category(expense_id: int, user_id: int, category: str) -> dict:
     expense = repo.get_expense(expense_id)
     if not expense or expense["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="지출을 찾을 수 없습니다.")
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
     if category not in CATEGORY_RULES:
-        raise HTTPException(status_code=400, detail="지원하지 않는 지출항목입니다.")
+        raise HttpError(400, "지원하지 않는 지출항목입니다.")
     deductible, confidence, basis = CATEGORY_RULES[category]
 
     extraction = repo.get_extraction(expense["receipt_id"]) or {}
@@ -390,7 +390,7 @@ def update_category(expense_id: int, user_id: int, category: str) -> dict:
 def deductibility(expense_id: int, user_id: int) -> dict:
     expense = repo.get_expense(expense_id)
     if not expense or expense["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="지출을 찾을 수 없습니다.")
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
     expense = _migrate_legacy(expense)
     extraction = repo.get_extraction(expense["receipt_id"]) or {}
     vendor = extraction.get("vendor") or "상호 미상"
@@ -449,7 +449,7 @@ def analysis(expense_id: int, user_id: int) -> dict:
     """OCR이 영수증에서 무엇을 읽었고 그것으로 어떻게 판정했는지 단계별로 설명한다. LLM 호출 없이 저장값과 규칙만 쓴다."""
     expense = repo.get_expense(expense_id)
     if not expense or expense["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="지출을 찾을 수 없습니다.")
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
     expense = _migrate_legacy(expense)
     extraction = repo.get_extraction(expense["receipt_id"]) or {}
     meta = extraction.get("read_meta") or {}
@@ -555,12 +555,12 @@ def get_receipt_image(receipt_id: int, user_id: int) -> tuple[bytes, str]:
     row = repo.get_receipt_image(receipt_id)
     image_data = row.get("image_data") if row else None
     if not row or row["user_id"] != user_id or not image_data:
-        raise HTTPException(status_code=404, detail="영수증 이미지를 찾을 수 없습니다.")
+        raise HttpError(404, "영수증 이미지를 찾을 수 없습니다.")
     return bytes(image_data), row.get("mime_type") or "image/jpeg"
 
 
 def delete_expense(expense_id: int, user_id: int) -> None:
     expense = repo.get_expense(expense_id)
     if not expense or expense["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="지출을 찾을 수 없습니다.")
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
     repo.delete_expense(expense_id, expense["receipt_id"])

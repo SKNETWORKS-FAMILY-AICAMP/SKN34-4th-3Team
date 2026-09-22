@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 
@@ -76,7 +76,7 @@ def create_personal_event(
 def delete_personal_event(user_id: int, event_id: int) -> None:
     event = repo.get_event(event_id)
     if not event or event.get("event_type") != "USER" or event.get("user_id") != user_id:
-        raise HTTPException(status_code=404, detail="내 일정을 찾을 수 없습니다.")
+        raise HttpError(404, "내 일정을 찾을 수 없습니다.")
     repo.delete_event(event_id)
 
 
@@ -104,7 +104,7 @@ def list_reminders(user_id: int) -> list[dict]:
 
 def create_reminder(user_id: int, event_id: int, notify_at: datetime) -> int:
     if not repo.get_event(event_id):
-        raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+        raise HttpError(404, "일정을 찾을 수 없습니다.")
     rid = repo.upsert_reminder(user_id, event_id, notify_at)
     if notify_at <= datetime.now():
         from services.notify_service import dispatch_due_reminders
@@ -116,5 +116,5 @@ def create_reminder(user_id: int, event_id: int, notify_at: datetime) -> int:
 def delete_reminder(user_id: int, reminder_id: int) -> None:
     reminder = repo.get_reminder(reminder_id)
     if not reminder or reminder["user_id"] != user_id:
-        raise HTTPException(status_code=404, detail="리마인더를 찾을 수 없습니다.")
+        raise HttpError(404, "리마인더를 찾을 수 없습니다.")
     repo.delete_reminder(reminder_id)

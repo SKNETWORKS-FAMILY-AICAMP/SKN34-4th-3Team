@@ -118,11 +118,11 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant BE as Backend(lifespan)
+    participant BE as Backend(startup)
     participant WU as llm-warmup 스레드
     participant LLM as LLM 서비스
 
-    BE->>BE: init_db() — Postgres 연결, 실패 시 SQLite 폴백
+    BE->>BE: init_db() — Postgres 연결, 실패 시 기동 중단
     BE->>WU: 데몬 스레드 시작
     BE-->>BE: 기동 완료 (요청 수신 시작)
     WU->>LLM: GET /rag/ready (3초)
@@ -138,7 +138,7 @@ sequenceDiagram
     WU->>WU: 결과를 uvicorn.error 로거에 기록
 ```
 
-인덱스가 준비되지 않은 채로는 모든 질의가 LLM의 `integration_unavailable` 응답으로 끝나므로, 누가 재색인을 부를 때까지 기다리지 않고 기동 시 한 번 확인한다(`Backend/main.py`의 lifespan → `Backend/core/llm_client.py`의 `ensure_index_ready`).
+인덱스가 준비되지 않은 채로는 모든 질의가 LLM의 `integration_unavailable` 응답으로 끝나므로, 누가 재색인을 부를 때까지 기다리지 않고 기동 시 한 번 확인한다(`Backend/config/asgi.py` → `Backend/config/api.py`의 `startup` → `Backend/core/llm_client.py`의 `ensure_index_ready`).
 
 데몬 스레드로 도는 이유는 워밍업이 기동을 막지 않게 하기 위해서다. `rag_documents`가 이미 임베딩을 갖고 있고 청크 content가 바뀌지 않았으면 `source: "cache"`(`status: "already_ready"`)로 로드되어 Embedding 재호출이 없다. 변경된 청크가 있으면 그만큼만 임베딩한다. `/rag/ready`에 닿지 못하면(LLM이 늦게 뜬 경우 등) 재색인하지 않으므로, compose는 llm 헬스체크 통과 뒤에 backend를 띄운다.
 

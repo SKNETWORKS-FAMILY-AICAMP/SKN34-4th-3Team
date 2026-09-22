@@ -1,14 +1,13 @@
 version = 1
 revision = 3
 requires-python = ">=3.13"
-
-[[package]]
-name = "annotated-doc"
-version = "0.0.5"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5a/8e/38aa427ed5402449e226975b649c5dc73ccadfefeb95e6aecb8f8ea4b6b6/annotated_doc-0.0.5.tar.gz", hash = "sha256:c7e58ce09192557605d8bbd92836d7e1d520ac9580096042c0bfd197efacf1bb", size = 10758, upload-time = "2026-07-28T13:50:58.129Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl", hash = "sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101", size = 5302, upload-time = "2026-07-28T13:50:57.239Z" },
+resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'win32'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version < '3.14' and sys_platform == 'emscripten'",
+    "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
 [[package]]
@@ -30,6 +29,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/61/cc/a381afa6efea9f496eff839d4a6a1aed3bfafc7b3ab4b0d1b243a12573dd/anyio-4.14.2.tar.gz", hash = "sha256:cfa139f3ed1a23ee8f88a145ddb5ac7605b8bbfd8592baacd7ce3d8bb4313c7f", size = 260176, upload-time = "2026-07-12T20:29:07.082Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/35/f2287558c17e29fafc8ef3daf819bb9834061cfa43bff8014f7df7f63bdc/anyio-4.14.2-py3-none-any.whl", hash = "sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494", size = 125813, upload-time = "2026-07-12T20:29:05.763Z" },
+]
+
+[[package]]
+name = "asgiref"
+version = "3.12.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/26/3b59f2bdae5f640389becb1f673cded775287f5fc4f816309d9ca9a3f93d/asgiref-3.12.1.tar.gz", hash = "sha256:59dcb51c272ad209d59bed5708a64a333083e86017d7fcdd67498eeab7784340", size = 42378, upload-time = "2026-07-14T09:56:18.087Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/1b/54f4ad77cd8a584fa70746c47df988e002cf1ee1eba43364d46f87803647/asgiref-3.12.1-py3-none-any.whl", hash = "sha256:fe386d1c2bff7259ea95929266d12a8cf9a8b5a1c2598402967d8792e7a7c094", size = 25478, upload-time = "2026-07-14T09:56:16.926Z" },
 ]
 
 [[package]]
@@ -203,19 +211,60 @@ wheels = [
 ]
 
 [[package]]
-name = "fastapi"
-version = "0.141.1"
+name = "django"
+version = "6.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "annotated-doc" },
-    { name = "pydantic" },
-    { name = "starlette" },
-    { name = "typing-extensions" },
-    { name = "typing-inspection" },
+    { name = "asgiref" },
+    { name = "sqlparse" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/02/91e3416a8fdd715abb903a952a6bec7cdd8d14eed55d415fc8595524c319/fastapi-0.141.1.tar.gz", hash = "sha256:e8822fc40db1e1858054d7a949a888695bc9bdce70139178e33bd2871a453ca1", size = 425799, upload-time = "2026-07-29T17:18:05.568Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/d4/8314b5bdef20832f0ac6ae3b3e4d4924e4759fa3b4af27609dd747e7a6be/django-6.1.1.tar.gz", hash = "sha256:7ab93536d8e677aa14554c56426290c69480bf2ee68d7513d4a22f57d6bfeb84", size = 11284905, upload-time = "2026-09-02T17:20:45.621Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/03/10388a42375ee7e4ac9b94eb2c5c569c8b5795e377e701c9ac3ad63de890/fastapi-0.141.1-py3-none-any.whl", hash = "sha256:bfb91aa2d334c61cb35ba9a116fc123b3d3df31640b801cf57a7a78ec3f603b3", size = 131954, upload-time = "2026-07-29T17:18:04.364Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/ca/c1040a4fd15754ede7df15fd72fc2e123045b473b253ab5f5284e11c651e/django-6.1.1-py3-none-any.whl", hash = "sha256:585fb82bf15053c42cf52e67c2f1b54a032dca384759315fd6678ab1870d1d72", size = 8419512, upload-time = "2026-09-02T17:20:39.153Z" },
+]
+
+[[package]]
+name = "django-cors-headers"
+version = "4.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "asgiref" },
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/39/55822b15b7ec87410f34cd16ce04065ff390e50f9e29f31d6d116fc80456/django_cors_headers-4.9.0.tar.gz", hash = "sha256:fe5d7cb59fdc2c8c646ce84b727ac2bca8912a247e6e68e1fb507372178e59e8", size = 21458, upload-time = "2025-09-18T10:40:52.326Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/30/d8/19ed1e47badf477d17fb177c1c19b5a21da0fd2d9f093f23be3fb86c5fab/django_cors_headers-4.9.0-py3-none-any.whl", hash = "sha256:15c7f20727f90044dcee2216a9fd7303741a864865f0c3657e28b7056f61b449", size = 12809, upload-time = "2025-09-18T10:40:50.843Z" },
+]
+
+[[package]]
+name = "elastic-transport"
+version = "9.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "sniffio" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/be/a719a217ed7f179c9e41821dff9dfd28415b21bc94da9d35fff84f7951b2/elastic_transport-9.4.2.tar.gz", hash = "sha256:366f4614f4544c5fb5d780c82f57af8f30492b44a68ed20750390aa81e20c2ea", size = 79310, upload-time = "2026-06-16T15:27:17.182Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/e4/9b7ef7a8e0bb416e0fe1879c92295041cf81e5a47e3c3110744e89b6eb35/elastic_transport-9.4.2-py3-none-any.whl", hash = "sha256:33dc89bb1855faa8b98ae8b036405a39c562778dbcdbe4a00a2eaf753148556c", size = 66314, upload-time = "2026-06-16T15:27:15.875Z" },
+]
+
+[[package]]
+name = "elasticsearch"
+version = "9.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "elastic-transport" },
+    { name = "python-dateutil" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/aa/b7/87bce7be89c822a63608e3c946a80d99fce1066ce9e9691bcb6b8ef57631/elasticsearch-9.5.1.tar.gz", hash = "sha256:98210cd96c256dd9936f58e1c762aba94da7db7d38d058bb0fbaf7e4b9567146", size = 930439, upload-time = "2026-09-09T20:17:03.842Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/6e/047d517a64249abd0a1b5b8c9f8244e3bf48c6916d5a68e9c76c52fc266d/elasticsearch-9.5.1-py3-none-any.whl", hash = "sha256:a980d8888ae70c03f0a1db6b2c5e3e39bf4e235abea737f522d2fd1d2d20bb99", size = 1018374, upload-time = "2026-09-09T20:17:00.18Z" },
 ]
 
 [[package]]
@@ -655,7 +704,9 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cohere" },
-    { name = "fastapi" },
+    { name = "django" },
+    { name = "django-cors-headers" },
+    { name = "elasticsearch" },
     { name = "langchain-openai" },
     { name = "langchain-text-splitters" },
     { name = "langgraph" },
@@ -668,7 +719,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pypdf" },
-    { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -681,7 +731,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cohere", specifier = ">=7.1.1" },
-    { name = "fastapi", specifier = ">=0.116.0" },
+    { name = "django", specifier = ">=6.1.1" },
+    { name = "django-cors-headers", specifier = ">=4.9.0" },
+    { name = "elasticsearch", specifier = ">=9.5.1" },
     { name = "langchain-openai", specifier = ">=0.3.28" },
     { name = "langchain-text-splitters", specifier = ">=1.1.2" },
     { name = "langgraph", specifier = ">=1.2.11" },
@@ -694,7 +746,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.5" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
     { name = "pypdf", specifier = ">=6.16.2" },
-    { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35.0" },
 ]
 
@@ -1121,21 +1172,24 @@ wheels = [
 ]
 
 [[package]]
+name = "python-dateutil"
+version = "2.9.0.post0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
 name = "python-dotenv"
 version = "1.2.3"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6a/53/ed9d74092561d4b01a2ef1349d52cdbc135e526c245f366b089cfca6de49/python_dotenv-1.2.3.tar.gz", hash = "sha256:a20a594dabeaa385725aa239d5244871c143ecb356add8a20fcf23773a6c3a35", size = 58945, upload-time = "2026-08-16T16:54:54.067Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/17/c5c6b53ddc18f297992099b3d9ec16c855c0ccc83263a21fe4d1c625ec6c/python_dotenv-1.2.3-py3-none-any.whl", hash = "sha256:904552145e8bfed22162c09dab1c2b9b54fefa7b23ba780f4f26ca0316b0f0d9", size = 22780, upload-time = "2026-08-16T16:54:52.473Z" },
-]
-
-[[package]]
-name = "python-multipart"
-version = "0.0.32"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
 ]
 
 [[package]]
@@ -1290,6 +1344,15 @@ wheels = [
 ]
 
 [[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1299,15 +1362,12 @@ wheels = [
 ]
 
 [[package]]
-name = "starlette"
-version = "1.6.0"
+name = "sqlparse"
+version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b5/b4/205b0d5241d934e8add0c38aa924c4f9fb7330834ff11e5444db964ec3f9/starlette-1.6.0.tar.gz", hash = "sha256:d4e3ac5e546444960c710297a3c9fc3f7ebae1b7e963f3d36173b49da535be9b", size = 2716969, upload-time = "2026-08-08T18:27:57.512Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/d3/3f06a1006f2261d1342aefb3c71eed02f5d4ca5bdbecd86ebc12ad38306e/sqlparse-0.6.0.tar.gz", hash = "sha256:113c35c75365ab9cc9c7231d68c6428fb11c085fc8e9eb1ad659b7ddbf6cd2b9", size = 178477, upload-time = "2026-08-13T19:16:06.396Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/cb/6a6a47d5b464bd08695d254f3da6e7986cc70c9fa5d778eda57538edfe56/starlette-1.6.0-py3-none-any.whl", hash = "sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c", size = 75969, upload-time = "2026-08-08T18:27:56.196Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/50/f00935da0ec7cbf325f8dc4f772ae46fbc7b672dd62876e73f0a94adda57/sqlparse-0.6.0-py3-none-any.whl", hash = "sha256:b861c0288ce2fa56209a9a6412d2e066ac664b3873b89c26c9d8415e8e32996f", size = 50070, upload-time = "2026-08-13T19:16:04.062Z" },
 ]
 
 [[package]]

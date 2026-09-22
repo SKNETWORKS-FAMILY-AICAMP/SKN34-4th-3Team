@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 570" role="img" aria-labelledby="title desc">
+  <title id="title">Judge ML 실험의 대표 Validation 혼동행렬</title>
+  <desc id="desc">행은 실제 불충분 0과 충분 1, 열은 예측 0과 1이다. 빨간 칸은 위험한 불충분에서 충분으로의 FP다.</desc>
+  <style>
+    text { font-family: Arial, sans-serif; fill: #17263b; }
+    .heading { font-size: 16px; font-weight: 700; }
+    .small { font-size: 11px; }
+    .num { font-size: 25px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
+    .ok { fill: #cfe9f3; }
+    .fp { fill: #ffc0bb; }
+    .fn { fill: #ffebc2; }
+    .panel { fill: #ffffff; stroke: #bac5d2; stroke-width: 1; }
+  </style>
+  <rect width="960" height="570" fill="#f6f8fb"/>
+  <text x="24" y="31" class="heading">Validation 혼동행렬: 오류 방향과 채택 실패 이유</text>
+  <text x="24" y="51" class="small">파랑=정답 · 빨강=위험 FP(불충분→충분) · 노랑=FN(충분→불충분). 각 모델의 판정 조건은 아래 문서 본문 참조.</text>
+
+  <g transform="translate(20 75)">
+    <rect class="panel" width="290" height="215" rx="9"/>
+    <text x="12" y="24" class="heading">Logistic Regression 기본</text>
+    <text x="100" y="44" class="small">예측 0</text><text x="194" y="44" class="small">예측 1</text>
+    <text x="13" y="91" class="small">실제 0</text><text x="13" y="151" class="small">실제 1</text>
+    <rect x="70" y="51" width="90" height="58" class="ok"/><rect x="164" y="51" width="90" height="58" class="fp"/>
+    <rect x="70" y="113" width="90" height="58" class="fn"/><rect x="164" y="113" width="90" height="58" class="ok"/>
+    <text x="115" y="80" class="num">5</text><text x="209" y="80" class="num">32</text>
+    <text x="115" y="142" class="num">1</text><text x="209" y="142" class="num">112</text>
+    <text x="13" y="196" class="small">정확도 0.78 · FP 32/37</text>
+  </g>
+
+  <g transform="translate(335 75)">
+    <rect class="panel" width="290" height="215" rx="9"/>
+    <text x="12" y="24" class="heading">Random Forest GridSearch</text>
+    <text x="100" y="44" class="small">예측 0</text><text x="194" y="44" class="small">예측 1</text>
+    <text x="13" y="91" class="small">실제 0</text><text x="13" y="151" class="small">실제 1</text>
+    <rect x="70" y="51" width="90" height="58" class="ok"/><rect x="164" y="51" width="90" height="58" class="fp"/>
+    <rect x="70" y="113" width="90" height="58" class="fn"/><rect x="164" y="113" width="90" height="58" class="ok"/>
+    <text x="115" y="80" class="num">0</text><text x="209" y="80" class="num">37</text>
+    <text x="115" y="142" class="num">0</text><text x="209" y="142" class="num">113</text>
+    <text x="13" y="196" class="small">정확도 0.753 · 전부 충분 예측</text>
+  </g>
+
+  <g transform="translate(650 75)">
+    <rect class="panel" width="290" height="215" rx="9"/>
+    <text x="12" y="24" class="heading">XGBoost Optuna 안전 판정</text>
+    <text x="100" y="44" class="small">예측 0</text><text x="194" y="44" class="small">예측 1</text>
+    <text x="13" y="91" class="small">실제 0</text><text x="13" y="151" class="small">실제 1</text>
+    <rect x="70" y="51" width="90" height="58" class="ok"/><rect x="164" y="51" width="90" height="58" class="fp"/>
+    <rect x="70" y="113" width="90" height="58" class="fn"/><rect x="164" y="113" width="90" height="58" class="ok"/>
+    <text x="115" y="80" class="num">29</text><text x="209" y="80" class="num">8</text>
+    <text x="115" y="142" class="num">59</text><text x="209" y="142" class="num">54</text>
+    <text x="13" y="196" class="small">정확도 0.553 · FPR 0.216</text>
+  </g>
+
+  <g transform="translate(177 320)">
+    <rect class="panel" width="290" height="215" rx="9"/>
+    <text x="12" y="24" class="heading">CatBoost Optuna 안전 판정</text>
+    <text x="100" y="44" class="small">예측 0</text><text x="194" y="44" class="small">예측 1</text>
+    <text x="13" y="91" class="small">실제 0</text><text x="13" y="151" class="small">실제 1</text>
+    <rect x="70" y="51" width="90" height="58" class="ok"/><rect x="164" y="51" width="90" height="58" class="fp"/>
+    <rect x="70" y="113" width="90" height="58" class="fn"/><rect x="164" y="113" width="90" height="58" class="ok"/>
+    <text x="115" y="80" class="num">35</text><text x="209" y="80" class="num">2</text>
+    <text x="115" y="142" class="num">60</text><text x="209" y="142" class="num">53</text>
+    <text x="13" y="196" class="small">정확도 0.587 · FP↓, FN↑</text>
+  </g>
+
+  <g transform="translate(492 320)">
+    <rect class="panel" width="290" height="215" rx="9"/>
+    <text x="12" y="24" class="heading">TF-IDF C + Linear SVM</text>
+    <text x="100" y="44" class="small">예측 0</text><text x="194" y="44" class="small">예측 1</text>
+    <text x="13" y="91" class="small">실제 0</text><text x="13" y="151" class="small">실제 1</text>
+    <rect x="70" y="51" width="90" height="58" class="ok"/><rect x="164" y="51" width="90" height="58" class="fp"/>
+    <rect x="70" y="113" width="90" height="58" class="fn"/><rect x="164" y="113" width="90" height="58" class="ok"/>
+    <text x="115" y="80" class="num">33</text><text x="209" y="80" class="num">4</text>
+    <text x="115" y="142" class="num">45</text><text x="209" y="142" class="num">68</text>
+    <text x="13" y="196" class="small">정확도 0.673 · FP 4/37</text>
+  </g>
+</svg>

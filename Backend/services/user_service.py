@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 
@@ -6,7 +6,7 @@ from core import repo
 def get_me(user_id: int) -> dict:
     user = repo.get_user(user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        raise HttpError(404, "사용자를 찾을 수 없습니다.")
     return {
         "id": user["id"],
         "email": user["email"],
@@ -20,7 +20,7 @@ def get_me(user_id: int) -> dict:
 def update_me(user_id: int, payload: dict) -> None:
     user = repo.get_user(user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+        raise HttpError(404, "사용자를 찾을 수 없습니다.")
     repo.update_user(
         user_id,
         {key: payload[key] for key in ("name", "age", "region", "phone") if payload.get(key) is not None},

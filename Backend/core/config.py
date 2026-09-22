@@ -25,7 +25,7 @@ APP_VERSION = "0.2.0"
 APP_DESCRIPTION = """
 청년·1인 창업자 맞춤형 행정·재정 지원 플랫폼의 REST API입니다.
 
-- **DB**: Postgres(`DATABASE_URL`)를 직접 SELECT/INSERT/UPDATE 합니다. 연결이 안 되면 SQLite로 폴백합니다. `policies`/`rag_documents`를 TRUNCATE하지 않습니다.
+- **DB**: Postgres(`DATABASE_URL`)를 직접 SELECT/INSERT/UPDATE 합니다. `policies`/`rag_documents`를 TRUNCATE하지 않습니다.
 - **LLM**: `LLM_API_URL`(기본 `http://127.0.0.1:8001`)이 살아 있으면 RAG/OCR/요약을 호출하고, 실패 시 목업으로 내려갑니다.
 - Rule 판정(세액감면·정책 자격)은 Backend에 두고, LLM은 근거 설명만 붙입니다.
 
@@ -59,8 +59,6 @@ DEMO_PASSWORD = "demo123"
 ADMIN_EMAIL = "admin@demo.com"
 ADMIN_PASSWORD = "admin123"
 
-DATA_DIR = BACKEND_ROOT / "data"
-SQLITE_PATH = Path(os.getenv("SQLITE_PATH", str(DATA_DIR / "app.db")))
 LLM_API_URL = os.getenv("LLM_API_URL", "http://127.0.0.1:8001").rstrip("/")
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
 

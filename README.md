@@ -155,7 +155,7 @@
 
 | 구분 | 기술 |
 | --- | --- |
-| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat-square&logo=django&logoColor=white) ![Django Ninja](https://img.shields.io/badge/Django_Ninja-092E20?style=flat-square) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
 | **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) |
 | **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) |
 | **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) |
@@ -225,7 +225,7 @@
 
 ```
 .
-├── Backend/         # API 서버 (FastAPI, :8000)
+├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
 ├── DB/              # DB 스키마와 수집 스크립트
@@ -1133,11 +1133,11 @@ Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필),
 
 ```mermaid
 sequenceDiagram
-    participant BE as Backend(lifespan)
+    participant BE as Backend(startup)
     participant WU as llm-warmup 스레드
     participant LLM as LLM 서비스
 
-    BE->>BE: init_db() — Postgres 연결, 실패 시 SQLite 폴백
+    BE->>BE: init_db() — Postgres 연결, 실패 시 기동 중단
     BE->>WU: 데몬 스레드 시작
     BE-->>BE: 기동 완료 (요청 수신 시작)
     WU->>LLM: GET /rag/ready (3초)

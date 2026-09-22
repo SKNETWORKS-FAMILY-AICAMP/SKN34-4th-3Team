@@ -74,6 +74,7 @@ from src.serving.tax_calculators_docstring import (
     calculate_tax,
 )
 from src.vectorstores.hybrid import HybridSearch, reciprocal_rank_fusion
+from src.vectorstores.nori_hybrid import NoriHybridSearch, merge_unique_sources, source_level_rrf
 
 
 DomainRoute = Literal["policy", "notice", "tax"]
@@ -520,8 +521,8 @@ def _select_route(
 def build_graph(
     llm: BaseChatModel | None = None,
     *,
-    policy_search: HybridSearch | None = None,
-    tax_search: HybridSearch | None = None,
+    policy_search: HybridSearch | NoriHybridSearch | None = None,
+    tax_search: HybridSearch | NoriHybridSearch | None = None,
     notice_search: NoticeSearch | None = None,
     rerank: Rerank | None = None,
     tax_intent_classifier: TaxIntentClassifier | None = None,
@@ -794,10 +795,17 @@ def build_graph(
             for dense_result, bm25_result in zip(dense_lists, bm25_lists):
                 dense_docs = merge_evidence(dense_docs, dense_result)
                 bm25_docs = merge_evidence(bm25_docs, bm25_result)
-            retrieved_docs = reciprocal_rank_fusion(
-                [result for pair in zip(dense_lists, bm25_lists) for result in pair],
-                rrf_k=settings_config.hybrid_rrf_k,
-                top_k=settings_config.cohere_rerank_candidate_k,
+            rankings = [result for pair in zip(dense_lists, bm25_lists) for result in pair]
+            retrieved_docs = (
+                source_level_rrf(
+                    rankings, unit="policy", rrf_k=settings_config.hybrid_rrf_k,
+                    top_k=settings_config.cohere_rerank_candidate_k,
+                )
+                if isinstance(policy_search, NoriHybridSearch)
+                else reciprocal_rank_fusion(
+                    rankings, rrf_k=settings_config.hybrid_rrf_k,
+                    top_k=settings_config.cohere_rerank_candidate_k,
+                )
             )
         except Exception:
             logger.exception("Policy hybrid retrieval failed")
@@ -1196,16 +1204,25 @@ def build_graph(
                     )
                     continue
                 dense_extra, bm25_extra, rrf_extra = extra_result
-                dense_docs = merge_evidence(dense_docs, dense_extra)
-                bm25_docs = merge_evidence(bm25_docs, bm25_extra)
-                rrf_docs = merge_evidence(rrf_docs, rrf_extra)
+                if isinstance(tax_retriever, NoriHybridSearch):
+                    dense_docs = merge_unique_sources(dense_docs, dense_extra, unit="tax")
+                    bm25_docs = merge_unique_sources(bm25_docs, bm25_extra, unit="tax")
+                    rrf_docs = merge_unique_sources(rrf_docs, rrf_extra, unit="tax")
+                else:
+                    dense_docs = merge_evidence(dense_docs, dense_extra)
+                    bm25_docs = merge_evidence(bm25_docs, bm25_extra)
+                    rrf_docs = merge_evidence(rrf_docs, rrf_extra)
             exact_result = search_results[-1] if has_exact_search else []
             if isinstance(exact_result, BaseException):
                 logger.warning("Tax exact legal retrieval failed: %s", exact_result)
                 exact_docs = []
             else:
                 exact_docs = exact_result
-            tax_rrf_docs = merge_evidence(exact_docs, rrf_docs)
+            tax_rrf_docs = (
+                merge_unique_sources(exact_docs, rrf_docs, unit="tax")
+                if isinstance(tax_retriever, NoriHybridSearch)
+                else merge_evidence(exact_docs, rrf_docs)
+            )
             retrieval_ms = (perf_counter() - retrieval_started) * 1000
             rerank_started = perf_counter()
             if tax_rrf_docs:
@@ -1261,8 +1278,12 @@ def build_graph(
 
         previous_rrf = state.get("retrieved_docs", [])
         previous_evidence = state.get("reranked_docs", [])
-        accumulated_rrf = merge_evidence(previous_rrf, tax_rrf_docs)
-        accumulated_evidence = merge_evidence(previous_evidence, hop_docs)
+        if isinstance(tax_retriever, NoriHybridSearch):
+            accumulated_rrf = merge_unique_sources(previous_rrf, tax_rrf_docs, unit="tax")
+            accumulated_evidence = merge_unique_sources(previous_evidence, hop_docs, unit="tax")
+        else:
+            accumulated_rrf = merge_evidence(previous_rrf, tax_rrf_docs)
+            accumulated_evidence = merge_evidence(previous_evidence, hop_docs)
         new_evidence_count = len(accumulated_evidence) - len(previous_evidence)
         retrieval_trace = [*state.get("tax_retrieval_trace", [])]
         retrieval_trace.append(

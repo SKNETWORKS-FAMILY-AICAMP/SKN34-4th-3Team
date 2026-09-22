@@ -1,10 +1,8 @@
-from fastapi.testclient import TestClient
-
-from src.serving.app import app
+from tests.django_client import DjangoTestClient
 
 
 def test_health_endpoint() -> None:
-    response = TestClient(app).get("/health")
+    response = DjangoTestClient().get("/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -14,7 +12,7 @@ def test_health_endpoint() -> None:
 
 
 def test_test_ui_origin_is_allowed() -> None:
-    response = TestClient(app).options(
+    response = DjangoTestClient().options(
         "/health",
         headers={
             "Origin": "http://localhost:5173",

@@ -74,7 +74,7 @@ npm run preview   # 빌드 결과 로컬 미리보기
 
 ### API 프록시
 
-개발 서버는 `/api` 요청의 접두사를 벗겨 `http://localhost:8000`(FastAPI)으로 프록시합니다. (`vite.config.js`)
+개발 서버는 `/api` 요청의 접두사를 벗겨 `http://localhost:8000`(Django)으로 프록시합니다. (`vite.config.js`)
 배포에서는 nginx(`nginx.conf`)가 같은 역할을 하며 대상만 `http://backend:8000`입니다.
 
 대부분의 화면이 Backend를 실제로 호출합니다. Backend가 없으면 로그인·AI 상담·맞춤 추천은 오류 안내가 뜨고, `useApi`로 부르는 일부 GET(홈 마감 임박 공고·통계, 마이페이지 캘린더, 로드맵 추천 질문)만 목데이터로 조용히 폴백합니다.

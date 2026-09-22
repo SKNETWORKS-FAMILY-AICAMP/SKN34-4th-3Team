@@ -23,4 +23,4 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8001
 
-CMD ["uv", "run", "--frozen", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["uv", "run", "--frozen", "uvicorn", "src.serving.django_config.asgi:application", "--host", "0.0.0.0", "--port", "8001", "--lifespan", "off"]

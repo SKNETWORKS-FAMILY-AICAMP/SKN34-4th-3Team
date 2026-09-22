@@ -450,7 +450,7 @@ LLM은 위 계약의 공개 Endpoint 8개, 요청·응답 schema, 공통 오류 
 | `sources[].url` 우선 사용, `status`·`guardrail_reason`·`llmUsed` 보존 | 완료 |
 | Docker에서 `LLM_API_URL=http://llm:8001` 주입 | 완료 (`docker-compose.yml`) |
 
-여기에 더해 Backend 기동 시 인덱스 워밍업이 붙었다. lifespan이 데몬 스레드로
+여기에 더해 Backend 기동 시 인덱스 워밍업이 붙었다. `config/asgi.py`의 기동 처리가 데몬 스레드로
 `GET /rag/ready` → 미준비 시 `POST /rag/reindex`를 한 번 돌린다
 (`Docs/Design/SEQUENCE.md` 4절).
 
