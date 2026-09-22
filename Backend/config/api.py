@@ -3,7 +3,7 @@ import threading
 
 from ninja import NinjaAPI
 
-from api import admin, auth, calendar, chat, expenses, notifications, policies, stats, tax, users
+from api import admin, auth, bizplan, calendar, chat, expenses, notifications, policies, stats, tax, users
 from core.config import APP_DESCRIPTION, APP_NAME, APP_VERSION, LLM_API_URL, OPENAPI_TAGS
 from core.db import db_path, init_db, scalar
 from core.llm_client import ensure_index_ready, llm_status
@@ -25,6 +25,7 @@ api.add_router("/chat", chat.router)
 api.add_router("/calendar", calendar.router)
 api.add_router("/tax", tax.router)
 api.add_router("/expenses", expenses.router)
+api.add_router("/bizplan", bizplan.router)
 api.add_router("", policies.router)
 api.add_router("/admin", admin.router)
 api.add_router("/notifications", notifications.router)

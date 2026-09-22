@@ -27,12 +27,17 @@ from src.features.indexing import (
 )
 from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
+from src.rag.bizplan_coach import generate_bizplan_coach_response
 from src.rag.backend_tasks import (
+    evaluate_business_plan,
     extract_receipt,
+    extract_receipt_from_ocr,
+    generate_business_plan,
     generate_deductibility,
     generate_legal_basis,
     summarize_announcement,
 )
+from src.features.receipt_ocr import MIN_TEXT_CHARACTERS, OcrResult, OcrUnavailableError, run_ocr
 from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
@@ -43,6 +48,14 @@ from src.rag.tax_cache import TaxRagCache
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
+    BizplanCoachRequest,
+    BizplanCoachResponse,
+    BusinessPlanEvaluateRequest,
+    BusinessPlanEvaluateResponse,
+    BusinessPlanRequest,
+    BusinessPlanResponse,
+    BusinessPlanSectionResponse,
+    BusinessPlanSectionScoreResponse,
     BackendUserContext,
     DeductibilityRequest,
     DeductibilityResponse,
@@ -759,6 +772,136 @@ async def adapter_deductibility(
         ) from exc
 
 
+async def adapter_business_plan(
+    request_body: BusinessPlanRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanResponse:
+    """사용자가 입력한 사업 정보만으로 PSST 사업계획서 초안을 생성한다. 법령 근거는 쓰지 않는다."""
+    _ = settings_config
+    try:
+        generated = await generate_business_plan(
+            rag_runtime.llm_factory(),
+            business_name=request_body.businessName,
+            tagline=request_body.tagline,
+            target_customer=request_body.targetCustomer,
+            problem_input=request_body.problem,
+            solution_input=request_body.solution,
+            differentiator=request_body.differentiator,
+            team_input=request_body.team,
+            target_program=request_body.targetProgram,
+            extra_notes=request_body.extraNotes,
+            template_text=request_body.templateText,
+        )
+        return BusinessPlanResponse(
+            sections=[
+                BusinessPlanSectionResponse(
+                    key=section.key, label=section.label, content=section.content
+                )
+                for section in generated.sections
+            ],
+            summary=generated.summary,
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan generation failed.",
+        ) from exc
+
+
+async def adapter_bizplan_coach(
+    request_body: BizplanCoachRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BizplanCoachResponse:
+    """사업계획서 아이디어 어시스턴트. 검색 그래프를 타지 않는 단일 모델 호출이다."""
+    _ = settings_config
+    try:
+        result = await generate_bizplan_coach_response(
+            rag_runtime.llm_factory(),
+            query=request_body.question,
+            plan_fields={
+                "businessName": request_body.businessName,
+                "tagline": request_body.tagline,
+                "targetCustomer": request_body.targetCustomer,
+            },
+            plan_sections=[
+                {"label": section.label, "content": section.content}
+                for section in request_body.sections
+            ],
+            conversation_history=[
+                message.model_dump() for message in request_body.conversationHistory
+            ],
+        )
+        if not result.in_scope:
+            fallback = {
+                "tax": "이 질문은 AI 세무 Assistant에서 확인해 주세요.",
+                "policy": "이 질문은 공고지원 AI에서 확인해 주세요.",
+                "none": "사업계획서 아이디어 구체화에 관한 질문만 답변할 수 있어요.",
+            }
+            return BizplanCoachResponse(
+                answer=fallback.get(result.redirect, fallback["none"]),
+                inScope=False,
+                redirect=result.redirect,
+            )
+        return BizplanCoachResponse(answer=result.answer, inScope=True, redirect="none")
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Bizplan coach failed.",
+        ) from exc
+
+
+async def adapter_business_plan_evaluate(
+    request_body: BusinessPlanEvaluateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanEvaluateResponse:
+    """작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다. 실제 심사 결과가 아니다."""
+    _ = settings_config
+    try:
+        generated = await evaluate_business_plan(
+            rag_runtime.llm_factory(),
+            sections=[section.model_dump() for section in request_body.sections],
+        )
+        return BusinessPlanEvaluateResponse(
+            overallScore=generated.overall_score,
+            overallComment=generated.overall_comment,
+            sections=[
+                BusinessPlanSectionScoreResponse(
+                    key=section.key,
+                    label=section.label,
+                    score=section.score,
+                    strengths=section.strengths,
+                    improvements=section.improvements,
+                )
+                for section in generated.sections
+            ],
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan evaluation failed.",
+        ) from exc
+
+
 async def adapter_summarize_announcement(
     request_body: AnnouncementSummaryRequest,
     rag_runtime: RagRuntime,
@@ -804,7 +947,10 @@ async def adapter_receipt_ocr(
     image: AsyncUploadedFile,
     rag_runtime: RagRuntime,
 ) -> ReceiptExtractionResponse:
-    """4 MiB 이하 영수증 이미지를 Vision 구조화 출력으로 추출한다."""
+    """4 MiB 이하 영수증 이미지를 OCR로 읽고 LLM으로 정리한다.
+
+    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때만 Vision 입력으로 대신한다.
+    """
     media_type = (image.content_type or "").casefold()
     if media_type not in SUPPORTED_RECEIPT_MEDIA_TYPES:
         raise ApiError(
@@ -822,14 +968,26 @@ async def adapter_receipt_ocr(
             status_code=413,
             detail="receipt image must not exceed 4 MiB",
         )
-    image_data_url = (
-        f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
-    )
+
+    ocr: OcrResult | None = None
     try:
-        generated = await extract_receipt(
-            rag_runtime.llm_factory(),
-            image_data_url=image_data_url,
-        )
+        candidate = await asyncio.to_thread(run_ocr, raw_image)
+        if candidate.text_length >= MIN_TEXT_CHARACTERS:
+            ocr = candidate
+    except OcrUnavailableError:
+        ocr = None
+
+    try:
+        llm = rag_runtime.llm_factory()
+        if ocr is not None:
+            generated = await extract_receipt_from_ocr(llm, ocr_text=ocr.as_prompt_text())
+            source, confidence = "ocr_llm", round(ocr.mean_confidence, 1)
+        else:
+            image_data_url = (
+                f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
+            )
+            generated = await extract_receipt(llm, image_data_url=image_data_url)
+            source, confidence = "vision", None
         return ReceiptExtractionResponse(
             date=generated.date,
             vendor=generated.vendor.strip() if generated.vendor else None,
@@ -838,6 +996,13 @@ async def adapter_receipt_ocr(
             category=(
                 generated.category.strip() if generated.category else None
             ),
+            proofType=generated.proof_type,
+            dateText=(generated.date_text or "").strip() or None,
+            vendorText=(generated.vendor_text or "").strip() or None,
+            amountText=(generated.amount_text or "").strip() or None,
+            proofEvidence=(generated.proof_evidence or "").strip() or None,
+            ocrConfidence=confidence,
+            source=source,
         )
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
         raise ApiError(

@@ -120,6 +120,69 @@ export async function apiPut(path, body, { signal, timeout = 10000 } = {}) {
   }
 }
 
+/** GET(이미지 등 바이너리). 실패하면 throw. Blob을 돌려주므로 호출부가 objectURL로 바꿔 쓴다. */
+export async function apiGetBlob(path, { signal, timeout = 15000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const res = await fetch(BASE + path, {
+      signal: ctl.signal,
+      headers: { ...authHeaders() },
+    });
+    handleStatus(res, path);
+    return await res.blob();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
+/** POST(multipart 파일 업로드). 실패하면 throw. Content-Type은 브라우저가 boundary와 함께 채운다. */
+export async function apiUpload(path, file, { fieldName = 'image', signal, timeout = 30000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const form = new FormData();
+    form.append(fieldName, file);
+    const res = await fetch(BASE + path, {
+      method: 'POST',
+      signal: ctl.signal,
+      headers: { Accept: 'application/json', ...authHeaders() },
+      body: form,
+    });
+    handleStatus(res, path);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
+/** PATCH(JSON). 실패하면 throw. */
+export async function apiPatch(path, body, { signal, timeout = 10000 } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const res = await fetch(BASE + path, {
+      method: 'PATCH',
+      signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
+      body: JSON.stringify(body || {}),
+    });
+    handleStatus(res, path);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
 /** DELETE. 실패(네트워크·비2xx·타임아웃)하면 throw. */
 export async function apiDelete(path, { signal, timeout = 10000 } = {}) {
   const ctl = new AbortController();
@@ -218,6 +281,20 @@ export const api = {
     { timeout: 50000, ...opt }
   ),
   summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
+  // 영수증 OCR은 Vision 호출이라 일반 POST보다 여유 있게 기다린다.
+  uploadReceipt: (file, opt) => apiUpload('/expenses/receipts', file, { timeout: 45000, ...opt }),
+  receiptDetail: (receiptId, opt) => apiGet(`/expenses/receipts/${receiptId}`, opt),
+  receiptImage: (receiptId, opt) => apiGetBlob(`/expenses/receipts/${receiptId}/image`, opt),
+  expenses: (params, opt) => apiGet('/expenses' + qs(params), opt),
+  updateExpenseCategory: (expenseId, category, opt) => apiPatch(`/expenses/${expenseId}`, { category }, opt),
+  deleteExpense: (expenseId, opt) => apiDelete(`/expenses/${expenseId}`, opt),
+  expenseAnalysis: (expenseId, opt) => apiGet(`/expenses/${expenseId}/analysis`, opt),
+  // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
+  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
+  evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
+  bizplanCoach: (body, opt) => apiPost('/bizplan/coach', body, { timeout: 45000, ...opt }),
+  // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
+  expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };
 
 /**

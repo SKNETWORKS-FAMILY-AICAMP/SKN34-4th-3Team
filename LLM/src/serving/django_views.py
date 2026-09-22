@@ -19,6 +19,9 @@ from src.serving.errors import ApiError, error_payload
 from src.serving import rag_routes
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
+    BizplanCoachRequest,
+    BusinessPlanEvaluateRequest,
+    BusinessPlanRequest,
     ComponentConfiguration,
     DeductibilityRequest,
     HealthResponse,
@@ -230,6 +233,30 @@ async def public_summarize_announcement(request: HttpRequest) -> HttpResponse:
     return await _dispatch(
         request, method="POST", handler=rag_routes.adapter_summarize_announcement,
         schema=AnnouncementSummaryRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_business_plan,
+        schema=BusinessPlanRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan_coach(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_bizplan_coach,
+        schema=BizplanCoachRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan_evaluate(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_business_plan_evaluate,
+        schema=BusinessPlanEvaluateRequest,
     )
 
 

@@ -15,6 +15,7 @@ import urllib.request
 
 from core.config import (
     LLM_API_URL,
+    LLM_TIMEOUT_BIZPLAN,
     LLM_TIMEOUT_CHAT_POLICY,
     LLM_TIMEOUT_CHAT_TAX,
     LLM_TIMEOUT_DEDUCTIBILITY,
@@ -170,6 +171,21 @@ def explain_expense(
         "status": spec.get("status"),
         "llmUsed": bool(spec.get("llmUsed")),
     }
+
+
+def generate_business_plan(fields: dict) -> dict | None:
+    """`POST /rag/business-plan`. 사용자가 입력한 사업 정보로 PSST 초안을 만든다."""
+    return _post("/rag/business-plan", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def evaluate_business_plan(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-evaluate`. 작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다."""
+    return _post("/rag/business-plan-evaluate", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def bizplan_coach(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-coach`. 사업계획서 아이디어 어시스턴트에게 질문한다."""
+    return _post("/rag/business-plan-coach", fields, timeout=LLM_TIMEOUT_BIZPLAN)
 
 
 def summarize_announcement(raw_content: str, source: str | None = None) -> dict | None:

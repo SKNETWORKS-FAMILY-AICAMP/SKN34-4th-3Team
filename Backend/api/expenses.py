@@ -2,6 +2,7 @@ import base64
 
 from datetime import date
 
+from django.http import HttpResponse
 from ninja import Router, File, Path, Query
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
@@ -9,6 +10,7 @@ from ninja.files import UploadedFile
 from api.deps import user_auth
 from schemas.expenses import (
     DeductibilityResponse,
+    ExpenseAnalysisResponse,
     ExpenseCategoryUpdate,
     ExpenseListResponse,
     ReceiptCreateResponse,
@@ -37,7 +39,18 @@ def upload_receipt(
         filename,
         image_base64=image_b64,
         mime_type=image.content_type or "image/jpeg",
+        image_bytes=content or None,
     )
+
+
+@router.get("/receipts/{receipt_id}/image", summary="영수증 원본 이미지")
+def receipt_image(
+    request,
+    receipt_id: int = Path(description="영수증 ID"),
+):
+    """업로드 당시 원본 이미지를 그대로 돌려준다. 나중에 어떤 영수증을 올렸는지 다시 확인할 때 쓴다."""
+    data, mime_type = expense_service.get_receipt_image(receipt_id, request.auth["id"])
+    return HttpResponse(content=data, content_type=mime_type)
 
 
 @router.get(
@@ -85,6 +98,19 @@ def delete_expense(
 ):
     expense_service.delete_expense(expense_id, request.auth["id"])
     return {"deleted": True}
+
+
+@router.get(
+    "/{expense_id}/analysis",
+    response=ExpenseAnalysisResponse,
+    summary="영수증 판독·판단 과정",
+)
+def analysis(
+    request,
+    expense_id: int = Path(description="지출 ID"),
+):
+    """OCR이 읽은 항목과 판정에 이르는 단계를 돌려준다. LLM을 부르지 않아 즉시 응답한다."""
+    return expense_service.analysis(expense_id, request.auth["id"])
 
 
 @router.get(
