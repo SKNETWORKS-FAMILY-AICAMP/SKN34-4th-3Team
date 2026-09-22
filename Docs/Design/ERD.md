@@ -107,6 +107,8 @@ erDiagram
         string image_url
         string status "DEFAULT 'pending'"
         datetime created_at
+        bytea image_data "원본 이미지"
+        string mime_type
     }
 
     receipt_extractions {
@@ -116,6 +118,8 @@ erDiagram
         string vendor
         int amount
         string items
+        string proof_type "증빙 종류"
+        string read_meta "JSON: 읽음 여부·원문 근거·OCR 신뢰도"
     }
 
     expenses {
@@ -128,6 +132,9 @@ erDiagram
         boolean deductible
         float deductible_confidence
         string deductible_basis
+        string deductible_tier "high/ambiguous/low"
+        boolean proof_valid "NULL=판단 불가"
+        string missing_fields "JSON 배열"
     }
 
     policies {
@@ -236,7 +243,8 @@ erDiagram
     - 공용 마스터 데이터와 사용자 소유 행이 한 테이블에 공존한다. 조회 시 `USER` 행은 `user_id`로 걸러야 하며(`Backend/services/calendar_service.py:42`), 삭제는 소유자만 가능하다
     - `Reminder`는 사용자가 특정 일정(세금·지원금·개인 무관)에 건 알림이다. `dispatched`로 발송 여부를 추적한다
 - **Policy – CalendarEvent**: 정책의 신청 마감일(`Announcement.apply_end_date`)을 기준으로 생성되는 POLICY 타입 `CalendarEvent`를 위한 관계다. `Announcement`에 `apply_start_date`/`apply_end_date` 구조화 필드를 추가한 이유는, `AnnouncementSummary.period`가 AI 요약 문자열이라 캘린더 렌더링에 쓸 신뢰 가능한 날짜 값이 아니기 때문이다.
-- **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다. 지출 분석은 추가 기능(추후 개발)이지만 세 테이블은 스키마에 그대로 유지한다(`Docs/README.md` 8절).
+- **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다(현재 구현은 한 장에 하나를 만든다). `receipts.image_data`는 업로드 원본을 다시 보여주기 위한 것이고, `receipt_extractions.read_meta`는 OCR이 실제로 읽은 항목과 기본값으로 채운 항목을 구분하는 JSON이다. `expenses.deductible_tier`·`proof_valid`·`missing_fields`는 경비 인정 3단계 판정·적격증빙 여부·빠진 정보다(FS-17).
+- **사업계획서(FS-29~31)**: 테이블이 없다. 입력값·초안·예비진단 결과는 브라우저 localStorage에만 임시저장한다. 창업 로드맵 체크리스트도 같은 방식이다.
 - **Policy – Announcement – AnnouncementSummary**: 정책(마스터 데이터) 하나에 여러 시점의 공고문이 달릴 수 있고(1:N), 공고문 하나는 AI 요약 결과 하나를 가진다(1:1).
 - **User – Policy (SavedPolicy)**: 관심 정책 저장(FS-23)을 위한 다대다 조인 테이블.
 - **AdminUser – Policy / TaxDocument**: 관리자가 등록한 데이터의 출처를 추적하기 위한 FK.
@@ -259,7 +267,7 @@ erDiagram
 
 ### 의도적으로 스키마에 두지 않은 항목
 
-Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채웠다(`notifications` 테이블, `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, `announcements.apply_method`, `announcement_summaries.llm_used`, `users.region`의 `chk_users_region` CHECK 제약(`NOT VALID`)). LLM 세금 캐시 테이블 `tax_rag_cache`도 이 파일에 있다. 위 다이어그램은 이를 반영한 상태다.
+Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채웠다(`notifications` 테이블, `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, 영수증 경비 판정용 `receipts.image_data`·`mime_type`, `receipt_extractions.proof_type`·`read_meta`, `expenses.deductible_tier`·`proof_valid`·`missing_fields`, `announcements.apply_method`, `announcement_summaries.llm_used`, `users.region`의 `chk_users_region` CHECK 제약(`NOT VALID`)). LLM 세금 캐시 테이블 `tax_rag_cache`도 이 파일에 있다. 위 다이어그램은 이를 반영한 상태다.
 
 `meta_ids`만 추가하지 않았다. 인메모리 id 카운터를 저장하려던 덤프 산출물이라, `SERIAL`을 쓰면 개념 자체가 사라진다. Backend의 Postgres 덤프 경로도 제거됐다(`Docs/STATUS.md` P0-3).
 
