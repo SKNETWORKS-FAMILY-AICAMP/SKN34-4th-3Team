@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
@@ -230,6 +231,21 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
         "PostgresVectorSearch",
         FakePostgresVectorSearch,
     )
+    def sync_source_index(*, embedding, settings):
+        received["source_synced"] = True
+        return SimpleNamespace(
+            vector_search=FakePostgresVectorSearch(embedding=embedding, settings=settings),
+            document_count=12,
+            chunk_count=34,
+            loaded_from_cache=True,
+        )
+
+    monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", sync_source_index)
+    monkeypatch.setattr(
+        rag_routes,
+        "reindex_postgres_to_elasticsearch",
+        lambda settings: received.update(es_settings=settings),
+    )
     client = build_client(
         tmp_path / "index.json",
         vector_store_backend="postgres",
@@ -250,8 +266,48 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
     }
     assert received["document_ids"] == [9, 7]
     assert received["force"] is True
+    assert received["source_synced"] is True
+    assert received["es_settings"] is received["settings"]
     assert client.app.state.rag_runtime.document_count == 12
     assert client.app.state.rag_runtime.chunk_count == 34
+
+    def fail_es(_settings):
+        raise RuntimeError("Elasticsearch unavailable")
+
+    monkeypatch.setattr(rag_routes, "reindex_postgres_to_elasticsearch", fail_es)
+    failed = client.post("/rag/reindex", json={"documentIds": [9]})
+    assert failed.status_code == 502
+    assert client.app.state.rag_runtime.elasticsearch_synced is False
+
+
+def test_backend_full_reindex_updates_elasticsearch(monkeypatch, tmp_path: Path) -> None:
+    received = []
+    search = object()
+    monkeypatch.setattr(
+        rag_routes,
+        "load_or_build_postgres_index",
+        lambda *, embedding, settings, force: SimpleNamespace(
+            vector_search=search,
+            document_count=3,
+            chunk_count=5,
+            loaded_from_cache=True,
+        ),
+    )
+    monkeypatch.setattr(
+        rag_routes,
+        "reindex_postgres_to_elasticsearch",
+        lambda settings: received.append(settings),
+    )
+    client = build_client(
+        tmp_path / "index.json",
+        vector_store_backend="postgres",
+    )
+
+    response = client.post("/rag/reindex", json={"documentIds": []})
+
+    assert response.status_code == 200
+    assert response.json()["document_count"] == 3
+    assert received == [client.settings]
 
 
 def test_backend_partial_reindex_rejects_in_memory_backend(tmp_path: Path) -> None:
