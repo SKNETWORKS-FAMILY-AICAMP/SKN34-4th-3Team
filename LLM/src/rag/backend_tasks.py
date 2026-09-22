@@ -47,14 +47,40 @@ class AnnouncementSummaryGeneration(_GeneratedOutput):
     notes: str
 
 
-class BusinessPlanGeneration(_GeneratedOutput):
-    """사용자가 입력한 정보만으로 작성한 PSST 사업계획서 초안."""
+class BusinessPlanSectionGeneration(_GeneratedOutput):
+    """생성된 사업계획서 항목 하나."""
 
-    problem: str
-    solution: str
-    scale_up: str
-    team: str
+    key: str
+    label: str
+    content: str
+
+
+class BusinessPlanGeneration(_GeneratedOutput):
+    """사용자가 입력한 정보만으로 작성한 사업계획서 초안.
+
+    지원사업 공고 양식을 받았으면 그 항목 구성을, 받지 못했으면 기본 PSST 4항목을 따른다.
+    """
+
+    sections: list[BusinessPlanSectionGeneration]
     summary: str
+
+
+class BusinessPlanSectionScore(_GeneratedOutput):
+    """항목 하나에 대한 예비진단 결과."""
+
+    key: str
+    label: str
+    score: int = Field(ge=0, le=100)
+    strengths: str
+    improvements: str
+
+
+class BusinessPlanEvaluation(_GeneratedOutput):
+    """사업계획서 초안에 대한 AI 예비진단(자체 채점)."""
+
+    overall_score: int = Field(ge=0, le=100)
+    overall_comment: str
+    sections: list[BusinessPlanSectionScore]
 
 
 class ReceiptExtractionGeneration(_GeneratedOutput):
@@ -229,20 +255,38 @@ _RECEIPT_PROOF_RULES = (
 )
 
 
+BUSINESS_PLAN_DEFAULT_SECTIONS_INSTRUCTION = (
+    "정해진 PSST 4항목 구조를 그대로 쓰세요. 항목은 이 순서와 key·label을 정확히 그대로 "
+    "사용하세요:\n"
+    '1. key="problem", label="Problem · 문제인식" — 어떤 고객이 어떤 문제를 겪고 있는지, '
+    "왜 지금 해결해야 하는지\n"
+    '2. key="solution", label="Solution · 실현가능성" — 그 문제를 어떻게 해결하는지, '
+    "제품·서비스의 핵심 기능과 차별점\n"
+    '3. key="scaleUp", label="Scale-up · 성장전략" — 목표 시장 크기와 고객 확보 방법, '
+    "수익모델을 어떻게 키울지\n"
+    '4. key="team", label="Team · 팀구성" — 팀 구성과 이 팀이 이 사업을 해낼 수 있는 이유'
+)
+
+BUSINESS_PLAN_TEMPLATE_SECTIONS_INSTRUCTION = (
+    "아래 '지원사업 공고 양식' 원문에 나온 사업계획서 항목 구성을 그대로 따르세요. 양식에 "
+    "적힌 항목 제목을 label로 쓰고, 그 항목이 요구하는 내용을 content로 채우세요. key는 "
+    '항목 순서를 나타내는 짧은 영문 소문자 식별자로 만드세요(예: "section_1", "section_2"). '
+    "항목 개수와 순서는 양식과 최대한 똑같이 맞추고, 양식에 없는 항목을 새로 만들지 마세요.\n\n"
+    "[지원사업 공고 양식]\n{template_text}"
+)
+
+
 BUSINESS_PLAN_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "예비창업패키지 등 정부 지원사업에 내는 사업계획서 초안을 PSST 구조로 작성하는 "
-            "보조 도구다. 사용자가 입력한 정보만 근거로 쓰고, 매출액·투자 유치액·이용자 수 같은 "
-            "구체적인 수치나 실적은 사용자가 주지 않았다면 만들어 내지 마세요. 대신 "
-            "'[직접 채워 주세요: 예상 매출액]'처럼 빈 자리로 표시하세요. 각 항목은 한국어로 "
-            "2~4문장, 존댓말로 쓰세요.\n\n"
-            "- problem: 어떤 고객이 어떤 문제를 겪고 있는지, 왜 지금 해결해야 하는지\n"
-            "- solution: 그 문제를 어떻게 해결하는지, 제품·서비스의 핵심 기능과 차별점\n"
-            "- scale_up: 목표 시장 크기와 고객 확보 방법, 수익모델을 어떻게 키울지\n"
-            "- team: 팀 구성과 이 팀이 이 사업을 해낼 수 있는 이유\n"
-            "- summary: 위 네 항목을 3문장으로 압축한 요약",
+            "예비창업패키지 등 정부 지원사업에 내는 사업계획서 초안을 작성하는 보조 도구다. "
+            "사용자가 입력한 정보만 근거로 쓰고, 매출액·투자 유치액·이용자 수 같은 구체적인 "
+            "수치나 실적은 사용자가 주지 않았다면 만들어 내지 마세요. 대신 "
+            "'[직접 채워 주세요: 예상 매출액]'처럼 빈 자리로 표시하세요. 각 항목의 content는 "
+            "한국어로 2~4문장, 존댓말로 쓰세요.\n\n"
+            "sections 항목 구성:\n{sections_instruction}\n\n"
+            "summary는 sections 전체 내용을 3문장으로 압축한 요약입니다.",
         ),
         (
             "human",
@@ -267,12 +311,23 @@ async def generate_business_plan(
     team_input: str,
     target_program: str,
     extra_notes: str,
+    template_text: str = "",
 ) -> BusinessPlanGeneration:
-    """사용자가 입력한 사업 정보로 PSST 사업계획서 초안을 생성한다."""
+    """사용자가 입력한 사업 정보로 사업계획서 초안을 생성한다.
+
+    template_text가 있으면 그 지원사업 공고 양식의 항목 구성을 따르고, 없으면 기본
+    PSST 4항목(문제인식·실현가능성·성장전략·팀구성) 구조로 만든다.
+    """
+    sections_instruction = (
+        BUSINESS_PLAN_TEMPLATE_SECTIONS_INSTRUCTION.format(template_text=template_text.strip())
+        if template_text and template_text.strip()
+        else BUSINESS_PLAN_DEFAULT_SECTIONS_INSTRUCTION
+    )
     chain = BUSINESS_PLAN_PROMPT | llm.with_structured_output(BusinessPlanGeneration)
     result = BusinessPlanGeneration.model_validate(
         await chain.ainvoke(
             {
+                "sections_instruction": sections_instruction,
                 "business_name": business_name or "(입력 없음)",
                 "tagline": tagline or "(입력 없음)",
                 "target_customer": target_customer or "(입력 없음)",
@@ -288,11 +343,62 @@ async def generate_business_plan(
     )
     return result.model_copy(
         update={
-            field_name: validate_generated_text(
-                getattr(result, field_name), field_name=field_name
-            )
-            for field_name in ("problem", "solution", "scale_up", "team", "summary")
+            "sections": [
+                section.model_copy(
+                    update={
+                        "content": validate_generated_text(
+                            section.content, field_name=f"section:{section.key}"
+                        )
+                    }
+                )
+                for section in result.sections
+            ],
+            "summary": validate_generated_text(result.summary, field_name="summary"),
         }
+    )
+
+
+BUSINESS_PLAN_EVALUATE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "정부 R&D·창업지원사업 사업계획서 심사위원처럼, 아래 사업계획서 초안을 항목별로 "
+            "평가하세요. 이것은 예비진단이며 실제 합격을 보장하지 않는다는 전제로, 초안에 "
+            "실제로 쓰인 내용만 근거로 채점하세요. 빈 자리로 남겨진 '[직접 채워 주세요: ...]' "
+            "항목은 아직 채워지지 않은 것으로 보고 감점 사유로 다루세요. 점수는 내용의 "
+            "구체성·논리적 연결·실현 가능성을 기준으로 0~100점, 5점 단위 권장. sections에는 "
+            "아래에 주어진 항목을 모두, 주어진 순서 그대로, 같은 key·label로 반환하세요. 각 "
+            "항목의 strengths(잘된 점)와 improvements(보완할 점)는 1~2문장, 존댓말로 구체적으로 "
+            "쓰세요. overall_comment는 전체를 한두 문장으로 평가하세요.",
+        ),
+        ("human", "{sections_text}"),
+    ]
+)
+
+
+async def evaluate_business_plan(
+    llm: BaseChatModel,
+    *,
+    sections: list[dict],
+) -> BusinessPlanEvaluation:
+    """작성된 초안을 항목별로 채점하는 AI 예비진단. 합격 여부가 아니라 참고용 자체 점검이다."""
+    sections_text = (
+        "\n\n".join(
+            f"[{section.get('label') or section.get('key')}]\n"
+            f"{(section.get('content') or '').strip() or '(작성 안 됨)'}"
+            for section in sections
+        )
+        or "(작성된 항목 없음)"
+    )
+    chain = BUSINESS_PLAN_EVALUATE_PROMPT | llm.with_structured_output(BusinessPlanEvaluation)
+    result = BusinessPlanEvaluation.model_validate(
+        await chain.ainvoke(
+            {"sections_text": sections_text},
+            config={"run_name": "backend_business_plan_evaluate"},
+        )
+    )
+    return result.model_copy(
+        update={"overall_comment": validate_generated_text(result.overall_comment, field_name="overall_comment")}
     )
 
 

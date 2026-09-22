@@ -612,6 +612,71 @@
   }
 
   /* ---- 지출관리 ---- */
+  /* 이 페이지만 인디고 계열 강조색을 쓴다(앱 기본 --blue와 별개로 .exp2 안에서만 적용). */
+  .exp2 {
+    --exp-accent: #4f46e5;
+    --exp-accent-wash: rgba(79, 70, 229, 0.08);
+    --exp-ok: #22c55e;
+    --exp-check: #f59e0b;
+    --exp-bad: #ef4444;
+  }
+  .exp2 .exp-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .exp-eyebrow__dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--exp-accent);
+  }
+  .exp-intro {
+    margin: 0 0 14px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  /* ---- 지출관리: 좌측(업로드·통계·필터) / 우측(영수증 목록) 2단 레이아웃 ---- */
+  .exp2__layout {
+    display: grid;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+  }
+  .exp2__side {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 12px;
+  }
+  .exp2__main {
+    min-width: 0;
+    /* 왼쪽(업로드·통계·필터)은 화면 한 번에 다 보이게 두고, 목록이 길어질 때는
+       페이지 전체가 아니라 이 영역 안에서만 스크롤되게 높이를 뷰포트에 맞춘다. */
+    max-height: calc(100vh - 160px);
+    overflow-y: auto;
+  }
+  .exp2__mainhead {
+    margin-bottom: 10px;
+  }
+  @media (max-width: 860px) {
+    .exp2__layout {
+      grid-template-columns: 1fr;
+    }
+    .exp2__side {
+      position: static;
+    }
+    .exp2__main {
+      max-height: none;
+      overflow-y: visible;
+    }
+  }
   .exp-form {
     display: grid;
     grid-template-columns: 130px 1fr 120px 130px auto;
@@ -657,31 +722,24 @@
     color: var(--ink-soft);
   }
   .exp-ded {
+    align-self: flex-end;
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 3px 9px;
+    border-radius: 999px;
   }
   .exp-ded--ok {
-    color: var(--green);
+    color: #16833f;
+    background: rgba(34, 197, 94, 0.14);
   }
   .exp-ded--check {
-    color: var(--amber);
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.15);
   }
   .exp-ded--bad {
-    color: var(--red);
-  }
-  .exp-listhead {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .exp-listhead__count {
-    font-size: 12.5px;
-    color: var(--ink-soft);
+    color: #b91c1c;
+    background: rgba(239, 68, 68, 0.13);
   }
   .exp-excel {
     display: inline-flex;
@@ -717,6 +775,223 @@
     opacity: 0.6;
     cursor: default;
   }
+  .exp2 .exp-upload {
+    border: none;
+    background: var(--exp-accent-wash);
+    color: var(--exp-accent);
+    box-shadow: none;
+    padding: 9px 12px;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  /* ---- 지출관리: 요약 통계 5개 ---- */
+  .exp-stats {
+    display: flex;
+    align-items: stretch;
+    margin: 16px 0;
+    padding: 14px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .exp-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 18px;
+    border-right: 1px solid var(--line);
+  }
+  .exp-stat:first-child {
+    padding-left: 2px;
+  }
+  .exp-stat:last-child {
+    border-right: none;
+  }
+  .exp-stat__lbl {
+    font-size: 11.5px;
+    color: var(--ink-faint);
+  }
+  .exp-stat__num {
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--ink);
+  }
+  .exp-stat--ok .exp-stat__num { color: var(--exp-ok); }
+  .exp-stat--check .exp-stat__num { color: var(--exp-check); }
+  .exp-stat--bad .exp-stat__num { color: var(--exp-bad); }
+  .exp-stat--accent .exp-stat__num { color: var(--exp-accent); }
+  @media (max-width: 640px) {
+    .exp-stats {
+      flex-wrap: wrap;
+      gap: 12px 0;
+    }
+    .exp-stat {
+      flex: 1 1 33%;
+      border-right: none;
+    }
+  }
+  /* 좌측 사이드바처럼 좁은 폭에서는 2열 그리드로, 가로 구분선 대신 카드형으로 바꾼다.
+     한 화면 안에 다 들어와야 해서 패딩·글자 크기를 촘촘하게 줄였다. */
+  .exp-stats--vert {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 10px 0;
+    padding: 0;
+    border-top: none;
+    border-bottom: none;
+  }
+  .exp-stats--vert .exp-stat {
+    flex: none;
+    gap: 2px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--ground);
+  }
+  .exp-stats--vert .exp-stat__lbl {
+    font-size: 10.5px;
+  }
+  .exp-stats--vert .exp-stat__num {
+    font-size: 15px;
+  }
+  .exp-stats--vert .exp-stat--accent {
+    grid-column: 1 / -1;
+    background: var(--exp-accent-wash);
+    border-color: var(--exp-accent);
+  }
+
+  /* ---- 지출관리: 필터 탭 + 검색 + 엑셀 ---- */
+  .exp-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .exp-toolbar__left {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .exp-toolbar__count {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .exp-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--ground);
+  }
+  .exp-tab {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 11px;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .exp-tab:hover {
+    color: var(--ink);
+  }
+  .exp-tab.is-on {
+    background: var(--exp-accent);
+    color: #fff;
+  }
+  .exp-tab__count {
+    font-size: 10.5px;
+    opacity: 0.8;
+  }
+  /* 좌측 사이드바용 세로 필터 탭 — 가로 알약 그룹 대신 전체 폭 목록으로 쌓는다. */
+  .exp-tabs--vert {
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+  }
+  .exp-tabs--vert .exp-tab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 11.5px;
+  }
+  .exp-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .exp-search {
+    padding: 8px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--card, #fff);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12.5px;
+    width: 180px;
+  }
+  .exp-search:focus {
+    outline: none;
+    border-color: var(--exp-accent);
+  }
+  .exp-search--full {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  .exp-excel--full {
+    width: 100%;
+    justify-content: center;
+  }
+  @media (max-width: 560px) {
+    .exp-toolbar__right {
+      width: 100%;
+    }
+    .exp-search {
+      flex: 1;
+      width: auto;
+    }
+  }
+
+  /* ---- 지출관리: 필터 결과 0건 ---- */
+  .exp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--ink-faint);
+    font-size: 12.5px;
+  }
+  .exp-empty__reset {
+    border: 1px solid var(--exp-accent);
+    border-radius: 8px;
+    padding: 7px 14px;
+    background: var(--exp-accent-wash);
+    color: var(--exp-accent);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .exp-empty__reset:hover {
+    background: var(--exp-accent);
+    color: #fff;
+  }
+
   /* ---- 영수증 인식 중: AI 분석 진행 화면 ---- */
   .exp-ai {
     position: relative;
@@ -892,10 +1167,14 @@
   }
   .exp-card {
     border: 1px solid var(--line);
+    border-left: 4px solid var(--line-strong);
     border-radius: 12px;
     padding: 12px;
     background: var(--ground);
   }
+  .exp-card--ok { border-left-color: #22c55e; }
+  .exp-card--check { border-left-color: #f59e0b; }
+  .exp-card--bad { border-left-color: #ef4444; }
   .exp-card__main {
     display: flex;
     gap: 14px;
@@ -958,7 +1237,7 @@
   .exp-card__head {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: flex-start;
     gap: 10px;
     width: 100%;
     border: 0;
@@ -971,9 +1250,8 @@
   }
   .exp-card__title {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 2px 10px;
+    flex-direction: column;
+    gap: 3px;
     min-width: 0;
   }
   .exp-card__vendor {
@@ -984,6 +1262,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .exp-card__right {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
   }
   .exp-card__amount {
     flex: none;

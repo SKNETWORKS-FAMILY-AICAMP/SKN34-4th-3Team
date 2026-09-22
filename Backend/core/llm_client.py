@@ -178,6 +178,16 @@ def generate_business_plan(fields: dict) -> dict | None:
     return _post("/rag/business-plan", fields, timeout=LLM_TIMEOUT_BIZPLAN)
 
 
+def evaluate_business_plan(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-evaluate`. 작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다."""
+    return _post("/rag/business-plan-evaluate", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def bizplan_coach(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-coach`. 사업계획서 아이디어 어시스턴트에게 질문한다."""
+    return _post("/rag/business-plan-coach", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
 def summarize_announcement(raw_content: str, source: str | None = None) -> dict | None:
     normalized_content = (raw_content or "").strip()
     if not normalized_content:

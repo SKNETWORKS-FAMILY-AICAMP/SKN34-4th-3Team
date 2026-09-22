@@ -227,16 +227,76 @@ class BusinessPlanRequest(BaseModel):
     team: str = ""
     targetProgram: str = ""
     extraNotes: str = ""
+    templateText: str = Field(
+        default="",
+        max_length=6000,
+        description="지원사업 공고의 사업계획서 양식 원문. 비어 있으면 기본 PSST 4항목으로 생성한다.",
+    )
+
+
+class BusinessPlanSectionResponse(BaseModel):
+    """생성된 사업계획서의 항목 하나. 기본 모드는 PSST 4항목, 양식 모드는 공고 양식을 따른다."""
+
+    key: str
+    label: str
+    content: str
 
 
 class BusinessPlanResponse(BaseModel):
-    """PSST 구조의 사업계획서 초안."""
+    """사업계획서 초안. templateText가 있으면 그 양식의 항목 구성을 따른다."""
 
-    problem: str
-    solution: str
-    scaleUp: str
-    team: str
+    sections: list[BusinessPlanSectionResponse]
     summary: str
+    llmUsed: bool
+
+
+class BizplanSectionInput(BaseModel):
+    """아이디어 어시스턴트·예비진단에 전달하는, 지금까지 작성된 항목 하나."""
+
+    key: str = ""
+    label: str = ""
+    content: str = ""
+
+
+class BizplanCoachRequest(BaseModel):
+    """사업계획서 아이디어 어시스턴트에 보내는 질문과 지금까지 작성한 내용."""
+
+    question: str
+    businessName: str = ""
+    tagline: str = ""
+    targetCustomer: str = ""
+    sections: list[BizplanSectionInput] = Field(default_factory=list, max_length=20)
+    conversationHistory: list[ConversationHistoryMessage] = Field(default_factory=list, max_length=20)
+
+
+class BizplanCoachResponse(BaseModel):
+    """아이디어 어시스턴트 응답."""
+
+    answer: str
+    inScope: bool
+    redirect: Literal["tax", "policy", "none"]
+
+
+class BusinessPlanEvaluateRequest(BaseModel):
+    """예비진단 대상 초안. 기본 모드는 PSST 4항목, 양식 모드는 공고 양식을 따른다."""
+
+    sections: list[BizplanSectionInput] = Field(default_factory=list, max_length=20)
+
+
+class BusinessPlanSectionScoreResponse(BaseModel):
+    key: str
+    label: str
+    score: int = Field(ge=0, le=100)
+    strengths: str
+    improvements: str
+
+
+class BusinessPlanEvaluateResponse(BaseModel):
+    """AI 예비진단 결과. 실제 심사 결과가 아닌 참고용 자체 채점이다."""
+
+    overallScore: int = Field(ge=0, le=100)
+    overallComment: str
+    sections: list[BusinessPlanSectionScoreResponse]
     llmUsed: bool
 
 

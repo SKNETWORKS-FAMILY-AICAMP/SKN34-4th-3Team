@@ -369,8 +369,14 @@
   }
 
 
-  /* ---- 지출관리 페이지: 카드 목록이 너무 넓게 퍼지지 않게 폭을 제한한다 ---- */
+  /* ---- 지출관리·사업계획서 페이지: 다른 기능 페이지와 같은 .fp--wide 컨테이너
+     폭(1180px)을 그대로 쓴다. ---- */
   .exp-page {
-    max-width: 880px;
+    max-width: 1180px;
     margin: 0 auto;
+  }
+  /* 지출관리는 안쪽에 .tool(공용, max-width:900px)을 한 번 더 두르고 있어서
+     exp-page보다 좁게 잘렸다 — 여기서만 풀어 exp-page 폭 그대로 쓰게 한다. */
+  .exp-page .tool {
+    max-width: none;
   }

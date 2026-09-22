@@ -25,7 +25,9 @@ from src.features.indexing import (
 )
 from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
+from src.rag.bizplan_coach import generate_bizplan_coach_response
 from src.rag.backend_tasks import (
+    evaluate_business_plan,
     extract_receipt,
     extract_receipt_from_ocr,
     generate_business_plan,
@@ -44,8 +46,14 @@ from src.rag.tax_cache import TaxRagCache
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
+    BizplanCoachRequest,
+    BizplanCoachResponse,
+    BusinessPlanEvaluateRequest,
+    BusinessPlanEvaluateResponse,
     BusinessPlanRequest,
     BusinessPlanResponse,
+    BusinessPlanSectionResponse,
+    BusinessPlanSectionScoreResponse,
     BackendUserContext,
     DeductibilityRequest,
     DeductibilityResponse,
@@ -751,12 +759,15 @@ async def adapter_business_plan(
             team_input=request_body.team,
             target_program=request_body.targetProgram,
             extra_notes=request_body.extraNotes,
+            template_text=request_body.templateText,
         )
         return BusinessPlanResponse(
-            problem=generated.problem,
-            solution=generated.solution,
-            scaleUp=generated.scale_up,
-            team=generated.team,
+            sections=[
+                BusinessPlanSectionResponse(
+                    key=section.key, label=section.label, content=section.content
+                )
+                for section in generated.sections
+            ],
             summary=generated.summary,
             llmUsed=True,
         )
@@ -769,6 +780,93 @@ async def adapter_business_plan(
         raise upstream_http_exception(
             exc,
             fallback_message="Business plan generation failed.",
+        ) from exc
+
+
+async def adapter_bizplan_coach(
+    request_body: BizplanCoachRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BizplanCoachResponse:
+    """사업계획서 아이디어 어시스턴트. 검색 그래프를 타지 않는 단일 모델 호출이다."""
+    _ = settings_config
+    try:
+        result = await generate_bizplan_coach_response(
+            rag_runtime.llm_factory(),
+            query=request_body.question,
+            plan_fields={
+                "businessName": request_body.businessName,
+                "tagline": request_body.tagline,
+                "targetCustomer": request_body.targetCustomer,
+            },
+            plan_sections=[
+                {"label": section.label, "content": section.content}
+                for section in request_body.sections
+            ],
+            conversation_history=[
+                message.model_dump() for message in request_body.conversationHistory
+            ],
+        )
+        if not result.in_scope:
+            fallback = {
+                "tax": "이 질문은 AI 세무 Assistant에서 확인해 주세요.",
+                "policy": "이 질문은 공고지원 AI에서 확인해 주세요.",
+                "none": "사업계획서 아이디어 구체화에 관한 질문만 답변할 수 있어요.",
+            }
+            return BizplanCoachResponse(
+                answer=fallback.get(result.redirect, fallback["none"]),
+                inScope=False,
+                redirect=result.redirect,
+            )
+        return BizplanCoachResponse(answer=result.answer, inScope=True, redirect="none")
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Bizplan coach failed.",
+        ) from exc
+
+
+async def adapter_business_plan_evaluate(
+    request_body: BusinessPlanEvaluateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanEvaluateResponse:
+    """작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다. 실제 심사 결과가 아니다."""
+    _ = settings_config
+    try:
+        generated = await evaluate_business_plan(
+            rag_runtime.llm_factory(),
+            sections=[section.model_dump() for section in request_body.sections],
+        )
+        return BusinessPlanEvaluateResponse(
+            overallScore=generated.overall_score,
+            overallComment=generated.overall_comment,
+            sections=[
+                BusinessPlanSectionScoreResponse(
+                    key=section.key,
+                    label=section.label,
+                    score=section.score,
+                    strengths=section.strengths,
+                    improvements=section.improvements,
+                )
+                for section in generated.sections
+            ],
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan evaluation failed.",
         ) from exc
 
 

@@ -76,6 +76,14 @@ const ANALYZE_STEPS = ['영수증 글자 읽기', '금액·상호·증빙 정리
 const EXP_JUDGE_CATS = ['사무용품', '통신비', '차량유지비', '광고선전비', '임차료', '복리후생비', '접대비', '교육·도서', '기타'];
 // 목록 카드는 폭이 좁아 서버가 주는 긴 tierLabel("애매함 (확인 필요)") 대신 짧은 표기를 쓴다.
 const TIER_SHORT_LABELS = { high: '높음', ambiguous: '애매함', low: '어려움' };
+// 카드 왼쪽 상태색 보더 + 필터 탭에 쓰는 클래스. high=인정 / ambiguous=애매 / low=불인정.
+const TIER_CLASS = { high: 'ok', ambiguous: 'check', low: 'bad' };
+const TIER_TABS = [
+  { key: 'all', label: '전체' },
+  { key: 'high', label: '인정' },
+  { key: 'ambiguous', label: '애매' },
+  { key: 'low', label: '불인정' },
+];
 
 // 서버는 UTC 시각을 주므로 브라우저 현지 시각(한국이면 KST)으로 바꿔 "9월 20일 오후 9:39"처럼 보여준다.
 function formatUploadedAt(iso) {
@@ -309,11 +317,11 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
     }
   };
 
-  const tierCls = item.tier === 'high' ? 'ok' : item.tier === 'low' ? 'bad' : 'check';
+  const tierCls = TIER_CLASS[item.tier] || 'check';
   const uploadedLabel = formatUploadedAt(item.uploadedAt);
 
   return (
-    <li className="exp-card">
+    <li className={'exp-card exp-card--' + tierCls}>
       <div className="exp-card__main">
         <button
           type="button"
@@ -345,13 +353,15 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
                 </span>
               )}
             </span>
-            <span className="u-num exp-card__amount">{item.amount.toLocaleString()}원</span>
+            <span className="exp-card__right">
+              <span className="u-num exp-card__amount">{item.amount.toLocaleString()}원</span>
+              <span className={'exp-ded exp-ded--' + tierCls} title={item.tierLabel}>
+                경비 인정 {TIER_SHORT_LABELS[item.tier] || item.tierLabel}
+              </span>
+            </span>
           </button>
           <div className="exp-card__catrow">
             <span className="exp-card__catlabel">지출항목</span>
-            <span className={'exp-ded exp-ded--' + tierCls} title={item.tierLabel}>
-              경비 인정 {TIER_SHORT_LABELS[item.tier] || item.tierLabel}
-            </span>
           </div>
           <div className="exp-dd" ref={catWrapRef}>
             <button
@@ -467,6 +477,8 @@ export function ExpenseTracker({ user, onRequireLogin }) {
   const [uploadIndex, setUploadIndex] = useState(0); // 여러 장을 올릴 때 지금 몇 번째인지
   const [uploadTotal, setUploadTotal] = useState(0);
   const [err, setErr] = useState('');
+  const [tierFilter, setTierFilter] = useState('all');
+  const [search, setSearch] = useState('');
   const fileRef = React.useRef(null);
   const userId = user && user.id;
 
@@ -581,25 +593,34 @@ export function ExpenseTracker({ user, onRequireLogin }) {
       )
     );
 
-  const total = items.reduce((s, x) => s + x.amount, 0);
   const highCount = items.filter((x) => x.tier === 'high').length;
+  const ambiguousCount = items.filter((x) => x.tier === 'ambiguous').length;
+  const lowCount = items.filter((x) => x.tier === 'low').length;
+  const approvalRate = items.length ? Math.round((highCount / items.length) * 100) : 0;
+
+  const searchNorm = search.trim().toLowerCase();
+  const filteredItems = items
+    .filter((x) => tierFilter === 'all' || x.tier === tierFilter)
+    .filter((x) => !searchNorm || (x.vendor || '').toLowerCase().includes(searchNorm) || (x.category || '').toLowerCase().includes(searchNorm));
+  const filteredTotal = filteredItems.reduce((s, x) => s + x.amount, 0);
+  const resetFilters = () => {
+    setTierFilter('all');
+    setSearch('');
+  };
 
   return (
     <div className="tool">
-      <div className="tool__panel">
-        <h2>지출관리 · 영수증 경비 판정</h2>
-        <p style={{ margin: '0 0 14px', fontSize: 12.5, color: 'var(--ink-soft)' }}>
-          영수증 사진을 올리면 OCR로 내용을 읽고, 사업 경비 인정 가능성과 증빙(세금계산서·카드·현금영수증)
-          적격 여부를 알려드려요. 최종 판단은 세무사와 함께 확인해 주세요.
-        </p>
-
+      <div className="tool__panel exp2">
         {!userId ? (
-          <p className="cvx__empty">
-            로그인하면 영수증을 올리고 경비 판정을 받을 수 있어요.{' '}
-            {onRequireLogin && (
-              <button type="button" style={linkBtn} onClick={onRequireLogin}>로그인</button>
-            )}
-          </p>
+          <React.Fragment>
+            <h2 className="exp-eyebrow"><span className="exp-eyebrow__dot" aria-hidden="true" />지출관리 · 영수증 경비 판정</h2>
+            <p className="cvx__empty">
+              로그인하면 영수증을 올리고 경비 판정을 받을 수 있어요.{' '}
+              {onRequireLogin && (
+                <button type="button" style={linkBtn} onClick={onRequireLogin}>로그인</button>
+              )}
+            </p>
+          </React.Fragment>
         ) : (
           <React.Fragment>
             <input
@@ -611,72 +632,141 @@ export function ExpenseTracker({ user, onRequireLogin }) {
               style={{ display: 'none' }}
               onChange={onFile}
             />
-            {uploading ? (
-              <div className="exp-ai" role="status" aria-live="polite">
-                <span className="exp-ai__glow exp-ai__glow--a" aria-hidden="true" />
-                <span className="exp-ai__glow exp-ai__glow--b" aria-hidden="true" />
-                <div className="exp-ai__orb" aria-hidden="true">
-                  <span className="exp-ai__orb-ring" />
-                  <span className="exp-ai__orb-core" />
-                </div>
-                <div className="exp-ai__text">
-                  <p className="exp-ai__title">
-                    AI가 영수증을 분석하고 있어요
-                    {uploadTotal > 1 && ` (${uploadIndex}/${uploadTotal})`}
-                  </p>
-                  <p className="exp-ai__sub">{uploadMsg || '영수증을 확인하고 있어요…'}</p>
-                </div>
-                <ol className="exp-ai__steps">
-                  {ANALYZE_STEPS.map((label, i) => (
-                    <li
-                      key={label}
-                      className={i < uploadStep ? 'is-done' : i === uploadStep ? 'is-active' : ''}
-                    >
-                      <span className="exp-ai__dot" aria-hidden="true" />
-                      {label}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : (
-              <button type="button" className="exp-upload" onClick={pickFile}>
-                📷 영수증 올리기 (여러 장 선택 가능)
-              </button>
-            )}
-            {err && <p className="cal__err">{err}</p>}
+            <div className="exp2__layout">
+              <aside className="exp2__side">
+                <h2 className="exp-eyebrow"><span className="exp-eyebrow__dot" aria-hidden="true" />지출관리 · 영수증 경비 판정</h2>
 
-            {loading ? (
-              <p className="ai__hint">불러오는 중…</p>
-            ) : items.length === 0 ? (
-              <p className="cvx__empty" style={{ marginTop: 14 }}>아직 올린 영수증이 없어요.</p>
-            ) : (
-              <React.Fragment>
-                <div className="exp-listhead">
-                  <span className="exp-listhead__count">영수증 {items.length}건</span>
-                  <button
-                    type="button"
-                    className="exp-excel"
-                    onClick={() => downloadExpensesExcel(items)}
-                  >
-                    📊 엑셀로 다운로드
+                {uploading ? (
+                  <div className="exp-ai" role="status" aria-live="polite">
+                    <span className="exp-ai__glow exp-ai__glow--a" aria-hidden="true" />
+                    <span className="exp-ai__glow exp-ai__glow--b" aria-hidden="true" />
+                    <div className="exp-ai__orb" aria-hidden="true">
+                      <span className="exp-ai__orb-ring" />
+                      <span className="exp-ai__orb-core" />
+                    </div>
+                    <div className="exp-ai__text">
+                      <p className="exp-ai__title">
+                        AI가 영수증을 분석하고 있어요
+                        {uploadTotal > 1 && ` (${uploadIndex}/${uploadTotal})`}
+                      </p>
+                      <p className="exp-ai__sub">{uploadMsg || '영수증을 확인하고 있어요…'}</p>
+                    </div>
+                    <ol className="exp-ai__steps">
+                      {ANALYZE_STEPS.map((label, i) => (
+                        <li
+                          key={label}
+                          className={i < uploadStep ? 'is-done' : i === uploadStep ? 'is-active' : ''}
+                        >
+                          <span className="exp-ai__dot" aria-hidden="true" />
+                          {label}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : (
+                  <button type="button" className="exp-upload" onClick={pickFile}>
+                    📷 영수증 올리기 (여러 장 선택 가능)
                   </button>
-                </div>
-                <ul className="exp-list exp-list--cards">
-                  {items.map((it) => (
-                    <ReceiptCard
-                      key={it.expenseId}
-                      item={it}
-                      onDeleted={onDeleted}
-                      onCategoryChanged={onCategoryChanged}
+                )}
+                {err && <p className="cal__err">{err}</p>}
+
+                {!loading && items.length > 0 && (
+                  <React.Fragment>
+                    <div className="exp-stats exp-stats--vert">
+                      <div className="exp-stat">
+                        <span className="exp-stat__lbl">전체 영수증</span>
+                        <span className="exp-stat__num">{items.length}건</span>
+                      </div>
+                      <div className="exp-stat exp-stat--ok">
+                        <span className="exp-stat__lbl">경비 인정</span>
+                        <span className="exp-stat__num">{highCount}건</span>
+                      </div>
+                      <div className="exp-stat exp-stat--check">
+                        <span className="exp-stat__lbl">애매함</span>
+                        <span className="exp-stat__num">{ambiguousCount}건</span>
+                      </div>
+                      <div className="exp-stat exp-stat--bad">
+                        <span className="exp-stat__lbl">경비 불인정</span>
+                        <span className="exp-stat__num">{lowCount}건</span>
+                      </div>
+                      <div className="exp-stat exp-stat--accent">
+                        <span className="exp-stat__lbl">인정률</span>
+                        <span className="exp-stat__num">{approvalRate}%</span>
+                      </div>
+                    </div>
+
+                    <div className="exp-tabs exp-tabs--vert" role="tablist" aria-label="경비 인정 상태 필터">
+                      {TIER_TABS.map((t) => {
+                        const count = t.key === 'all' ? items.length : t.key === 'high' ? highCount : t.key === 'ambiguous' ? ambiguousCount : lowCount;
+                        return (
+                          <button
+                            key={t.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={tierFilter === t.key}
+                            className={'exp-tab' + (tierFilter === t.key ? ' is-on' : '')}
+                            onClick={() => setTierFilter(t.key)}
+                          >
+                            {t.label} <span className="exp-tab__count">{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <input
+                      type="text"
+                      className="exp-search exp-search--full"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="상호·지출항목 검색"
+                      aria-label="영수증 검색"
                     />
-                  ))}
-                </ul>
-                <div className="exp-total">
-                  <span>합계 · 인정 가능성 높음 {highCount}/{items.length}건</span>
-                  <span className="u-num">{total.toLocaleString()}원</span>
-                </div>
-              </React.Fragment>
-            )}
+                    <button
+                      type="button"
+                      className="exp-excel exp-excel--full"
+                      onClick={() => downloadExpensesExcel(filteredItems)}
+                    >
+                      📊 엑셀로 다운로드
+                    </button>
+                  </React.Fragment>
+                )}
+              </aside>
+
+              <div className="exp2__main">
+                {loading ? (
+                  <p className="ai__hint">불러오는 중…</p>
+                ) : items.length === 0 ? (
+                  <p className="cvx__empty">아직 올린 영수증이 없어요.</p>
+                ) : filteredItems.length === 0 ? (
+                  <div className="exp-empty">
+                    <p>조건에 맞는 영수증이 없어요.</p>
+                    <button type="button" className="exp-empty__reset" onClick={resetFilters}>
+                      필터 초기화
+                    </button>
+                  </div>
+                ) : (
+                  <React.Fragment>
+                    <div className="exp2__mainhead">
+                      <span className="exp-toolbar__count">영수증 {filteredItems.length}건</span>
+                    </div>
+                    <ul className="exp-list exp-list--cards">
+                      {filteredItems.map((it) => (
+                        <ReceiptCard
+                          key={it.expenseId}
+                          item={it}
+                          onDeleted={onDeleted}
+                          onCategoryChanged={onCategoryChanged}
+                        />
+                      ))}
+                    </ul>
+                    <div className="exp-total">
+                      <span>합계 · 인정 가능성 높음 {filteredItems.filter((x) => x.tier === 'high').length}/{filteredItems.length}건</span>
+                      <span className="u-num">{filteredTotal.toLocaleString()}원</span>
+                    </div>
+                  </React.Fragment>
+                )}
+              </div>
+            </div>
           </React.Fragment>
         )}
       </div>

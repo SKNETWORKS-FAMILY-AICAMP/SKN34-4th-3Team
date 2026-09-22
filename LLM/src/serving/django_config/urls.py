@@ -20,6 +20,8 @@ urlpatterns = [
     path("rag/deductibility", views.public_deductibility),
     path("rag/summarize-announcement", views.public_summarize_announcement),
     path("rag/business-plan", views.public_business_plan),
+    path("rag/business-plan-coach", views.public_business_plan_coach),
+    path("rag/business-plan-evaluate", views.public_business_plan_evaluate),
     path("ocr/receipt", views.receipt_ocr),
 ]
 

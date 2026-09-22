@@ -22,6 +22,8 @@ ROUTES: tuple[tuple[str, str, type[BaseModel] | None, type[BaseModel]], ...] = (
     ("/rag/deductibility", "post", schemas.DeductibilityRequest, schemas.DeductibilityResponse),
     ("/rag/summarize-announcement", "post", schemas.AnnouncementSummaryRequest, schemas.AnnouncementSummaryResponse),
     ("/rag/business-plan", "post", schemas.BusinessPlanRequest, schemas.BusinessPlanResponse),
+    ("/rag/business-plan-coach", "post", schemas.BizplanCoachRequest, schemas.BizplanCoachResponse),
+    ("/rag/business-plan-evaluate", "post", schemas.BusinessPlanEvaluateRequest, schemas.BusinessPlanEvaluateResponse),
     ("/ocr/receipt", "post", None, schemas.ReceiptExtractionResponse),
 )
 
