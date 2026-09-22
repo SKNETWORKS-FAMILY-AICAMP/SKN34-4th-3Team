@@ -244,7 +244,7 @@ erDiagram
     - `Reminder`는 사용자가 특정 일정(세금·지원금·개인 무관)에 건 알림이다. `dispatched`로 발송 여부를 추적한다
 - **Policy – CalendarEvent**: 정책의 신청 마감일(`Announcement.apply_end_date`)을 기준으로 생성되는 POLICY 타입 `CalendarEvent`를 위한 관계다. `Announcement`에 `apply_start_date`/`apply_end_date` 구조화 필드를 추가한 이유는, `AnnouncementSummary.period`가 AI 요약 문자열이라 캘린더 렌더링에 쓸 신뢰 가능한 날짜 값이 아니기 때문이다.
 - **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다(현재 구현은 한 장에 하나를 만든다). `receipts.image_data`는 업로드 원본을 다시 보여주기 위한 것이고, `receipt_extractions.read_meta`는 OCR이 실제로 읽은 항목과 기본값으로 채운 항목을 구분하는 JSON이다. `expenses.deductible_tier`·`proof_valid`·`missing_fields`는 경비 인정 3단계 판정·적격증빙 여부·빠진 정보다(FS-17).
-- **사업계획서(FS-29~31)**: 테이블이 없다. 입력값·초안·예비진단 결과는 브라우저 localStorage에만 임시저장한다. 창업 로드맵 체크리스트도 같은 방식이다.
+- **사업계획서(FS-29~31)**: 테이블이 없다. 입력값·초안·예비진단 결과는 브라우저 localStorage에만 임시저장한다. 창업 로드맵 체크리스트와 상담 대화방 구분·이름도 같은 방식이다. DB 이관안은 아래 "제안: 유저 개인화 저장 이관" 절과 `Docs/reports/USER_PERSONALIZATION_DB.md` 참고.
 - **Policy – Announcement – AnnouncementSummary**: 정책(마스터 데이터) 하나에 여러 시점의 공고문이 달릴 수 있고(1:N), 공고문 하나는 AI 요약 결과 하나를 가진다(1:1).
 - **User – Policy (SavedPolicy)**: 관심 정책 저장(FS-23)을 위한 다대다 조인 테이블.
 - **AdminUser – Policy / TaxDocument**: 관리자가 등록한 데이터의 출처를 추적하기 위한 FK.
@@ -283,3 +283,54 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
 - 로컬에서 띄운 Backend는 Postgres 연결 시 `Backend/core/db.py`의 `_apply_extras`로 `DB/app_extras.sql`을 best-effort 적용한다. 파일이 없으면 건너뛰고 실패한 문장은 무시하므로 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
 - `setup.sh`·`setup.bat`은 기동 때마다 `psql`로 `app_extras.sql`을 다시 적용한다
+
+## 제안: 유저 개인화 저장 이관 (미적용)
+
+지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 위 다이어그램(현행 스키마)에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+
+```mermaid
+erDiagram
+    users ||--o{ chat_rooms : opens
+    chat_rooms ||--o{ chat_messages : contains
+    users ||--o{ chat_messages : sends
+    users ||--o{ user_roadmap_progress : checks
+    users ||--o| bizplan_drafts : drafts
+
+    chat_rooms {
+        int id PK
+        int user_id FK
+        string category "tax / policy / roadmap"
+        string title "NULL이면 첫 질문을 제목으로"
+        datetime created_at
+        datetime updated_at "마지막 메시지 시각"
+    }
+
+    chat_messages {
+        int id PK
+        int user_id FK
+        int room_id FK "신규, ON DELETE CASCADE"
+        string category
+        string question
+        string answer
+        datetime created_at
+    }
+
+    user_roadmap_progress {
+        int user_id PK "FK"
+        int version PK "DEFAULT 2"
+        string task_key PK "단계:인덱스 (예: A:0)"
+        datetime done_at
+    }
+
+    bizplan_drafts {
+        int user_id PK "FK"
+        jsonb form
+        jsonb plan "sections 가변"
+        jsonb eval_result
+        datetime updated_at
+    }
+```
+
+- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다.
+- **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
+- **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 공고 양식에 따라 초안 항목 수·키가 달라져 `form`·`plan`·`eval_result`를 JSONB로 둔다.
