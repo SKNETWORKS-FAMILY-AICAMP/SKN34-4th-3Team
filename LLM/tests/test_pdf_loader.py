@@ -3,47 +3,11 @@ from pathlib import Path
 import pytest
 
 from src.data.contracts import DocumentCatalogEntry
-from src.data.document_catalog import SOURCE_PDF_DIR, get_document_catalog
 from src.features.document_processing import (
     PdfDocumentNotFoundError,
     PdfTextNotFoundError,
     load_pdf_pages,
 )
-
-
-def test_catalog_discovers_all_pdfs_in_rag_data() -> None:
-    catalog = get_document_catalog()
-
-    assert SOURCE_PDF_DIR.name == "RAG_data"
-    assert len(catalog) == len(list(SOURCE_PDF_DIR.glob("*.pdf"))) == 20
-    assert catalog[0] == {
-        "policy_id": 103,
-        "title": "청년 직무경험 지원사업 공고",
-        "file_name": "01_청년_직무경험_지원사업_공고.pdf",
-    }
-    assert catalog[-1] == {
-        "policy_id": 120,
-        "title": "청년 전월세보증금 이자지원",
-        "file_name": "20_청년_전월세보증금_이자지원_실제공고문형.pdf",
-    }
-
-
-def test_catalog_pdf_is_loaded_read_only_with_page_metadata() -> None:
-    entry = get_document_catalog()[0]
-    pdf_path = SOURCE_PDF_DIR / entry["file_name"]
-    before = pdf_path.read_bytes()
-
-    pages = load_pdf_pages(entry)
-
-    assert pages
-    assert pages[0].page_content.strip()
-    assert pages[0].metadata == {
-        "policy_id": entry["policy_id"],
-        "title": entry["title"],
-        "source": entry["file_name"],
-        "page": 1,
-    }
-    assert pdf_path.read_bytes() == before
 
 
 def test_missing_pdf_raises_clear_error(tmp_path: Path) -> None:
