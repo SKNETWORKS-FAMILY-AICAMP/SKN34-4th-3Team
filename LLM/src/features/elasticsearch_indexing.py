@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import logging
 import re
 from typing import Any, TypedDict
@@ -13,6 +13,8 @@ from src.core.database import connect_database
 
 logger = logging.getLogger(__name__)
 _SAFE_INDEX_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+_MANAGED_INDEX_SUFFIX = "-nori-v3-xsv-xsa-"
+_ORPHAN_GRACE_PERIOD = timedelta(days=1)
 # 조사·어미·접속어·기호와 의미가 어근에 남는 파생 접미사만 제거한다.
 # 세금·법령 검색의 부정/범위 의미를 보존하기 위해 VX, VCN, MAG, MM, XPN, XSN은
 # 제거하지 않는다.
@@ -265,6 +267,52 @@ def _labeled_content(*items: tuple[str, object | None]) -> str:
     )
 
 
+def _managed_index_created_at(index_name: str, prefix: str) -> datetime | None:
+    """이 색인 함수의 이름 규칙과 일치하는 물리 인덱스의 생성 시각을 반환한다."""
+    if not index_name.startswith(prefix):
+        return None
+    suffix = index_name[len(prefix):]
+    if not re.fullmatch(r"[0-9]{20}", suffix):
+        return None
+    try:
+        return datetime.strptime(suffix, "%Y%m%d%H%M%S%f").replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _delete_unused_managed_indices(
+    es: Elasticsearch,
+    *,
+    alias: str,
+    active_index: str,
+    previous_indices: set[str],
+) -> None:
+    """Alias 전환 후 이전 대상과 오래된 미사용 인덱스만 정리한다."""
+    prefix = f"{alias}{_MANAGED_INDEX_SUFFIX}"
+    cutoff = datetime.now(UTC) - _ORPHAN_GRACE_PERIOD
+    try:
+        indices = es.indices.get(
+            index=f"{prefix}*",
+            features="aliases",
+            allow_no_indices=True,
+            ignore_unavailable=True,
+        )
+    except Exception:
+        logger.exception("Failed to list unused Elasticsearch indices for %s", alias)
+        return
+
+    for index_name, metadata in indices.items():
+        created_at = _managed_index_created_at(index_name, prefix)
+        if index_name == active_index or created_at is None or metadata.get("aliases"):
+            continue
+        if index_name not in previous_indices and created_at > cutoff:
+            continue
+        try:
+            es.indices.delete(index=index_name)
+        except Exception:
+            logger.exception("Failed to delete unused Elasticsearch index %s", index_name)
+
+
 def reindex_postgres_to_elasticsearch(
     settings: Settings | None = None,
     *,
@@ -302,9 +350,17 @@ def reindex_postgres_to_elasticsearch(
         resolved_settings.elasticsearch_url,
         request_timeout=resolved_settings.elasticsearch_request_timeout,
     )
+    # 과거 실행에서 남은 오래된 미사용 인덱스를 먼저 정리해 새 색인 공간을 확보한다.
+    _delete_unused_managed_indices(
+        es,
+        alias=alias,
+        active_index="",
+        previous_indices=set(),
+    )
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
-    index_name = f"{alias}-nori-v3-xsv-xsa-{timestamp}"
+    index_name = f"{alias}{_MANAGED_INDEX_SUFFIX}{timestamp}"
     created = False
+    previous_indices: set[str] = set()
     try:
         es.indices.create(index=index_name, **nori_index_definition())
         created = True
@@ -328,6 +384,7 @@ def reindex_postgres_to_elasticsearch(
         alias_actions: list[dict[str, Any]] = []
         if es.indices.exists_alias(name=alias):
             current_indices = es.indices.get_alias(name=alias)
+            previous_indices = set(current_indices)
             alias_actions.extend(
                 {"remove": {"index": current_index, "alias": alias}}
                 for current_index in current_indices.keys()
@@ -337,10 +394,23 @@ def reindex_postgres_to_elasticsearch(
     except Exception:
         if created:
             try:
-                es.indices.delete(index=index_name)
+                active_indices = (
+                    es.indices.get_alias(name=alias)
+                    if es.indices.exists_alias(name=alias)
+                    else {}
+                )
+                if index_name not in active_indices:
+                    es.indices.delete(index=index_name)
             except Exception:
                 logger.exception("Failed to remove incomplete Elasticsearch index %s", index_name)
         raise
+
+    _delete_unused_managed_indices(
+        es,
+        alias=alias,
+        active_index=index_name,
+        previous_indices=previous_indices,
+    )
 
     return {
         "index": index_name,

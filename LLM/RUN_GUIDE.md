@@ -187,6 +187,10 @@ docker compose exec -T elasticsearch curl -fsS http://localhost:9200/rag-documen
 반환하고 해당 LLM 프로세스는 ES 결과를 사용하지 않는다. ES 복구 후 `/rag/reindex`를
 다시 호출한다. 검색 중 ES 연결이 끊기면 로그에 오류를 남기고 pgvector Dense 결과로
 검색을 계속한다. ES 적재 명령은 새 물리 인덱스의 적재가 완료된 뒤 alias를 전환한다.
+전환에 성공하면 이 프로그램이 만든 직전 물리 인덱스를 삭제하고, 동일한 이름 규칙의
+미사용 인덱스 중 생성된 지 하루가 지난 것도 정리한다. 다른 alias가 붙은 인덱스와
+현재 `rag-documents` 대상은 삭제하지 않는다. 정리에 실패하면 새 alias는 유지되며
+LLM 로그에서 `Failed to delete unused Elasticsearch index`를 확인한다.
 
 ## 6. RAG 질문 테스트
 
