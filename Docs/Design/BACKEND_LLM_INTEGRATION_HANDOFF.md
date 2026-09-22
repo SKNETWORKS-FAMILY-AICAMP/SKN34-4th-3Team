@@ -26,7 +26,10 @@ LLM은 다음 Backend용 공개 API를 제공한다.
 | `POST` | `/rag/legal-basis` | Backend 세액감면 판정 근거 설명 |
 | `POST` | `/rag/deductibility` | 경비 인정 가능성 분석 |
 | `POST` | `/rag/summarize-announcement` | 공고문 구조화 요약 |
-| `POST` | `/ocr/receipt` | 영수증 Vision 필드 추출 |
+| `POST` | `/ocr/receipt` | 영수증 필드 추출(Tesseract OCR + LLM, 글자 부족 시 Vision 대체) |
+| `POST` | `/rag/business-plan` | 사업계획서 초안 생성 (이후 추가) |
+| `POST` | `/rag/business-plan-evaluate` | 사업계획서 AI 예비진단 (이후 추가) |
+| `POST` | `/rag/business-plan-coach` | 사업계획서 아이디어 어시스턴트 (이후 추가) |
 
 작성 시점 LLM 테스트 결과는 `222 passed`였다. 2026-09-15 기준 테스트는 354건이며 로컬 실행에서
 `346 passed, 8 failed`(원본 PDF 등 로컬 데이터 의존 테스트)다. Fake 모델과 임시 인덱스를
@@ -234,7 +237,8 @@ Backend 처리 권장안:
 - 허용 형식: JPEG, PNG, WebP
 - 최대 크기: 4 MiB
 - 인식하지 못한 필드는 `null` 또는 빈 배열이므로 Backend가 샘플 값으로 오인하지 않아야 한다.
-- 실제 영수증 인식 품질은 아직 검증하지 않았다.
+- 이후 Vision 단독 방식에서 Tesseract OCR + LLM 해석 방식으로 바뀌었다. 응답에 `proofType`·원문 근거·`ocrConfidence`·`source`(`ocr_llm`|`vision`)가 추가됐다(`Docs/Design/LLM_API_SPEC_V1.md` 5절).
+- 실제 영수증 인식 품질은 아직 충분히 검증하지 않았다.
 
 ### `/rag/reindex`
 
@@ -335,6 +339,6 @@ Backend 담당 작업과 별개로 다음은 LLM PR에서 먼저 결정하거나
 - 부분 재색인을 원천 재조회 방식으로 수정하거나 실험 기능으로 명시해 비활성화
 - Embedding 모델 변경 감지 또는 모델 변경 시 강제 전체 재색인 운영 규칙 확정
 - 공통 오류 envelope schema를 OpenAPI 응답에 명시
-- 실제 영수증 파일과 Vision 모델로 OCR 품질 확인
+- 실제 영수증 파일로 Tesseract OCR·Vision 대체 경로의 품질 확인
 
 세부 근거와 우선순위는 `Docs/reports/LLM_INTEGRATION_AUDIT_0909.md`를 참고한다.
