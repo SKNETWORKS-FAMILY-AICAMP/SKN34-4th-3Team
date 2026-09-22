@@ -2,11 +2,10 @@ import asyncio
 from collections.abc import Callable
 from pathlib import Path
 
-from fastapi.testclient import TestClient
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
-from src.core.config import Settings, get_settings
+from src.core.config import Settings
 from src.data import get_document_catalog
 from src.rag.backend_tasks import (
     AnnouncementSummaryGeneration,
@@ -14,7 +13,6 @@ from src.rag.backend_tasks import (
     LegalBasisGeneration,
     ReceiptExtractionGeneration,
 )
-from src.serving.app import create_app
 from src.serving import rag_routes
 from src.serving.rag_routes import RagRuntime
 from src.rag.graph import ContextualizedQuestion, RouteDecision
@@ -27,6 +25,7 @@ from src.rag.roadmap import (
 from src.rag.tax import TaxIntentDecision
 from src.vectorstores.hybrid import HybridSearch
 from tests.fakes import FakeStructuredChatModel, make_default_fake_model
+from tests.django_client import DjangoTestClient
 
 
 def build_client(
@@ -36,12 +35,11 @@ def build_client(
     llm_factory: Callable = make_default_fake_model,
     retrieval_mode: str = "dense",
     vector_store_backend: str = "in_memory",
-) -> TestClient:
+) -> DjangoTestClient:
     runtime = RagRuntime(
         embedding_factory=embedding_factory,
         llm_factory=llm_factory,
     )
-    app = create_app(runtime=runtime)
     settings = Settings(
         _env_file=None,
         langsmith_tracing=False,
@@ -53,11 +51,10 @@ def build_client(
         embedding_model="test-embedding-model",
         vector_index_cache_path=cache_path,
     )
-    app.dependency_overrides[get_settings] = lambda: settings
-    return TestClient(app)
+    return DjangoTestClient(runtime=runtime, settings=settings)
 
 
-def add_test_tax_evidence(client: TestClient) -> None:
+def add_test_tax_evidence(client: DjangoTestClient) -> None:
     """Backend 전용 Tax API 테스트에 사용할 법령 Chunk를 추가한다."""
     client.app.state.rag_runtime.require_index().add_chunks(
         [

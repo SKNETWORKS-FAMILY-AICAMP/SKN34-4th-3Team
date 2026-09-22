@@ -126,7 +126,7 @@ flowchart LR
 .
 ├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
-├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
+├── LLM/             # Django ASGI API, RAG 파이프라인, 모델 서빙 (:8001)
 ├── DB/              # DB 스키마와 수집 스크립트
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
@@ -152,7 +152,8 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | --- | --- |
 | 화면 | http://localhost:5173 |
 | Backend API 문서 | http://localhost:8000/docs |
-| LLM API 문서 | http://localhost:8001/docs |
+| LLM API 문서 | http://localhost:8001/docs (Django ASGI) |
+| LLM 상태 확인 | http://localhost:8001/health |
 
 - 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (12절 참고)
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`

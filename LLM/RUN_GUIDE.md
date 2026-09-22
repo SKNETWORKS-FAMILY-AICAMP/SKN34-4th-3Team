@@ -1,6 +1,6 @@
 # LLM 서비스 실행 가이드
 
-현재 LLM 서비스는 FastAPI + LangGraph 기반이며 기본 포트는 `8001`이다.
+현재 LLM 서비스의 HTTP 계층은 Django ASGI이며, RAG 실행은 기존 LangGraph를 사용한다. 기본 포트는 `8001`이다.
 
 ## 1. 사전 준비
 
@@ -78,7 +78,7 @@ uv run python main.py
 
 ```powershell
 cd LLM
-uv run uvicorn main:app --host 0.0.0.0 --port 8001
+uv run uvicorn src.serving.django_config.asgi:application --host 0.0.0.0 --port 8001 --lifespan off
 ```
 
 정상 시작 로그:
@@ -96,8 +96,10 @@ Uvicorn running on http://0.0.0.0:8001
 
 ```text
 http://localhost:8001/health
-http://localhost:8001/docs
 ```
+
+API 문서는 `http://localhost:8001/docs`, OpenAPI JSON은 `http://localhost:8001/openapi.json`에서 확인한다.
+`uv run python manage.py check`로 Django 설정을 검사한다.
 
 PowerShell:
 
@@ -114,6 +116,8 @@ Invoke-RestMethod http://localhost:8001/rag/ready
 
 `/rag/ready`의 `index_ready`는 DB에 Embedding이 존재한다는 의미가 아니다. 현재
 LLM 프로세스에 pgvector 검색기와 메모리 BM25 검색기가 준비됐다는 의미다.
+LLM 서버는 첫 HTTP 요청에서 인덱스 준비를 백그라운드로 시작한다. 준비 중에는
+`index_ready=false`가 반환될 수 있으며, 준비가 끝나면 `true`로 바뀐다.
 
 ## 5. 검색기 준비
 
