@@ -120,7 +120,7 @@ def upsert_tax_info(user_id: int, tax_type: str, details: str) -> None:
 def insert_tax_reduction(user_id: int, eligible: bool, reasons: list, legal_basis: str) -> None:
     db.insert(
         "INSERT INTO tax_reduction_results(user_id,eligible,reasons,legal_basis,judged_at) VALUES (?,?,?,?,?)",
-        (user_id, db.flag(eligible), db.dumps(reasons), legal_basis, db._iso(datetime.now())),
+        (user_id, bool(eligible), db.dumps(reasons), legal_basis, db._iso(datetime.now())),
     )
 
 
@@ -246,12 +246,12 @@ def upsert_reminder(user_id: int, event_id: int, notify_at: datetime) -> int:
     if existing:
         db.execute(
             "UPDATE reminders SET notify_at=?, dispatched=? WHERE id=?",
-            (db._iso(notify_at), db.flag(False), existing["id"]),
+            (db._iso(notify_at), False, existing["id"]),
         )
         return existing["id"]
     return db.insert(
         "INSERT INTO reminders(user_id,event_id,notify_at,created_at,dispatched) VALUES (?,?,?,?,?)",
-        (user_id, event_id, db._iso(notify_at), db._iso(datetime.now()), db.flag(False)),
+        (user_id, event_id, db._iso(notify_at), db._iso(datetime.now()), False),
     )
 
 
@@ -260,11 +260,11 @@ def delete_reminder(reminder_id: int) -> None:
 
 
 def due_reminders() -> list[dict]:
-    return db.fetchall("SELECT * FROM reminders WHERE dispatched = ?", (db.flag(False),))
+    return db.fetchall("SELECT * FROM reminders WHERE dispatched = ?", (False,))
 
 
 def mark_reminder_dispatched(reminder_id: int) -> None:
-    db.execute("UPDATE reminders SET dispatched = ? WHERE id = ?", (db.flag(True), reminder_id))
+    db.execute("UPDATE reminders SET dispatched = ? WHERE id = ?", (True, reminder_id))
 
 
 def saved_policy_ids(user_id: int) -> set[int]:
@@ -283,7 +283,7 @@ def unread_count(user_id: int) -> int:
     return int(
         db.scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_flag = ?",
-            (user_id, db.flag(False)),
+            (user_id, False),
         )
         or 0
     )
@@ -293,19 +293,19 @@ def mark_notifications_read(user_id: int, notification_id: int | None = None) ->
     if notification_id is None:
         db.execute(
             "UPDATE notifications SET read_flag = ? WHERE user_id = ?",
-            (db.flag(True), user_id),
+            (True, user_id),
         )
         return
     db.execute(
         "UPDATE notifications SET read_flag = ? WHERE user_id = ? AND id = ?",
-        (db.flag(True), user_id, notification_id),
+        (True, user_id, notification_id),
     )
 
 
 def insert_notification(user_id: int, kind: str, title: str, body: str, channel: str, status: str = "delivered") -> int:
     return db.insert(
         "INSERT INTO notifications(user_id,kind,title,body,channel,status,read_flag,created_at) VALUES (?,?,?,?,?,?,?,?)",
-        (user_id, kind, title, body, channel, status, db.flag(False), db._iso(datetime.now())),
+        (user_id, kind, title, body, channel, status, False, db._iso(datetime.now())),
     )
 
 
@@ -326,7 +326,7 @@ def insert_extraction(receipt_id: int, spent, vendor: str, amount: int, items: l
 def insert_expense(receipt_id: int, user_id: int, category: str, amount: int, spent, deductible: bool, confidence: float, basis: str) -> int:
     return db.insert(
         "INSERT INTO expenses(receipt_id,user_id,category,amount,date,deductible,deductible_confidence,deductible_basis) VALUES (?,?,?,?,?,?,?,?)",
-        (receipt_id, user_id, category, amount, db._iso(spent), db.flag(deductible), confidence, basis),
+        (receipt_id, user_id, category, amount, db._iso(spent), bool(deductible), confidence, basis),
     )
 
 
@@ -349,7 +349,7 @@ def list_expenses(user_id: int) -> list[dict]:
 def update_expense(expense_id: int, category: str, deductible: bool, confidence: float, basis: str) -> None:
     db.execute(
         "UPDATE expenses SET category=?, deductible=?, deductible_confidence=?, deductible_basis=? WHERE id=?",
-        (category, db.flag(deductible), confidence, basis, expense_id),
+        (category, bool(deductible), confidence, basis, expense_id),
     )
 
 
@@ -438,7 +438,7 @@ def upsert_summary(announcement_id: int, summary: dict) -> None:
                 summary.get("documents"),
                 summary.get("notes"),
                 summary.get("source"),
-                db.flag(bool(summary.get("llm_used"))),
+                bool(summary.get("llm_used")),
                 announcement_id,
             ),
         )
@@ -453,7 +453,7 @@ def upsert_summary(announcement_id: int, summary: dict) -> None:
             summary.get("documents"),
             summary.get("notes"),
             summary.get("source"),
-            db.flag(bool(summary.get("llm_used"))),
+            bool(summary.get("llm_used")),
         ),
     )
 
