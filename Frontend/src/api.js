@@ -268,12 +268,10 @@ export const api = {
   }),
   chatHistory: (category, opt) => apiGet('/chat/messages' + qs({ category }), opt),
   clearChat: (category, opt) => apiDelete('/chat/messages' + qs({ category }), opt),
-  // 대화방 하나만 삭제 — 그 방에 속한 메시지 id들만 지운다(다른 방은 그대로).
-  // ids가 비면 qs()가 파라미터를 빼서 "전체 삭제" 요청이 되므로 보내지 않고 실패로 돌린다.
-  deleteMessages: (ids, opt) =>
-    ids && ids.length
-      ? apiDelete('/chat/messages' + qs({ ids: ids.join(',') }), opt)
-      : Promise.reject(new Error('deleteMessages: ids가 비어 있음')),
+  chatRooms: (category, opt) => apiGet('/chat/rooms' + qs({ category }), opt),
+  // title을 null로 보내면 첫 질문을 제목으로 되돌린다.
+  renameChatRoom: (roomId, title, opt) => apiPatch(`/chat/rooms/${roomId}`, { title }, opt),
+  deleteChatRoom: (roomId, opt) => apiDelete(`/chat/rooms/${roomId}`, opt),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
   // 캐시가 없으면 LLM이 즉시 요약을 생성하므로 일반 GET보다 긴 제한 시간을 둔다.
   announcementSummary: (announcementId, opt) => apiGet(

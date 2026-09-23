@@ -111,7 +111,7 @@ Backend ↔ PostgreSQL                                               이미지·
 소득세법 제27조·제160조의2(항상), 제81조의6·법인세법 제75조의5(증빙 부적격일 때), 소득세법 제35조·법인세법 제25조(접대비), 소득세법 제33조의2(차량유지비), 소득세법 시행령 제55조(복리후생비·광고선전비)입니다. 조문 번호와 제목은 원문으로 확인했고 요지는 요약입니다.
 
 ### 저장 데이터
-`DB/app_extras.sql`로 컬럼을 추가하며 `setup.bat`/`setup.sh` 실행 시 자동 적용됩니다: `receipts`(원본 이미지), `receipt_extractions`(증빙 종류, 읽음 여부·원문 근거·OCR 신뢰도), `expenses`(판정, 증빙 적격, 빠진 정보).
+`DB/app_extras.sql`로 컬럼을 추가하며 `docker compose up`(`db-migrate` 서비스) 또는 `setup.bat`/`setup.sh` 실행 시 자동 적용됩니다: `receipts`(원본 이미지), `receipt_extractions`(증빙 종류, 읽음 여부·원문 근거·OCR 신뢰도), `expenses`(판정, 증빙 적격, 빠진 정보).
 
 ---
 
