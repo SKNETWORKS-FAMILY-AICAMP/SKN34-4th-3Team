@@ -12,6 +12,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
 
 COLLECTION_SEQUENCE = [
     "02_collect_tax_law.py",
+    "11_collect_nts_interpretation.py", 
     "03_collect_gov24.py",
     "04_collect_kstartup.py",
     "05_collect_bizinfo.py",
