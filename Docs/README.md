@@ -161,6 +161,24 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
 - 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 4절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
 
+### 개발 모드 (코드·스키마 변경 즉시 반영)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+- 화면은 http://localhost:5173 (컨테이너라 브라우저가 자동으로 열리지 않는다)
+- **Backend**: `Backend/` 의 `.py` 저장 시 uvicorn `--reload` 로 자동 재시작. 재시작 로그는 `docker compose logs -f backend`
+- **Frontend**: `frontend-dev` 컨테이너의 Vite HMR로 즉시 반영. 첫 기동은 컨테이너 안 `npm ci` 로 시간이 걸린다(`docker compose logs -f frontend-dev`). `package.json` 변경 시 `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d -V frontend-dev` 로 node_modules 볼륨을 새로 만든다
+- compose `frontend` 프로필(nginx 정적 빌드)은 배포 전용. 호스트에서 `npm run dev` 를 직접 돌리는 기존 방식도 그대로 동작한다(이 경우 `frontend-dev` 와 5173 포트가 겹치므로 둘 중 하나만)
+- **DB 스키마**: `DB/app_extras.sql` 저장 시 Backend가 재시작되며 `init_db()`가 파일을 다시 적용한다
+  - 기존 볼륨에 반영할 변경은 반드시 `app_extras.sql`에 재실행 안전 구문으로 추가(`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, 제약은 파일 내 `DO $$` 존재 확인 패턴)
+  - `01_schema.sql`은 빈 볼륨 최초 기동 때만 실행된다. 수정 시 같은 변경을 `app_extras.sql`에도 추가해야 기존 DB에 반영된다
+  - 적용 실패는 Backend 로그의 "app_extras.sql 적용 실패" 경고로 확인. 오류 내용을 바로 보려면 `docker compose run --rm db-migrate`
+  - `docker compose down -v`는 DB·ES 데이터 전체 삭제이므로 데이터 초기화가 필요할 때만 사용
+- LLM은 재시작마다 인덱스 warm-up이 돌아 개발 모드 대상에서 제외. LLM 코드 수정 후에는 `docker compose restart llm`
+- 배포(12절)는 기존처럼 `docker-compose.yml`만 사용
+
 ## 11. Git 커밋 메시지 규약
 형식: `Type: 설명` — Type은 영문 대문자로 시작, 설명은 한글로 간결하게
 
