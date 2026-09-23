@@ -20,6 +20,11 @@ from src.data.postgres_repository import (
     get_user_profile as get_database_user_profile,
 )
 from src.features.document_processing import PdfDocumentError
+from src.features.business_plan_documents import (
+    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, convert_hwpx_to_pdf, decode_template,
+    inspect_template, render_default_hwpx, render_default_pdf,
+    render_hwpx_form, render_pdf_form,
+)
 from src.features.elasticsearch_indexing import reindex_postgres_to_elasticsearch
 from src.features.indexing import (
     load_or_build_document_index,
@@ -33,6 +38,7 @@ from src.rag.backend_tasks import (
     extract_receipt,
     extract_receipt_from_ocr,
     generate_business_plan,
+    refine_business_plan_input,
     generate_deductibility,
     generate_legal_basis,
     summarize_announcement,
@@ -54,6 +60,12 @@ from src.serving.schemas import (
     BusinessPlanEvaluateResponse,
     BusinessPlanRequest,
     BusinessPlanResponse,
+    BusinessPlanRefineRequest,
+    BusinessPlanRefineResponse,
+    BusinessPlanTemplateRequest,
+    BusinessPlanTemplateResponse,
+    BusinessPlanRenderRequest,
+    BusinessPlanRenderResponse,
     BusinessPlanSectionResponse,
     BusinessPlanSectionScoreResponse,
     BackendUserContext,
@@ -792,6 +804,8 @@ async def adapter_business_plan(
             target_program=request_body.targetProgram,
             extra_notes=request_body.extraNotes,
             template_text=request_body.templateText,
+            template_fields=request_body.templateFields,
+            announcement_criteria=request_body.announcementCriteria,
         )
         return BusinessPlanResponse(
             sections=[
@@ -874,6 +888,8 @@ async def adapter_business_plan_evaluate(
         generated = await evaluate_business_plan(
             rag_runtime.llm_factory(),
             sections=[section.model_dump() for section in request_body.sections],
+            announcement_criteria=request_body.announcementCriteria,
+            template_criteria=request_body.templateCriteria,
         )
         return BusinessPlanEvaluateResponse(
             overallScore=generated.overall_score,
@@ -900,6 +916,79 @@ async def adapter_business_plan_evaluate(
             exc,
             fallback_message="Business plan evaluation failed.",
         ) from exc
+
+
+async def adapter_business_plan_refine(
+    request_body: BusinessPlanRefineRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRefineResponse:
+    _ = settings_config
+    try:
+        refined = await refine_business_plan_input(
+            rag_runtime.llm_factory(), request_body.input.model_dump()
+        )
+        return BusinessPlanRefineResponse(refined=refined.model_dump(), llmUsed=True)
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise upstream_http_exception(exc, fallback_message="Business plan refinement failed.") from exc
+
+
+async def adapter_business_plan_template_inspect(
+    request_body: BusinessPlanTemplateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanTemplateResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        kind, data = decode_template(request_body.fileName, request_body.contentBase64)
+        fields = await asyncio.to_thread(inspect_template, kind, data)
+        return BusinessPlanTemplateResponse(
+            kind=kind, fields=fields,
+            outputFormats=["pdf"] if kind == "pdf" else ["hwpx", "pdf"],
+        )
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
+
+
+async def adapter_business_plan_render(
+    request_body: BusinessPlanRenderRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRenderResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        sections = [section.model_dump() for section in request_body.sections]
+        if request_body.template:
+            kind, data = decode_template(
+                request_body.template.fileName, request_body.template.contentBase64
+            )
+            fields = await asyncio.to_thread(inspect_template, kind, data)
+            values = {section["label"]: section["content"] for section in sections}
+            if set(fields) != set(values) or len(fields) != len(sections):
+                raise BusinessPlanDocumentError("초안 항목이 양식의 입력 항목과 일치하지 않습니다.")
+            if kind == "pdf":
+                if request_body.format != "pdf":
+                    raise BusinessPlanDocumentError("PDF 양식은 PDF로만 출력할 수 있습니다.")
+                result = await asyncio.to_thread(render_pdf_form, data, values)
+            else:
+                hwpx = await asyncio.to_thread(render_hwpx_form, data, values)
+                result = hwpx if request_body.format == "hwpx" else await asyncio.to_thread(convert_hwpx_to_pdf, hwpx)
+        elif request_body.format == "hwpx":
+            result = await asyncio.to_thread(render_default_hwpx, request_body.title, sections)
+        else:
+            result = await asyncio.to_thread(render_default_pdf, request_body.title, sections)
+        name = "business-plan." + request_body.format
+        mime = "application/pdf" if request_body.format == "pdf" else "application/hwp+zip"
+        return BusinessPlanRenderResponse(
+            fileName=name, mimeType=mime,
+            contentBase64=base64.b64encode(result).decode("ascii"),
+        )
+    except BusinessPlanRendererUnavailable as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
 
 
 async def adapter_summarize_announcement(

@@ -65,6 +65,37 @@ class BusinessPlanGeneration(_GeneratedOutput):
     summary: str
 
 
+class BusinessPlanRefinement(_GeneratedOutput):
+    businessName: str
+    tagline: str
+    targetCustomer: str
+    problem: str
+    solution: str
+    differentiator: str
+    team: str
+    extraNotes: str
+
+
+BUSINESS_PLAN_REFINE_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", "사업계획서 입력을 읽기 쉬운 한국어로 한 번 정리하세요. 입력된 사실만 유지하고 "
+     "수치·실적·팀 이력 등 새 사실을 만들어 넣지 마세요. 비어 있는 필드는 빈 문자열로 두고, "
+     "각 필드의 의미를 바꾸거나 서로 다른 사실을 합치지 마세요."),
+    ("human", "{fields_json}"),
+])
+
+
+async def refine_business_plan_input(llm: BaseChatModel, fields: dict[str, str]) -> BusinessPlanRefinement:
+    chain = BUSINESS_PLAN_REFINE_PROMPT | llm.with_structured_output(BusinessPlanRefinement)
+    result = BusinessPlanRefinement.model_validate(await chain.ainvoke(
+        {"fields_json": json.dumps(fields, ensure_ascii=False)},
+        config={"run_name": "backend_business_plan_refine"},
+    ))
+    return result.model_copy(update={
+        key: getattr(result, key).strip() if fields.get(key, "").strip() else ""
+        for key in fields
+    })
+
+
 class BusinessPlanSectionScore(_GeneratedOutput):
     """항목 하나에 대한 예비진단 결과."""
 
@@ -283,7 +314,7 @@ BUSINESS_PLAN_PROMPT = ChatPromptTemplate.from_messages(
             "예비창업패키지 등 정부 지원사업에 내는 사업계획서 초안을 작성하는 보조 도구다. "
             "사용자가 입력한 정보만 근거로 쓰고, 매출액·투자 유치액·이용자 수 같은 구체적인 "
             "수치나 실적은 사용자가 주지 않았다면 만들어 내지 마세요. 대신 "
-            "'[직접 채워 주세요: 예상 매출액]'처럼 빈 자리로 표시하세요. 각 항목의 content는 "
+            "'정보 부족: 예상 매출액'처럼 빈 자리로 표시하세요. 각 항목의 content는 "
             "한국어로 2~4문장, 존댓말로 쓰세요.\n\n"
             "sections 항목 구성:\n{sections_instruction}\n\n"
             "summary는 sections 전체 내용을 3문장으로 압축한 요약입니다.",
@@ -293,7 +324,7 @@ BUSINESS_PLAN_PROMPT = ChatPromptTemplate.from_messages(
             "사업명: {business_name}\n한 줄 소개: {tagline}\n목표 고객: {target_customer}\n"
             "핵심 문제: {problem_input}\n해결 방안: {solution_input}\n차별점: {differentiator}\n"
             "팀 구성: {team_input}\n신청하려는 지원사업(선택): {target_program}\n"
-            "추가로 참고할 내용(선택): {extra_notes}",
+            "추가로 참고할 내용(선택): {extra_notes}\n공고 평가 기준(있는 경우): {announcement_criteria}",
         ),
     ]
 )
@@ -312,6 +343,8 @@ async def generate_business_plan(
     target_program: str,
     extra_notes: str,
     template_text: str = "",
+    template_fields: list[str] | None = None,
+    announcement_criteria: str = "",
 ) -> BusinessPlanGeneration:
     """사용자가 입력한 사업 정보로 사업계획서 초안을 생성한다.
 
@@ -319,6 +352,11 @@ async def generate_business_plan(
     PSST 4항목(문제인식·실현가능성·성장전략·팀구성) 구조로 만든다.
     """
     sections_instruction = (
+        "다음 양식의 입력 항목을 같은 순서·이름으로 각각 한 번씩 작성하세요. "
+        "key는 section_1, section_2처럼 순서대로 지정하세요. "
+        "필요한 정보가 없으면 content를 '정보 부족'으로 적으세요:\n"
+        + "\n".join(f"{index}. {name}" for index, name in enumerate(template_fields, 1))
+        if template_fields else
         BUSINESS_PLAN_TEMPLATE_SECTIONS_INSTRUCTION.format(template_text=template_text.strip())
         if template_text and template_text.strip()
         else BUSINESS_PLAN_DEFAULT_SECTIONS_INSTRUCTION
@@ -337,10 +375,19 @@ async def generate_business_plan(
                 "team_input": team_input or "(입력 없음)",
                 "target_program": target_program or "(입력 없음)",
                 "extra_notes": extra_notes or "(없음)",
+                "announcement_criteria": announcement_criteria or "(없음)",
             },
             config={"run_name": "backend_business_plan"},
         )
     )
+    if template_fields:
+        by_label = {section.label.strip(): section for section in result.sections}
+        result = result.model_copy(update={"sections": [
+            BusinessPlanSectionGeneration(
+                key=f"section_{index}", label=name,
+                content=(by_label[name].content if name in by_label else "정보 부족"),
+            ) for index, name in enumerate(template_fields, 1)
+        ]})
     return result.model_copy(
         update={
             "sections": [
@@ -364,12 +411,14 @@ BUSINESS_PLAN_EVALUATE_PROMPT = ChatPromptTemplate.from_messages(
             "system",
             "정부 R&D·창업지원사업 사업계획서 심사위원처럼, 아래 사업계획서 초안을 항목별로 "
             "평가하세요. 이것은 예비진단이며 실제 합격을 보장하지 않는다는 전제로, 초안에 "
-            "실제로 쓰인 내용만 근거로 채점하세요. 빈 자리로 남겨진 '[직접 채워 주세요: ...]' "
+            "실제로 쓰인 내용만 근거로 채점하세요. '정보 부족'이나 '[직접 채워 주세요: ...]' "
             "항목은 아직 채워지지 않은 것으로 보고 감점 사유로 다루세요. 점수는 내용의 "
             "구체성·논리적 연결·실현 가능성을 기준으로 0~100점, 5점 단위 권장. sections에는 "
             "아래에 주어진 항목을 모두, 주어진 순서 그대로, 같은 key·label로 반환하세요. 각 "
             "항목의 strengths(잘된 점)와 improvements(보완할 점)는 1~2문장, 존댓말로 구체적으로 "
-            "쓰세요. overall_comment는 전체를 한두 문장으로 평가하세요.",
+            "쓰세요. overall_comment는 전체를 한두 문장으로 평가하세요. "
+            "공고·양식에 평가 기준이 있으면 그것을 우선 적용하고, 없으면 구체성·논리성·실현 가능성을 적용하세요.\n"
+            "공고 기준: {announcement_criteria}\n양식 기준: {template_criteria}",
         ),
         ("human", "{sections_text}"),
     ]
@@ -380,6 +429,8 @@ async def evaluate_business_plan(
     llm: BaseChatModel,
     *,
     sections: list[dict],
+    announcement_criteria: str = "",
+    template_criteria: str = "",
 ) -> BusinessPlanEvaluation:
     """작성된 초안을 항목별로 채점하는 AI 예비진단. 합격 여부가 아니라 참고용 자체 점검이다."""
     sections_text = (
@@ -393,7 +444,9 @@ async def evaluate_business_plan(
     chain = BUSINESS_PLAN_EVALUATE_PROMPT | llm.with_structured_output(BusinessPlanEvaluation)
     result = BusinessPlanEvaluation.model_validate(
         await chain.ainvoke(
-            {"sections_text": sections_text},
+            {"sections_text": sections_text,
+             "announcement_criteria": announcement_criteria or "(없음)",
+             "template_criteria": template_criteria or "(없음)"},
             config={"run_name": "backend_business_plan_evaluate"},
         )
     )

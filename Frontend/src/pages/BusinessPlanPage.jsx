@@ -28,17 +28,20 @@ const DEFAULT_SECTIONS = Object.keys(DEFAULT_SECTION_META).map((key) => ({
 }));
 const GENERIC_SECTION_DESC = 'AI가 지원사업 공고 양식에 맞춰 쓴 초안이에요. 필요하면 직접 고쳐 써도 되고, 오른쪽 아이디어 어시스턴트에게 다듬어 달라고 물어봐도 좋아요.';
 
-// 왼쪽 사이드바 그룹 구조 — Gixpert의 "준비 / AI 설계 / 마무리" 3단 구조를 참고했다.
-// "AI 설계" 항목은 고정이 아니라 plan.sections(초안 생성 결과)를 따라 개수·제목이 바뀐다.
+// 생성 후 항목 목록은 실제 초안의 항목 순서와 제목을 따른다.
 function buildGroups(aiSteps) {
   return [
     { name: '준비', steps: [
       { key: 'basic', label: '기초 정보' },
       { key: 'idea', label: '아이디어 정리' },
+      { key: 'refine', label: '입력 내용 검토' },
     ] },
-    { name: 'AI 설계', steps: aiSteps },
+    { name: 'AI 초안 작성', steps: [
+      { key: 'setup', label: '공고 · 양식 선택' },
+      ...aiSteps,
+    ] },
     { name: '마무리', steps: [
-      { key: 'evaluate', label: 'AI 예비진단' },
+      { key: 'preview', label: '문서 미리보기 · 평가' },
       { key: 'done', label: '완료 · 다운로드' },
     ] },
   ];
@@ -231,6 +234,11 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
   const [evaluating, setEvaluating] = useState(false);
   const [err, setErr] = useState('');
   const [savedNote, setSavedNote] = useState('');
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementError, setAnnouncementError] = useState('');
+  const [selectedAnnouncementId, setSelectedAnnouncementId] = useState('');
+  const [templateFile, setTemplateFile] = useState(null);
+  const [templateError, setTemplateError] = useState('');
 
   // 로그인한 사용자의 임시저장 초안을 불러온다.
   useEffect(() => {
@@ -240,16 +248,37 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
       setForm({ ...EMPTY_FORM, ...(draft.form || {}) });
       if (draft.plan && Array.isArray(draft.plan.sections)) setPlan(draft.plan);
       if (draft.evalResult) setEvalResult(draft.evalResult);
+      if (draft.selectedAnnouncementId) setSelectedAnnouncementId(String(draft.selectedAnnouncementId));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const setField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  useEffect(() => {
+    if (!userId) return;
+    let current = true;
+    api.announcements({ limit: 100 }).then((result) => {
+      if (current) setAnnouncements(result.announcements || []);
+    }).catch(() => {
+      if (current) setAnnouncementError('공고 목록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.');
+    });
+    return () => { current = false; };
+  }, [userId]);
+
+  const setField = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setPlan(null);
+    setEvalResult(null);
+  };
   const setSectionContent = (key, content) =>
     setPlan((p) => (p ? { ...p, sections: p.sections.map((s) => (s.key === key ? { ...s, content } : s)) } : p));
 
+  const onSectionChange = (key, content) => {
+    setSectionContent(key, content);
+    setEvalResult(null);
+  };
+
   const ideaReady = form.targetCustomer.trim() && form.problem.trim() && form.solution.trim();
-  const usingTemplate = !!form.templateText.trim();
+  const selectedAnnouncement = announcements.find((item) => String(item.id) === selectedAnnouncementId);
 
   // 초안이 아직 없으면 기본 PSST 4항목을 미리보기로 보여주고, 생성되고 나면 실제 결과(공고
   // 양식을 넣었다면 그 항목 구성)로 자연스럽게 바뀐다.
@@ -267,7 +296,9 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
       const section = plan && plan.sections && plan.sections.find((s) => s.key === key);
       return !!(section && section.content.trim());
     }
-    if (key === 'evaluate') return !!evalResult;
+    if (key === 'refine') return false; // 신규 Backend 정리 계약 연결 전
+    if (key === 'setup') return !!selectedAnnouncement && !templateFile;
+    if (key === 'preview') return !!evalResult;
     if (key === 'done') return !!evalResult;
     return false;
   };
@@ -282,13 +313,28 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
       setErr('목표 고객, 핵심 문제, 해결 방안을 먼저 입력해 주세요.');
       return;
     }
+    if (!selectedAnnouncement || templateFile) {
+      setActive('setup');
+      setErr(selectedAnnouncement ? '파일 양식은 Backend 연동 후 사용할 수 있습니다.' : '공고를 선택해 주세요.');
+      return;
+    }
     setErr('');
     setGenerating(true);
     try {
-      const res = await api.generateBusinessPlan(form);
+      const res = await api.generateBusinessPlan({
+        ...form,
+        targetProgram: selectedAnnouncement.title,
+        templateText: '',
+      });
       setPlan(res);
       setEvalResult(null);
-      setActive((res.sections && res.sections[0] && res.sections[0].key) || 'basic');
+      setActive('preview');
+      try {
+        const score = await api.evaluateBusinessPlan({ sections: res.sections });
+        setEvalResult(score);
+      } catch (_) {
+        setErr('초안은 작성됐지만 예비진단을 받지 못했습니다. 미리보기에서 다시 시도해 주세요.');
+      }
     } catch (e2) {
       if (e2 && e2.status === 401) onRequireLogin && onRequireLogin();
       else setErr('초안을 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
@@ -315,7 +361,6 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
   const goStep = (key) => {
     setErr('');
     setActive(key);
-    if (aiStepKeys.includes(key) && !plan && !generating) generatePlan();
   };
 
   const saveNow = () => {
@@ -323,7 +368,7 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
       onRequireLogin && onRequireLogin();
       return;
     }
-    saveDraft(userId, { form, plan, evalResult });
+    saveDraft(userId, { form, plan, evalResult, selectedAnnouncementId });
     setSavedNote('임시저장했어요');
     setTimeout(() => setSavedNote(''), 2000);
   };
@@ -410,25 +455,6 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                   onChange={(e) => setField('tagline', e.target.value)} />
               </label>
               <label className="bp-field">
-                <span className="bp-field__label">신청하려는 지원사업 (선택)</span>
-                <input type="text" value={form.targetProgram} placeholder="예: 예비창업패키지"
-                  onChange={(e) => setField('targetProgram', e.target.value)} />
-              </label>
-              <label className="bp-field">
-                <span className="bp-field__label">
-                  지원사업 공고 양식 (선택)
-                  <em className="bp-field__sub">넣으면 그 양식에 맞춰 작성해요</em>
-                </span>
-                <textarea rows={5} value={form.templateText}
-                  placeholder={'공고에 나온 사업계획서 항목 구성을 그대로 붙여넣으세요.\n예)\n1. 창업아이템 개요\n2. 개발 동기 및 목적\n3. 시장분석 및 경쟁력 확보방안\n4. 사업화 추진전략'}
-                  onChange={(e) => setField('templateText', e.target.value)} />
-              </label>
-              <p className="bp-hint">
-                {usingTemplate
-                  ? '공고 양식을 넣었어요 — AI 설계 단계에서 이 양식의 항목 구성 그대로 초안을 만들어요.'
-                  : '비워두면 기본 PSST(문제인식·실현가능성·성장전략·팀구성) 구조로 만들어요.'}
-              </p>
-              <label className="bp-field">
                 <span className="bp-field__label">추가로 참고할 내용 (선택)</span>
                 <textarea rows={2} value={form.extraNotes} placeholder="초안에 반영했으면 하는 내용"
                   onChange={(e) => setField('extraNotes', e.target.value)} />
@@ -447,10 +473,74 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                     onChange={(e) => setField(f.key, e.target.value)} />
                 </label>
               ))}
-              <button type="button" className="exp-upload" onClick={generatePlan} disabled={!ideaReady || generating}>
-                ✨ AI로 초안 만들기 →
+              <button type="button" className="exp-upload" onClick={() => goStep('refine')} disabled={!ideaReady}>
+                입력 내용 검토하기 →
               </button>
               {!ideaReady && <p className="bp-hint">목표 고객, 핵심 문제, 해결 방안은 꼭 입력해 주세요.</p>}
+            </section>
+          )}
+
+          {active === 'refine' && (
+            <section>
+              <h3 className="bp2__stepttl">입력 내용 검토</h3>
+              <p className="bp2__stepdesc">입력한 사실을 확인하고 수정하세요. AI가 한 번 다듬는 기능은 Backend API 연결 후 제공됩니다.</p>
+              <p className="bp-hint">현재 표시된 내용은 AI 정리 결과가 아닌 사용자가 입력한 원문입니다.</p>
+              {[
+                { key: 'businessName', label: '사업명' },
+                { key: 'tagline', label: '한 줄 소개' },
+                ...IDEA_FIELDS,
+                { key: 'extraNotes', label: '추가 메모' },
+              ].map((field) => (
+                <label key={field.key} className="bp-field">
+                  <span className="bp-field__label">{field.label}</span>
+                  <textarea rows={2} value={form[field.key]} onChange={(e) => setField(field.key, e.target.value)} />
+                </label>
+              ))}
+              <button type="button" className="exp-upload" disabled title="Backend 정리 API 연동 후 사용할 수 있습니다">AI로 입력 정리하기 · 연동 대기</button>
+            </section>
+          )}
+
+          {active === 'setup' && (
+            <section>
+              <h3 className="bp2__stepttl">공고 · 양식 선택</h3>
+              <p className="bp2__stepdesc">계획서를 제출할 공고를 선택하세요. 양식 파일을 제출하지 않으면 기본 PSST 양식을 사용합니다.</p>
+              <label className="bp-field">
+                <span className="bp-field__label">제출할 공고 (필수)</span>
+                <select value={selectedAnnouncementId} onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedAnnouncementId(id);
+                  setField('targetProgram', announcements.find((item) => String(item.id) === id)?.title || '');
+                }}>
+                  <option value="">공고를 선택해 주세요</option>
+                  {announcements.map((item) => <option key={item.id} value={item.id}>{item.title}{item.dday != null ? ` · D-${item.dday}` : ''}</option>)}
+                </select>
+              </label>
+              {announcementError && <p className="cal__err">{announcementError}</p>}
+              <label className="bp-field">
+                <span className="bp-field__label">사업계획서 양식 (선택 · PDF/HWPX)</span>
+                <input type="file" accept=".pdf,.hwpx" onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setPlan(null);
+                  setEvalResult(null);
+                  if (file && (!/\.(pdf|hwpx)$/i.test(file.name) || file.size > 4 * 1024 * 1024)) {
+                    setTemplateError('PDF 또는 HWPX 파일을 4 MiB 이하로 선택해 주세요.');
+                    setTemplateFile(null);
+                    e.target.value = '';
+                  } else {
+                    setTemplateError('');
+                    setTemplateFile(file);
+                  }
+                }} />
+              </label>
+              {templateError && <p className="cal__err">{templateError}</p>}
+              <p className="bp-hint">{templateFile
+                ? `${templateFile.name} 선택됨 · 입력 위치 검사는 Backend 연동 후 진행됩니다.`
+                : '양식을 선택하지 않으면 기본 PSST 항목을 사용합니다.'}</p>
+              <p className="bp-hint">AI 정리·파일 양식·HWPX/PDF 출력은 Backend 연결 전입니다. 현재는 기존 텍스트 초안만 작성할 수 있습니다.</p>
+              <button type="button" className="exp-upload" onClick={generatePlan}
+                disabled={!selectedAnnouncement || !!templateFile || !ideaReady || generating}>
+                {generating ? '초안 작성 중…' : '현재 지원되는 텍스트 초안 만들기'}
+              </button>
             </section>
           )}
 
@@ -465,7 +555,7 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
               {generating ? (
                 <AnalyzingPanel
                   title="AI가 초안을 쓰고 있어요"
-                  sub={usingTemplate ? '지원사업 공고 양식의 항목 구성에 맞춰 정리하고 있어요…' : '문제인식 · 실현가능성 · 성장전략 · 팀구성 순서로 정리하고 있어요…'}
+                  sub="문제인식 · 실현가능성 · 성장전략 · 팀구성 순서로 정리하고 있어요…"
                 />
               ) : activeSection ? (
                 <React.Fragment>
@@ -473,30 +563,43 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                     className="bp2__psst-textarea"
                     rows={10}
                     value={activeSection.content}
-                    onChange={(e) => setSectionContent(active, e.target.value)}
+                    onChange={(e) => onSectionChange(active, e.target.value)}
                   />
                   <p className="bp-hint">필요하면 직접 고쳐도 돼요. 오른쪽 아이디어 어시스턴트에게 다듬어 달라고 물어봐도 좋아요.</p>
                 </React.Fragment>
               ) : (
                 <div className="bp2__empty">
                   <p>아직 AI 초안이 없어요. 먼저 아이디어를 정리하고 초안을 만들어 주세요.</p>
-                  <button type="button" className="exp-upload" onClick={() => goStep('idea')}>← 아이디어 정리로 이동</button>
+                  <button type="button" className="exp-upload" onClick={() => goStep('setup')}>← 공고 · 양식 선택으로 이동</button>
                 </div>
               )}
             </section>
           )}
 
-          {active === 'evaluate' && (
+          {active === 'preview' && (
             <section className="bp-eval">
-              <h3 className="bp2__stepttl">AI 예비진단</h3>
-              <p className="bp2__stepdesc">완성된 초안을 AI가 항목별로 미리 채점해요. 실제 심사 결과를 보장하지 않는 참고용이에요.</p>
+              <h3 className="bp2__stepttl">문서 미리보기 · 평가</h3>
+              <p className="bp2__stepdesc">초안 내용과 AI 예비진단을 함께 확인하세요. 파일 양식의 원본 배치 미리보기는 Backend 연동 후 제공됩니다.</p>
 
               {!plan ? (
                 <div className="bp2__empty">
                   <p>먼저 AI 초안을 만들어야 예비진단을 받을 수 있어요.</p>
-                  <button type="button" className="exp-upload" onClick={() => goStep('idea')}>← 아이디어 정리로 이동</button>
+                  <button type="button" className="exp-upload" onClick={() => goStep('setup')}>← 공고 · 양식 선택으로 이동</button>
                 </div>
-              ) : evaluating ? (
+              ) : (
+                <React.Fragment>
+                  <article className="bp-preview" aria-label="사업계획서 초안 미리보기">
+                    <h4>{form.businessName || '사업계획서'} 초안</h4>
+                    <p>{form.tagline}</p>
+                    <p>{plan.summary}</p>
+                    {plan.sections.map((section) => (
+                      <section key={section.key}>
+                        <h5>{section.label}</h5>
+                        <p>{section.content || '정보 부족'}</p>
+                      </section>
+                    ))}
+                  </article>
+                  {evaluating ? (
                 <AnalyzingPanel title="AI가 예비진단을 하고 있어요" sub="항목별로 강점과 보완할 점을 살펴보고 있어요…" />
               ) : !evalResult ? (
                 <button type="button" className="exp-upload" onClick={runEvaluate}>🩺 예비진단 시작하기</button>
@@ -529,6 +632,8 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                   <button type="button" className="exp-excel" onClick={runEvaluate}>🔄 다시 진단받기</button>
                 </React.Fragment>
               )}
+                </React.Fragment>
+              )}
             </section>
           )}
 
@@ -550,15 +655,19 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                   <p className="bp-summary">{plan.summary}</p>
                   <div className="bp-actions">
                     {!evalResult && (
-                      <button type="button" className="bp-back" onClick={() => goStep('evaluate')}>🩺 예비진단 받으러 가기</button>
+                      <button type="button" className="bp-back" onClick={() => goStep('preview')}>🩺 미리보기 · 예비진단으로 이동</button>
                     )}
                     <button type="button" className="exp-upload" onClick={() => downloadMarkdown(form, plan)}>
-                      📄 사업계획서 다운로드 (.md)
+                      📄 현재 제공 중인 텍스트 초안 다운로드 (.md)
                     </button>
+                    {(!templateFile || /\.hwpx$/i.test(templateFile.name)) && (
+                      <button type="button" className="exp-upload" disabled title="Backend 파일 출력 API 연동 후 사용할 수 있습니다">HWPX 다운로드 · 연동 대기</button>
+                    )}
+                    <button type="button" className="exp-upload" disabled title="Backend 파일 출력 API 연동 후 사용할 수 있습니다">PDF 다운로드 · 연동 대기</button>
                   </div>
                   <p className="bp-disclaimer">
-                    AI가 입력한 내용만으로 작성한 초안이에요. [직접 채워 주세요] 표시는 사실 확인이 필요한
-                    자리이니 채워 넣고, 제출 전에 다시 검토해 주세요. 한글(HWP)·PDF 다운로드는 아직 준비 중이에요.
+                    AI가 입력한 내용만으로 작성한 초안이에요. '정보 부족' 표시는 사실 확인이 필요한
+                    자리이니 채워 넣고, 제출 전에 다시 검토해 주세요. HWPX·PDF 다운로드는 Backend 연동 후 제공됩니다.
                   </p>
                 </React.Fragment>
               )}

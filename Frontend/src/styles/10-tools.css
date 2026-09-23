@@ -897,6 +897,8 @@
     color: var(--ink-soft);
   }
   .bp-field input[type='text'],
+  .bp-field input[type='file'],
+  .bp-field select,
   .bp-field textarea {
     width: 100%;
     padding: 10px 12px;
@@ -909,6 +911,8 @@
     resize: vertical;
   }
   .bp-field input[type='text']:focus,
+  .bp-field input[type='file']:focus,
+  .bp-field select:focus,
   .bp-field textarea:focus {
     outline: none;
     border-color: var(--blue);
@@ -1466,3 +1470,15 @@
   .bp-eval__neg {
     margin-bottom: 0;
   }
+  .bp-preview {
+    margin: 18px 0;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-solid);
+    color: var(--ink);
+    line-height: 1.7;
+  }
+  .bp-preview h4 { margin: 0 0 12px; font-size: 18px; }
+  .bp-preview h5 { margin: 18px 0 6px; font-size: 14px; }
+  .bp-preview p { margin: 0 0 8px; white-space: pre-wrap; }

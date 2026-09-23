@@ -293,6 +293,10 @@ export const api = {
   generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
   evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
   bizplanCoach: (body, opt) => apiPost('/bizplan/coach', body, { timeout: 45000, ...opt }),
+  // Backend 연결 후 사용할 신규 계약. 화면에서는 연결 전 상태를 명시한다.
+  refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
+  inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
+  renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };
