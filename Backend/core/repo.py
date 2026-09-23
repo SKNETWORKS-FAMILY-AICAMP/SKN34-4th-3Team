@@ -132,10 +132,12 @@ def latest_tax_reduction(user_id: int) -> dict | None:
     )
 
 
-def insert_chat(user_id: int, category: str, question: str, answer: str, sources: list[dict]) -> int:
+def insert_chat(
+    user_id: int, category: str, question: str, answer: str, sources: list[dict], room_id: int
+) -> int:
     mid = db.insert(
-        "INSERT INTO chat_messages(user_id,category,question,answer,created_at) VALUES (?,?,?,?,?)",
-        (user_id, category, question, answer, db._iso(datetime.now())),
+        "INSERT INTO chat_messages(user_id,category,room_id,question,answer,created_at) VALUES (?,?,?,?,?,?)",
+        (user_id, category, room_id, question, answer, db._iso(datetime.now())),
     )
     for item in sources:
         db.insert(
@@ -154,48 +156,89 @@ def chat_sources(message_id: int) -> list[dict]:
 
 
 def list_chats(user_id: int, category: str | None = None) -> list[dict]:
-    if category:
-        return db.fetchall(
-            "SELECT * FROM chat_messages WHERE user_id = ? AND category = ? ORDER BY created_at",
-            (user_id, category),
-        )
-    return db.fetchall(
-        "SELECT * FROM chat_messages WHERE user_id = ? ORDER BY created_at",
-        (user_id,),
+    """사용자에게 보여줄 기록. 삭제한 방의 메시지는 뺀다."""
+    sql = (
+        "SELECT m.* FROM chat_messages m JOIN chat_rooms r ON r.id = m.room_id "
+        "WHERE m.user_id = ? AND r.deleted_at IS NULL"
     )
+    params: tuple = (user_id,)
+    if category:
+        sql += " AND m.category = ?"
+        params += (category,)
+    return db.fetchall(sql + " ORDER BY m.created_at, m.id", params)
 
 
-def recent_chats(user_id: int, category: str, limit: int = 10) -> list[dict]:
-    """LLM에 보낼 대화 문맥용 최근 기록. 같은 사용자·카테고리 행만 시간순으로 돌려준다."""
+def count_chats(user_id: int) -> int:
+    """관리자 통계용. 삭제한 방의 메시지까지 센다."""
+    return int(db.scalar("SELECT COUNT(*) FROM chat_messages WHERE user_id = ?", (user_id,)) or 0)
+
+
+def recent_chats(user_id: int, category: str, room_id: int, limit: int = 10) -> list[dict]:
+    """LLM에 보낼 대화 문맥용 최근 기록. 같은 사용자·카테고리·대화방 행만 시간순으로 돌려준다."""
     rows = db.fetchall(
-        "SELECT * FROM chat_messages WHERE user_id = ? AND category = ? "
+        "SELECT * FROM chat_messages WHERE user_id = ? AND category = ? AND room_id = ? "
         "ORDER BY created_at DESC, id DESC LIMIT ?",
-        (user_id, category, limit),
+        (user_id, category, room_id, limit),
     )
     return list(reversed(rows))
 
 
-def delete_chats(user_id: int, category: str | None = None) -> int:
-    rows = list_chats(user_id, category)
-    for row in rows:
-        db.execute("DELETE FROM answer_sources WHERE message_id = ?", (row["id"],))
-        db.execute("DELETE FROM chat_messages WHERE id = ?", (row["id"],))
-    return len(rows)
+def list_rooms(user_id: int, category: str) -> list[dict]:
+    """활성 대화방 목록. 제목이 없을 때 보여줄 첫 질문을 함께 돌려준다."""
+    return db.fetchall(
+        "SELECT r.*, (SELECT m.question FROM chat_messages m WHERE m.room_id = r.id "
+        "ORDER BY m.id LIMIT 1) AS first_question "
+        "FROM chat_rooms r WHERE r.user_id = ? AND r.category = ? AND r.deleted_at IS NULL "
+        "ORDER BY r.updated_at DESC, r.id DESC",
+        (user_id, category),
+    )
 
 
-def delete_chats_by_ids(user_id: int, message_ids: list[int]) -> int:
-    """지정한 메시지들만 지운다(대화방 하나 삭제용). 본인 소유가 아닌 id는 조용히 건너뛴다."""
-    deleted = 0
-    for mid in message_ids:
-        row = db.fetchone(
-            "SELECT id FROM chat_messages WHERE id = ? AND user_id = ?", (mid, user_id)
-        )
-        if not row:
-            continue
-        db.execute("DELETE FROM answer_sources WHERE message_id = ?", (mid,))
-        db.execute("DELETE FROM chat_messages WHERE id = ?", (mid,))
-        deleted += 1
-    return deleted
+def create_room(user_id: int, category: str) -> int:
+    now = db._iso(datetime.now())
+    return db.insert(
+        "INSERT INTO chat_rooms(user_id,category,created_at,updated_at) VALUES (?,?,?,?)",
+        (user_id, category, now, now),
+    )
+
+
+def get_room(room_id: int, user_id: int) -> dict | None:
+    """본인 소유의 활성 방만 돌려준다."""
+    return db.fetchone(
+        "SELECT * FROM chat_rooms WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        (room_id, user_id),
+    )
+
+
+def rename_room(room_id: int, user_id: int, title: str | None) -> None:
+    db.execute(
+        "UPDATE chat_rooms SET title = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        (title, room_id, user_id),
+    )
+
+
+def touch_room(room_id: int) -> None:
+    db.execute("UPDATE chat_rooms SET updated_at = now() WHERE id = ?", (room_id,))
+
+
+def delete_room(room_id: int, user_id: int) -> None:
+    db.execute(
+        "UPDATE chat_rooms SET deleted_at = now() WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+        (room_id, user_id),
+    )
+
+
+def delete_rooms(user_id: int, category: str | None = None) -> int:
+    """사용자의 대화방을 삭제 표시한다. 메시지 행은 통계용으로 남는다."""
+    sql = "SELECT id FROM chat_rooms WHERE user_id = ? AND deleted_at IS NULL"
+    params: tuple = (user_id,)
+    if category:
+        sql += " AND category = ?"
+        params += (category,)
+    rooms = db.fetchall(sql, params)
+    for room in rooms:
+        delete_room(room["id"], user_id)
+    return len(rooms)
 
 
 def list_events() -> list[dict]:

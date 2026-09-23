@@ -284,9 +284,9 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 - 로컬에서 띄운 Backend는 Postgres 연결 시 `Backend/core/db.py`의 `_apply_extras`로 `DB/app_extras.sql`을 best-effort 적용한다. 파일이 없으면 건너뛰고 실패한 문장은 무시하므로 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
 - `setup.sh`·`setup.bat`은 기동 때마다 `psql`로 `app_extras.sql`을 다시 적용한다
 
-## 제안: 유저 개인화 저장 이관 (미적용)
+## 유저 개인화 저장 이관 (대화방 적용, 로드맵·사업계획서 미적용)
 
-지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 위 다이어그램(현행 스키마)에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 스키마는 `DB/app_extras.sql`에 반영됐고, 코드는 대화방만 전환했다(로드맵 체크·사업계획서 초안은 아직 localStorage). 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
 
 ```mermaid
 erDiagram
@@ -303,12 +303,13 @@ erDiagram
         string title "NULL이면 첫 질문을 제목으로"
         datetime created_at
         datetime updated_at "마지막 메시지 시각"
+        datetime deleted_at "NULL이면 활성, 삭제는 표시만"
     }
 
     chat_messages {
         int id PK
         int user_id FK
-        int room_id FK "신규, ON DELETE CASCADE"
+        int room_id FK "NOT NULL, ON DELETE CASCADE"
         string category
         string question
         string answer
@@ -331,6 +332,6 @@ erDiagram
     }
 ```
 
-- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다.
+- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
 - **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
 - **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 공고 양식에 따라 초안 항목 수·키가 달라져 `form`·`plan`·`eval_result`를 JSONB로 둔다.

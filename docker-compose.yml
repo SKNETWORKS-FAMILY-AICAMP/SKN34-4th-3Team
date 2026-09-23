@@ -22,6 +22,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       llm:
         condition: service_healthy
 
@@ -72,6 +74,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
 
@@ -94,6 +98,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # 기동할 때마다 app_extras.sql 을 다시 적용한다. initdb 는 볼륨이 비어 있을 때만 돌아
+  # 기존 볼륨에는 스키마 변경이 반영되지 않기 때문이다. 전 문장이 재실행 안전하다.
+  db-migrate:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./DB/app_extras.sql:/app_extras.sql:ro
+    command: ["psql", "-h", "db", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/app_extras.sql"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   elasticsearch:
     build: ./elasticsearch

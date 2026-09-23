@@ -38,66 +38,6 @@ export const socialBtn = {
 
 // Backend가 시드하는 데모 계정 (core/config.py DEMO_EMAIL/DEMO_PASSWORD와 동일)
 
-export const ROOMS_KEY = (userId, category) => `changeup:chat-rooms:${userId}:${category}`;
-
-export const loadRooms = (userId, category) => {
-  try {
-    const arr = JSON.parse(localStorage.getItem(ROOMS_KEY(userId, category)) || '[]');
-    return Array.isArray(arr) ? arr.filter((n) => typeof n === 'number') : [];
-  } catch (e) {
-    return [];
-  }
-};
-
-export const saveRooms = (userId, category, arr) => {
-  try {
-    localStorage.setItem(ROOMS_KEY(userId, category), JSON.stringify(arr));
-  } catch (e) {
-    /* 저장 못 해도 이번 세션은 동작한다 */
-  }
-};
-
-// 대화방 이름 — 첫 질문(기본 제목) 대신 직접 정한 이름을 쓰고 싶을 때. 첫 메시지 id로 방을 식별한다.
-
-export const ROOM_NAMES_KEY = (userId, category) => `changeup:chat-room-names:${userId}:${category}`;
-
-export const loadRoomNames = (userId, category) => {
-  try {
-    const o = JSON.parse(localStorage.getItem(ROOM_NAMES_KEY(userId, category)) || '{}');
-    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
-  } catch (e) {
-    return {};
-  }
-};
-
-export const saveRoomNames = (userId, category, obj) => {
-  try {
-    localStorage.setItem(ROOM_NAMES_KEY(userId, category), JSON.stringify(obj));
-  } catch (e) {
-    /* 저장 못 해도 이번 세션은 동작한다 */
-  }
-};
-
-// 대화방 삭제 — 서버 기록은 그대로 두고 이 브라우저에서만 목록에서 숨긴다. 첫 메시지 id로 식별.
-
-export const HIDDEN_ROOMS_KEY = (userId, category) => `changeup:chat-room-hidden:${userId}:${category}`;
-
-export const loadHiddenRooms = (userId, category) => {
-  try {
-    const arr = JSON.parse(localStorage.getItem(HIDDEN_ROOMS_KEY(userId, category)) || '[]');
-    return new Set(Array.isArray(arr) ? arr : []);
-  } catch (e) {
-    return new Set();
-  }
-};
-
-export const saveHiddenRooms = (userId, category, set) => {
-  try {
-    localStorage.setItem(HIDDEN_ROOMS_KEY(userId, category), JSON.stringify([...set]));
-  } catch (e) {
-    /* 저장 못 해도 이번 세션은 동작한다 */
-  }
-};
 /** 저장 시각을 'YYYY-MM-DD' 로 줄인다. 형식이 예상과 달라도 앞 10글자는 건진다. */
 
 export const dayKeyOf = (v) => {
