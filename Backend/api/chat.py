@@ -1,4 +1,5 @@
 from ninja import Router, Path, Query
+from ninja.errors import HttpError
 
 from api.deps import user_auth
 from schemas.chat import (
@@ -55,8 +56,12 @@ def history(
 def clear_history(
     request,
     category: str | None = Query(default=None, description="비우면 전체, 있으면 해당 카테고리만"),
+    ids: str | None = Query(default=None, include_in_schema=False),
 ):
     """현재 사용자의 대화방을 모두(또는 해당 카테고리만) 삭제합니다. 삭제한 방은 목록·기록에서 빠집니다."""
+    # 예전 프론트의 방 하나 삭제(?ids=)가 전체 삭제로 처리되지 않도록 막는다.
+    if ids is not None:
+        raise HttpError(400, "대화방 삭제는 DELETE /chat/rooms/{roomId}를 사용하세요. 새로고침 후 다시 시도해 주세요.")
     deleted = chat_service.clear_messages(request.auth["id"], category)
     return {"deleted": True, "count": deleted}
 

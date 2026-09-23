@@ -16,7 +16,7 @@ from ninja.testing import TestClient  # noqa: E402
 from api import deps  # noqa: E402
 from config.api import api  # noqa: E402
 from core.security import create_token  # noqa: E402
-from services import expense_service, policy_service  # noqa: E402
+from services import chat_service, expense_service, policy_service  # noqa: E402
 
 client = TestClient(api)
 
@@ -99,6 +99,19 @@ class PublicEndpointTest(unittest.TestCase):
     def test_query_bounds_are_422(self):
         res = client.get("/announcements?limit=0")
         self.assertEqual(res.status_code, 422)
+
+
+class ChatClearTest(unittest.TestCase):
+    def test_legacy_ids_param_is_400_and_deletes_nothing(self):
+        repo = MagicMock()
+        repo.get_user.return_value = {"id": 1, "status": "active"}
+        token = create_token(1, "user")
+        with patch.object(deps, "repo", repo), patch.object(chat_service, "clear_messages") as clear:
+            res = client.delete(
+                "/chat/messages?ids=1,2", headers={"Authorization": f"Bearer {token}"}
+            )
+        self.assertEqual(res.status_code, 400)
+        clear.assert_not_called()
 
 
 if __name__ == "__main__":
