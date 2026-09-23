@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -17,6 +18,8 @@ from core.config import (
     DEMO_PASSWORD,
 )
 from core.security import hash_password
+
+logger = logging.getLogger(__name__)
 
 _DATE_KEYS = {
     "due_date",
@@ -194,16 +197,12 @@ def _apply_extras(conn) -> None:
     path = Path(__file__).resolve().parents[2] / "DB" / "app_extras.sql"
     if not path.is_file():
         return
-    for statement in path.read_text(encoding="utf-8").split(";"):
-        sql = "\n".join(
-            line for line in statement.splitlines() if not line.strip().startswith("--")
-        ).strip()
-        if not sql:
-            continue
-        try:
-            conn.execute(sql)
-        except Exception:
-            continue
+    # DO $$ 블록이 있어 ;로 나누면 깨진다. 파일 전체를 한 번에 실행한다(전 문장 재실행 안전).
+    try:
+        conn.execute(path.read_text(encoding="utf-8"))
+    except Exception:
+        conn.rollback()
+        logger.warning("app_extras.sql 적용 실패. psql로 직접 적용 필요", exc_info=True)
 
 
 def _seed() -> None:
