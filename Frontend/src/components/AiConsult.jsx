@@ -1,10 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api.js';
 import { AI_RULES, AI_SUGGESTIONS, AI_ERR } from '../constants.js';
-import {
-  loadRooms, saveRooms, loadRoomNames, saveRoomNames,
-  loadHiddenRooms, saveHiddenRooms, dayKeyOf, dayLabel, rowsToTurns, linkBtn,
-} from '../utils.js';
+import { dayKeyOf, dayLabel, rowsToTurns, linkBtn } from '../utils.js';
 import { Markdown } from './Markdown.jsx';
 
 const getConfirmationNotice = ({ status, guardrailReason } = {}) => {
@@ -19,6 +16,10 @@ const getConfirmationNotice = ({ status, guardrailReason } = {}) => {
   }
   return '추가 정보가 필요해요. 조건을 더 알려주시면 정확히 확인할 수 있어요.';
 };
+
+// 응답 대기·화면 전환에서 방을 구분하는 키. 서버 저장 전인 새 대화는 id가 없어 따로 표시한다.
+const NEW_ROOM = 'new';
+const roomKey = (id) => (id == null ? NEW_ROOM : id);
 
 export function AiConsult({
   user,
@@ -48,37 +49,24 @@ export function AiConsult({
   const [err, setErr] = useState('');
   const [histBusy, setHistBusy] = useState(false); // 기록 조회·삭제 진행 중
   const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
-  const [rows, setRows] = useState([]); // 서버 기록 원본 (id 포함) — 대화방을 나누는 기준
-  const [bounds, setBounds] = useState(() => (category && userId ? loadRooms(userId, category) : [])); // 방 경계 id
-  const [roomNames, setRoomNames] = useState(() => (category && userId ? loadRoomNames(userId, category) : {})); // 첫 메시지 id -> 직접 정한 이름
-  const [hiddenIds, setHiddenIds] = useState(() => (category && userId ? loadHiddenRooms(userId, category) : new Set())); // 삭제(숨김)한 방의 첫 메시지 id
-  const [renamingId, setRenamingId] = useState(null); // 지금 이름을 고치는 중인 방의 첫 메시지 id
+  const [rows, setRows] = useState([]); // 서버 기록 원본 (id·room_id 포함)
+  const [roomList, setRoomList] = useState([]); // 서버 대화방 목록 (최근 대화 순)
+  const [roomId, setRoomId] = useState(null); // 지금 보고 있는 방 (null=아직 저장 전인 새 대화)
+  const [pendingKey, setPendingKey] = useState(null); // 응답을 기다리는 방의 roomKey (null=없음)
+  const [renamingId, setRenamingId] = useState(null); // 지금 이름을 고치는 중인 방 id
   const [renameDraft, setRenameDraft] = useState('');
-  const [roomIdx, setRoomIdx] = useState(0); // 지금 보고 있는 방
-  const [pendingRoomIdx, setPendingRoomIdx] = useState(null); // 지금 응답을 기다리는 중인 방 (null=없음)
   const [needsLogin, setNeedsLogin] = useState(false);
   const bodyRef = useRef(null);
   const ctlRef = useRef(null);
-  // 응답이 도착했을 때 "지금 보고 있는 방"이 바뀌어 있을 수 있어 최신 roomIdx를 ref로도 들고 있는다.
-  const roomIdxRef = useRef(roomIdx);
+  // 응답이 도착했을 때 "지금 보고 있는 방"이 바뀌어 있을 수 있어 최신 값을 ref로도 들고 있는다.
+  const roomKeyRef = useRef(roomKey(roomId));
   useEffect(() => {
-    roomIdxRef.current = roomIdx;
-  }, [roomIdx]);
+    roomKeyRef.current = roomKey(roomId);
+  }, [roomId]);
   // 응답을 기다리는 방을 벗어났다 되돌아왔을 때 다시 보여줄 "질문까지는 던진" 상태 스냅샷
   const pendingTurnsRef = useRef(null);
 
-  // 서버 기록을 경계 기준으로 방 단위로 나눈다. 마지막 방이 "현재 대화"다.
-  const rooms = React.useMemo(() => {
-    const groups = [[]];
-    rows.forEach((row) => {
-      const bi = bounds.filter((b) => row.id > b).length;
-      while (groups.length <= bi) groups.push([]);
-      groups[bi].push(row);
-    });
-    while (groups.length < bounds.length + 1) groups.push([]);
-    return groups;
-  }, [rows, bounds]);
-  const lastRoom = rooms.length - 1;
+  const turnsOf = (id, source = rows) => rowsToTurns(source.filter((r) => r.room_id === id));
 
   useEffect(() => {
     let alive = true;
@@ -96,49 +84,30 @@ export function AiConsult({
     };
   }, []);
 
-  // 로그인 + category 지정 시 이전 질문·답변을 불러와 표시한다.
+  // 로그인 + category 지정 시 대화방 목록과 이전 질문·답변을 불러와 가장 최근 방을 연다.
   useEffect(() => {
     if (!userId || !category) {
       setHistLoaded(false);
       setTurns([]);
       setRows([]);
-      setBounds([]);
-      setRoomIdx(0);
-      setRoomNames({});
-      setHiddenIds(new Set());
+      setRoomList([]);
+      setRoomId(null);
       return;
     }
     let alive = true;
     setHistBusy(true);
     setErr('');
     setTurns([]);
-    api
-      .chatHistory(category)
-      .then((r) => {
+    Promise.all([api.chatRooms(category), api.chatHistory(category)])
+      .then(([r, h]) => {
         if (!alive) return;
-        const fetched = (r && r.messages) || [];
+        const list = (r && r.rooms) || [];
+        const fetched = (h && h.messages) || [];
+        setRoomList(list);
         setRows(fetched);
-        // 기록보다 뒤에 있는 경계만 정리한다. (마지막 메시지 id와 같은 경계 = 아직 비어 있는 새 방)
-        const maxId = fetched.length ? fetched[fetched.length - 1].id : 0;
-        const kept = loadRooms(userId, category).filter((b) => b <= maxId);
-        setRoomNames(loadRoomNames(userId, category));
-        setHiddenIds(loadHiddenRooms(userId, category));
-        const groups = [[]];
-        fetched.forEach((row) => {
-          const bi = kept.filter((b) => row.id > b).length;
-          while (groups.length <= bi) groups.push([]);
-          groups[bi].push(row);
-        });
-        while (groups.length < kept.length + 1) groups.push([]);
-        // 메시지가 하나도 없는 방(새 대화를 눌렀다 그냥 나간 흔적)은 여기서 없앤다.
-        // 마지막 방은 지금 쓰려는 새 대화일 수 있으므로 비어 있어도 남긴다.
-        const live = groups.filter((g, i) => g.length > 0 || i === groups.length - 1);
-        const tidy = live.slice(0, -1).map((g) => g[g.length - 1].id);
-        setBounds(tidy);
-        saveRooms(userId, category, tidy);
-        // 마지막(현재) 방을 연다.
-        setRoomIdx(live.length - 1);
-        setTurns(rowsToTurns(live[live.length - 1]));
+        const first = list.length ? list[0].id : null;
+        setRoomId(first);
+        setTurns(first == null ? [] : turnsOf(first, fetched));
         setHistLoaded(true);
       })
       .catch(() => {
@@ -164,13 +133,8 @@ export function AiConsult({
       setTurns([]);
       setStream('');
       setRows([]);
-      setBounds([]);
-      saveRooms(userId, category, []);
-      setRoomNames({});
-      saveRoomNames(userId, category, {});
-      setHiddenIds(new Set());
-      saveHiddenRooms(userId, category, new Set());
-      setRoomIdx(0);
+      setRoomList([]);
+      setRoomId(null);
     } catch (e) {
       setErr('대화 기록을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
     } finally {
@@ -188,20 +152,18 @@ export function AiConsult({
     if (!q || busy) return;
     setErr('');
     setNeedsLogin(false);
-    // 서버에는 항상 스레드 끝에 쌓이므로, 지난 방을 보고 있었다면 현재 방으로 옮겨서 이어간다.
-    const base = roomIdx === lastRoom ? turns : [];
-    if (roomIdx !== lastRoom) setRoomIdx(lastRoom);
-    // 응답을 기다리는 동안에도 다른 방을 둘러볼 수 있다 — 이 방(askedRoomIdx)을 계속 보고 있을 때만
-    // 아래에서 도착하는 답변을 화면에 반영한다. 다른 방으로 옮겨갔다면 rows에만 쌓아 두고,
+    // 지금 보고 있는 방에 이어 쓴다. 새 대화면 첫 답변과 함께 서버가 방을 만든다.
+    // 응답을 기다리는 동안에도 다른 방을 둘러볼 수 있다 — 이 방(askedKey)을 계속 보고 있을 때만
+    // 도착하는 답변을 화면에 반영한다. 다른 방으로 옮겨갔다면 rows에만 쌓아 두고,
     // 나중에 이 방을 다시 열면(openRoom) rows로부터 다시 그려진다.
-    const askedRoomIdx = lastRoom;
-    roomIdxRef.current = askedRoomIdx; // 지금 막 이 방으로 옮겼으니 effect가 따라잡기 전에 먼저 맞춰 둔다
-    const isViewingAsked = () => roomIdxRef.current === askedRoomIdx;
+    const askedRoomId = roomId;
+    let askedKey = roomKey(askedRoomId);
+    const isViewingAsked = () => roomKeyRef.current === askedKey;
     const appendTurn = (entry) => {
       if (isViewingAsked()) setTurns((cur) => [...cur, entry]);
     };
-    setPendingRoomIdx(askedRoomIdx);
-    const nextTurns = [...base, { role: 'user', content: q }];
+    setPendingKey(askedKey);
+    const nextTurns = [...turns, { role: 'user', content: q }];
     pendingTurnsRef.current = nextTurns;
     setTurns(nextTurns);
     setDraft('');
@@ -228,6 +190,7 @@ export function AiConsult({
     try {
       const chatBody = { question: q, category: category || 'tax' };
       if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
+      if (askedRoomId != null) chatBody.roomId = askedRoomId;
       rag = await api.chat(chatBody, { signal: ctl.signal });
     } catch (e) {
       // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
@@ -243,13 +206,29 @@ export function AiConsult({
         /* 근거를 못 받아도 답변은 그대로 보여준다 */
       }
     }
-    // 서버에 저장된 메시지를 원본 목록에도 반영해야 방 경계 계산이 계속 맞는다.
-    if (rag && rag.messageId != null) {
+    // 서버에 저장된 메시지와 방을 목록에도 반영한다.
+    if (rag && rag.messageId != null && rag.roomId != null) {
+      const now = new Date().toISOString();
       // created_at 을 빼면 사이드바에서 날짜를 못 읽어 '날짜 미상'으로 빠진다.
       setRows((cur) => [
         ...cur,
-        { id: rag.messageId, question: q, answer: rag.answer || '', created_at: new Date().toISOString() },
+        { id: rag.messageId, room_id: rag.roomId, question: q, answer: rag.answer || '', created_at: now },
       ]);
+      setRoomList((cur) => {
+        const found = cur.find((r) => r.id === rag.roomId);
+        const room = found
+          ? { ...found, updatedAt: now }
+          : { id: rag.roomId, category, title: null, firstQuestion: q, createdAt: now, updatedAt: now };
+        return [room, ...cur.filter((r) => r.id !== rag.roomId)];
+      });
+      if (askedRoomId == null) {
+        // 새 대화가 방금 서버 방이 됐다. 계속 보고 있었다면 그 방으로 전환한다.
+        if (isViewingAsked()) {
+          roomKeyRef.current = roomKey(rag.roomId);
+          setRoomId(rag.roomId);
+        }
+        askedKey = roomKey(rag.roomId);
+      }
     }
 
     // status가 error·integration_unavailable이면 LLM이 답하긴 했지만 근거를 만들지 못한 경우다.
@@ -331,64 +310,60 @@ export function AiConsult({
       setBusy(false);
       setStream('');
       setProgress('');
-      setPendingRoomIdx(null);
+      setPendingKey(null);
       pendingTurnsRef.current = null;
       ctlRef.current = null;
     }
   };
 
-  // 사이드바 목록: 방마다 첫 질문을 제목으로, 마지막 대화 시각을 날짜로 쓴다.
-  // 메시지가 없는 방은 지금 보고 있는 것(= 새 대화)만 남긴다.
-  const roomList = rooms
-    .map((g, i) => ({
-      i,
-      firstId: g.length ? g[0].id : null,
-      title: g.length
-        ? (roomNames[g[0].id] || g[0].question)
-        // 서버 확인 전(응답 대기 중)이라 rows엔 아직 없다 — 방금 던진 질문을 스냅샷에서 보여준다.
-        : (i === pendingRoomIdx && pendingTurnsRef.current && pendingTurnsRef.current[0]
-            ? pendingTurnsRef.current[0].content
-            : '새 대화'),
-      day: g.length ? dayKeyOf(g[g.length - 1].created_at) : dayKeyOf(new Date()),
-    }))
-    // 지금 보고 있는 방, 응답을 기다리는 중인 방은 메시지가 아직 없어도 목록에 남긴다.
-    .filter((room) => rooms[room.i].length > 0 || room.i === roomIdx || room.i === pendingRoomIdx)
-    .filter((room) => room.firstId == null || !hiddenIds.has(room.firstId));
+  // 사이드바 목록: 직접 정한 이름이 없으면 첫 질문을 제목으로, 마지막 대화 시각을 날짜로 쓴다.
+  // 아직 저장 전인 새 대화는 지금 보고 있거나 응답을 기다리는 중일 때만 맨 위에 둔다.
+  const sideRooms = roomList.map((r) => ({
+    id: r.id,
+    title: r.title || r.firstQuestion || '새 대화',
+    day: dayKeyOf(r.updatedAt),
+  }));
+  if (roomId == null || pendingKey === NEW_ROOM) {
+    sideRooms.unshift({
+      id: null,
+      // 서버 확인 전(응답 대기 중)이라 목록엔 아직 없다 — 방금 던진 질문을 스냅샷에서 보여준다.
+      title: pendingKey === NEW_ROOM && pendingTurnsRef.current && pendingTurnsRef.current[0]
+        ? pendingTurnsRef.current[0].content
+        : '새 대화',
+      day: dayKeyOf(new Date()),
+    });
+  }
 
-  // 같은 날짜는 목록에서 떨어져 있어도 한 묶음으로 모은다.
-  // (방 순서는 메시지 id 순이라 날짜 순서와 어긋날 수 있다)
+  // 같은 날짜끼리 한 묶음으로 모은다. 최신 날짜부터, 날짜를 모르는 옛 기록은 맨 아래로 내린다.
   const roomGroups = [];
   const byDay = new Map();
-  roomList
-    .slice()
-    .reverse()
-    .forEach((room) => {
-      let grp = byDay.get(room.day);
-      if (!grp) {
-        grp = { day: room.day, rooms: [] };
-        byDay.set(room.day, grp);
-        roomGroups.push(grp);
-      }
-      grp.rooms.push(room);
-    });
-  // 최신 날짜부터. 날짜를 모르는 옛 기록은 맨 아래로 내린다.
+  sideRooms.forEach((room) => {
+    let grp = byDay.get(room.day);
+    if (!grp) {
+      grp = { day: room.day, rooms: [] };
+      byDay.set(room.day, grp);
+      roomGroups.push(grp);
+    }
+    grp.rooms.push(room);
+  });
   roomGroups.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
 
-  const openRoom = (i) => {
+  const openRoom = (id) => {
     // 응답을 기다리는 동안에도 다른 방을 볼 수 있다 — 지금 응답 중인 방만 클릭으로 막을 이유가 없다.
-    if (histBusy || i === roomIdx) return;
-    setRoomIdx(i);
-    if (i === pendingRoomIdx && pendingTurnsRef.current) {
+    if (histBusy || id === roomId) return;
+    roomKeyRef.current = roomKey(id);
+    setRoomId(id);
+    if (roomKey(id) === pendingKey && pendingTurnsRef.current) {
       // 아직 답이 안 온 방으로 돌아온 것 — 서버 기록(rows)엔 없으니 던져둔 질문 그대로 복원한다.
       setTurns(pendingTurnsRef.current);
     } else {
-      setTurns(rowsToTurns(rooms[i]));
+      setTurns(turnsOf(id));
       setStream('');
     }
     setErr('');
   };
 
-  // 대화방 이름 바꾸기 — 첫 메시지 id로 방을 식별해서 저장한다.
+  // 대화방 이름 바꾸기 — 서버에 저장해 다른 기기에서도 같은 이름으로 보인다.
   const startRename = (id, current) => {
     setRenamingId(id);
     setRenameDraft(current);
@@ -397,129 +372,58 @@ export function AiConsult({
     setRenamingId(null);
     setRenameDraft('');
   };
-  const submitRename = (id) => {
-    const name = renameDraft.trim();
-    setRoomNames((prev) => {
-      const next = { ...prev };
-      if (name) next[id] = name;
-      else delete next[id]; // 비워서 저장하면 기본 제목(첫 질문)으로 되돌아간다
-      saveRoomNames(userId, category, next);
-      return next;
-    });
+  const submitRename = async (id) => {
+    const name = renameDraft.trim() || null; // 비워서 저장하면 기본 제목(첫 질문)으로 되돌아간다
     setRenamingId(null);
     setRenameDraft('');
+    try {
+      await api.renameChatRoom(id, name);
+      setRoomList((cur) => cur.map((r) => (r.id === id ? { ...r, title: name } : r)));
+    } catch (e) {
+      setErr('대화방 이름을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
-  // 대화방 삭제 — 서버 기록(rows)은 그대로 두고 이 브라우저의 목록에서만 뺀다.
   const deleteRoom = async (room) => {
-    if (busy || histBusy || room.i === pendingRoomIdx) return; // 응답 기다리는 방은 지울 수 없다
-    if (!window.confirm('이 대화방을 삭제할까요?\n서버에 저장된 기록도 함께 지워지고, 되돌릴 수 없습니다.')) {
-      return;
-    }
+    if (busy || histBusy || roomKey(room.id) === pendingKey) return; // 응답 기다리는 방은 지울 수 없다
+    if (!window.confirm('이 대화방을 삭제할까요?\n되돌릴 수 없습니다.')) return;
 
-    if (room.firstId == null) {
-      // 아직 메시지가 없는 "새 대화" — 지울 서버 기록이 없으니 바로 되돌린다.
-      // (빈 방은 항상 lastRoom 이라 경계를 만들었다면 그 경계만 걷어내면 된다)
-      if (bounds.length > 0) {
-        const nextBounds = bounds.slice(0, -1);
-        setBounds(nextBounds);
-        saveRooms(userId, category, nextBounds);
-        const targetIdx = nextBounds.length;
-        setRoomIdx(targetIdx);
-        const revealed = rooms[targetIdx] || [];
-        setTurns(rowsToTurns(revealed)); // 되돌아간 방의 실제 내용을 그대로 보여준다(무조건 빈 화면 X)
-        // "방금 이어쓰던 방을 지운" 되돌리기라면, 그때 같이 숨겨졌던 그 방도 다시 보이게 한다.
-        const revealedFirstId = revealed.length ? revealed[0].id : null;
-        if (revealedFirstId != null && hiddenIds.has(revealedFirstId)) {
-          setHiddenIds((prev) => {
-            const next = new Set(prev);
-            next.delete(revealedFirstId);
-            saveHiddenRooms(userId, category, next);
-            return next;
-          });
-        }
-      } else {
-        setTurns([]);
-      }
+    if (room.id == null) {
+      // 아직 메시지가 없는 "새 대화" — 지울 서버 기록이 없으니 가장 최근 방으로 되돌린다.
+      const first = roomList.length ? roomList[0].id : null;
+      roomKeyRef.current = roomKey(first);
+      setRoomId(first);
+      setTurns(first == null ? [] : turnsOf(first));
       setStream('');
       setErr('');
       return;
     }
 
-    const roomRows = rooms[room.i] || [];
-    const idsToDelete = roomRows.map((r) => r.id);
-
-    let nextBounds = bounds;
-    if (room.i === lastRoom) {
-      // 지금 이어서 쓰는 방을 지우는 거라, 다음 질문이 지워진 방에 섞이지 않게 새 방으로 분리해 둔다.
-      const lastMsgId = roomRows.length ? roomRows[roomRows.length - 1].id : null;
-      if (lastMsgId != null) {
-        nextBounds = bounds.includes(lastMsgId) ? bounds : [...bounds, lastMsgId].sort((a, b) => a - b);
-        setBounds(nextBounds);
-        saveRooms(userId, category, nextBounds);
-      }
-    }
-
-    // 서버 기록을 실제로 지운다. 실패하면(네트워크 등) 이 브라우저에서만이라도 숨겨서
-    // 화면상으론 지운 것처럼 두고, 다음에 다시 시도할 수 있게 안내한다.
-    let serverOk = true;
     try {
-      await api.deleteMessages(idsToDelete);
+      await api.deleteChatRoom(room.id);
     } catch (e) {
-      serverOk = false;
+      setErr('대화방을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
+      return;
     }
-
-    if (serverOk) {
-      setRows((cur) => cur.filter((r) => !idsToDelete.includes(r.id)));
-      setRoomNames((prev) => {
-        if (!(room.firstId in prev)) return prev;
-        const next = { ...prev };
-        delete next[room.firstId];
-        saveRoomNames(userId, category, next);
-        return next;
-      });
-      setHiddenIds((prev) => {
-        if (!prev.has(room.firstId)) return prev;
-        const next = new Set(prev);
-        next.delete(room.firstId);
-        saveHiddenRooms(userId, category, next);
-        return next;
-      });
-    } else {
-      setErr('서버에서 지우지 못했어요. 이 브라우저에서만 우선 숨겼어요 — 잠시 후 다시 시도해 주세요.');
-      setHiddenIds((prev) => {
-        const next = new Set(prev);
-        next.add(room.firstId);
-        saveHiddenRooms(userId, category, next);
-        return next;
-      });
-    }
-
-    if (room.i === roomIdx) {
-      const targetIdx = nextBounds.length; // 위에서 새 방을 텄으면 그 방, 아니면 원래 lastRoom
-      setRoomIdx(targetIdx);
-      setTurns(rowsToTurns(rooms[targetIdx] || []));
+    setRoomList((cur) => cur.filter((r) => r.id !== room.id));
+    setRows((cur) => cur.filter((r) => r.room_id !== room.id));
+    if (room.id === roomId) {
+      roomKeyRef.current = NEW_ROOM;
+      setRoomId(null);
+      setTurns([]);
       setStream('');
-      if (serverOk) setErr('');
     }
+    setErr('');
   };
 
-  // 지금 대화는 그대로 두고 빈 방을 새로 연다. 서버 기록은 지우지 않는다.
+  // 지금 대화는 그대로 두고 빈 방을 새로 연다. 방은 첫 질문을 보낼 때 서버에 만들어진다.
   const startNew = () => {
     if (busy || histBusy) return;
     setErr('');
     setStream('');
-    if (!category || !userId) {
-      setTurns([]);
-      return;
-    }
-    const maxId = rows.length ? rows[rows.length - 1].id : 0;
-    // 이미 비어 있는 새 방이면 또 만들지 않는다.
-    if (roomIdx === lastRoom && (rooms[lastRoom] || []).length === 0 && turns.length === 0) return;
-    const next = bounds.includes(maxId) ? bounds : [...bounds, maxId].sort((a, b) => a - b);
-    setBounds(next);
-    saveRooms(userId, category, next);
-    setRoomIdx(next.length);
+    if (roomId == null && turns.length === 0) return; // 이미 비어 있는 새 대화
+    roomKeyRef.current = NEW_ROOM;
+    setRoomId(null);
     setTurns([]);
   };
 
@@ -551,7 +455,7 @@ export function AiConsult({
         {histBusy && turns.length === 0 && (
           <div className="ai__hint">이전 대화를 불러오는 중…</div>
         )}
-        {!histBusy && turns.length === 0 && pendingRoomIdx !== roomIdx && (
+        {!histBusy && turns.length === 0 && pendingKey !== roomKey(roomId) && (
           <div className="ai__hint">
             <b className="ai__hintttl">어떤 게 궁금하신가요?</b>
             <span className="ai__hintsub">{user.biz} · {user.region} 기준으로 답해 드려요. 아래를 눌러 시작해 보세요.</span>
@@ -587,7 +491,7 @@ export function AiConsult({
             )}
           </React.Fragment>
         ))}
-        {pendingRoomIdx === roomIdx &&
+        {pendingKey === roomKey(roomId) &&
           (stream ? (
             <div className="msg msg--ai"><Markdown text={stream} /></div>
           ) : (
@@ -617,7 +521,7 @@ export function AiConsult({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={
-            busy && pendingRoomIdx !== roomIdx
+            busy && pendingKey !== roomKey(roomId)
               ? '다른 대화방에서 응답을 기다리는 중이에요…'
               : '메시지를 입력하세요'
           }
@@ -657,20 +561,20 @@ export function AiConsult({
                     <span className="cvx__group-n">{grp.rooms.length}</span>
                   </div>
                   {grp.rooms.map((room) =>
-                    renamingId != null && renamingId === room.firstId ? (
+                    room.id != null && renamingId === room.id ? (
                       <form
-                        key={room.i}
+                        key={room.id}
                         className="cvx__rename"
                         onSubmit={(e) => {
                           e.preventDefault();
-                          submitRename(room.firstId);
+                          submitRename(room.id);
                         }}
                       >
                         <input
                           autoFocus
                           value={renameDraft}
                           onChange={(e) => setRenameDraft(e.target.value)}
-                          onBlur={() => submitRename(room.firstId)}
+                          onBlur={() => submitRename(room.id)}
                           onKeyDown={(e) => {
                             if (e.key === 'Escape') cancelRename();
                           }}
@@ -680,34 +584,34 @@ export function AiConsult({
                         <button type="submit" aria-label="이름 저장">✓</button>
                       </form>
                     ) : (
-                      <div key={room.i} className={'cvx__row' + (room.i === roomIdx ? ' is-active' : '')}>
+                      <div key={roomKey(room.id)} className={'cvx__row' + (room.id === roomId ? ' is-active' : '')}>
                         <button
                           type="button"
                           className="cvx__conv"
-                          aria-current={room.i === roomIdx ? 'true' : undefined}
-                          onClick={() => openRoom(room.i)}
+                          aria-current={room.id === roomId ? 'true' : undefined}
+                          onClick={() => openRoom(room.id)}
                         >
                           {room.title}
-                          {room.i === pendingRoomIdx && (
+                          {roomKey(room.id) === pendingKey && (
                             <span className="cvx__pending" title="응답을 기다리는 중이에요" aria-label="응답 대기 중">
                               <i /><i /><i />
                             </span>
                           )}
                         </button>
-                        {room.firstId != null && (
+                        {room.id != null && (
                           <button
                             type="button"
                             className="cvx__edit"
                             aria-label="대화방 이름 바꾸기"
                             onClick={(e) => {
                               e.stopPropagation();
-                              startRename(room.firstId, room.title);
+                              startRename(room.id, room.title);
                             }}
                           >
                             ✎
                           </button>
                         )}
-                        {room.i !== pendingRoomIdx && (
+                        {roomKey(room.id) !== pendingKey && (
                           <button
                             type="button"
                             className="cvx__edit cvx__del"

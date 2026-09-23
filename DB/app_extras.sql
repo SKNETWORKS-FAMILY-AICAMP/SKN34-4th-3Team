@@ -104,3 +104,15 @@ CREATE TABLE IF NOT EXISTS bizplan_drafts (
     eval_result JSONB,
     updated_at  TIMESTAMP DEFAULT now()
 );
+
+-- 대화방 삭제는 행을 지우지 않고 표시만 한다(관리자 통계 보존). NULL이면 활성 방.
+ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+
+-- Backend가 항상 room_id를 넣으므로 백필 뒤 NULL이 없으면 NOT NULL로 고정한다.
+-- user_id·category가 NULL이라 백필되지 못한 행이 있으면 건너뛴다.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM chat_messages WHERE room_id IS NULL) THEN
+        ALTER TABLE chat_messages ALTER COLUMN room_id SET NOT NULL;
+    END IF;
+END $$;

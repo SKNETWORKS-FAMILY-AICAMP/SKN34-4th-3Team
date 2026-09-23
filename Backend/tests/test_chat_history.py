@@ -19,20 +19,54 @@ RAG_OK = {
 
 
 class FakeRepo:
-    """chat_messages를 (user_id, category)별로 들고 있는 대역."""
+    """chat_rooms·chat_messages 대역. room_id가 없는 행은 (user_id, category)별 방 하나에 넣는다."""
 
     def __init__(self, rows=None):
-        self.rows = list(rows or [])
+        self.rooms = {}
+        self.rows = []
         self.inserted = []
+        self.touched = []
+        for item in rows or []:
+            item = dict(item)
+            room_id = item.get("room_id")
+            if room_id is None:
+                room_id = self.room_of(item["user_id"], item["category"]) or self.create_room(
+                    item["user_id"], item["category"]
+                )
+            self.rooms.setdefault(
+                room_id, {"id": room_id, "user_id": item["user_id"], "category": item["category"]}
+            )
+            item["room_id"] = room_id
+            self.rows.append(item)
 
-    def recent_chats(self, user_id, category, limit=10):
+    def room_of(self, user_id, category):
+        for room in self.rooms.values():
+            if room["user_id"] == user_id and room["category"] == category:
+                return room["id"]
+        return None
+
+    def create_room(self, user_id, category):
+        room_id = max(self.rooms, default=0) + 1
+        self.rooms[room_id] = {"id": room_id, "user_id": user_id, "category": category}
+        return room_id
+
+    def get_room(self, room_id, user_id):
+        room = self.rooms.get(room_id)
+        return room if room and room["user_id"] == user_id else None
+
+    def touch_room(self, room_id):
+        self.touched.append(room_id)
+
+    def recent_chats(self, user_id, category, room_id, limit=10):
         rows = [
-            r for r in self.rows if r["user_id"] == user_id and r["category"] == category
+            r
+            for r in self.rows
+            if r["user_id"] == user_id and r["category"] == category and r["room_id"] == room_id
         ]
         return rows[-limit:]
 
-    def insert_chat(self, user_id, category, question, answer, sources):
-        self.inserted.append((user_id, category, question, answer, sources))
+    def insert_chat(self, user_id, category, question, answer, sources, room_id):
+        self.inserted.append((user_id, category, question, answer, sources, room_id))
         return 100 + len(self.inserted)
 
     def get_user(self, user_id):
@@ -45,12 +79,13 @@ class FakeRepo:
         return []
 
 
-def row(user_id, category, question, answer):
+def row(user_id, category, question, answer, room_id=None):
     return {
         "user_id": user_id,
         "category": category,
         "question": question,
         "answer": answer,
+        "room_id": room_id,
     }
 
 
@@ -63,7 +98,11 @@ class ConversationHistoryTest(unittest.TestCase):
         rag=RAG_OK,
         user_id=1,
         roadmap_step=None,
+        room_id="same",
     ):
+        # 기본은 해당 사용자·카테고리의 기존 방에 이어 쓴다. 방이 없으면 새 방(None).
+        if room_id == "same":
+            room_id = repo.room_of(user_id, category)
         with patch.object(chat_service, "repo", repo), patch.object(
             chat_service, "rag_answer", return_value=rag
         ) as rag_answer:
@@ -72,6 +111,7 @@ class ConversationHistoryTest(unittest.TestCase):
                 category,
                 question,
                 roadmap_step=roadmap_step,
+                room_id=room_id,
             )
         return result, rag_answer
 
@@ -186,10 +226,13 @@ class ConversationHistoryTest(unittest.TestCase):
         contents = [item["content"] for item in self.history_of(rag_answer)]
         self.assertNotIn("가족이 두 명이면?", contents)
         self.assertEqual(len(repo.inserted), 1)
-        user_id, category, question, answer, _ = repo.inserted[0]
+        user_id, category, question, answer, _, room_id = repo.inserted[0]
         self.assertEqual((user_id, category, question), (1, "tax", "가족이 두 명이면?"))
         self.assertEqual(answer, "LLM 답변")
         self.assertEqual(result["messageId"], 101)
+        self.assertEqual(room_id, repo.room_of(1, "tax"))
+        self.assertEqual(result["roomId"], room_id)
+        self.assertEqual(repo.touched, [room_id])
 
     def test_roadmap_history_uses_smaller_limit_and_forwards_step(self):
         repo = FakeRepo(
@@ -227,6 +270,49 @@ class ConversationHistoryTest(unittest.TestCase):
             sum(len(item["content"]) for item in history),
             chat_service.ROADMAP_HISTORY_TOTAL_LIMIT,
         )
+
+
+class ChatRoomTest(unittest.TestCase):
+    def send(self, repo, room_id, category="tax", user_id=1):
+        with patch.object(chat_service, "repo", repo), patch.object(
+            chat_service, "rag_answer", return_value=RAG_OK
+        ) as rag_answer:
+            result = chat_service.send_message(user_id, category, "질문", room_id=room_id)
+        return result, rag_answer
+
+    def test_other_room_rows_are_excluded(self):
+        repo = FakeRepo(
+            [
+                row(1, "tax", "1번 방 질문", "1번 방 답변", room_id=1),
+                row(1, "tax", "2번 방 질문", "2번 방 답변", room_id=2),
+            ]
+        )
+        _, rag_answer = self.send(repo, room_id=2)
+        contents = [item["content"] for item in rag_answer.call_args[1]["conversation_history"]]
+        self.assertEqual(contents, ["2번 방 질문", "2번 방 답변"])
+
+    def test_new_room_is_created_without_room_id(self):
+        repo = FakeRepo([row(1, "tax", "이전 질문", "이전 답변")])
+        result, rag_answer = self.send(repo, room_id=None)
+        self.assertIsNone(rag_answer.call_args[1]["conversation_history"])
+        self.assertEqual(result["roomId"], 2)
+        self.assertEqual(repo.inserted[0][5], 2)
+        self.assertEqual(repo.rooms[2]["category"], "tax")
+
+    def test_other_users_room_is_not_found(self):
+        repo = FakeRepo([row(2, "tax", "B 질문", "B 답변")])
+        with self.assertRaises(HttpError) as ctx:
+            self.send(repo, room_id=1, user_id=1)
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(repo.inserted, [])
+
+    def test_room_of_other_category_is_not_found(self):
+        repo = FakeRepo([row(1, "policy", "정책 질문", "정책 답변")])
+        with patch.object(chat_service, "rag_answer") as rag_answer:
+            with self.assertRaises(HttpError) as ctx:
+                self.send(repo, room_id=1, category="tax")
+        self.assertEqual(ctx.exception.status_code, 404)
+        rag_answer.assert_not_called()
 
 
 class ExistingContractTest(unittest.TestCase):
