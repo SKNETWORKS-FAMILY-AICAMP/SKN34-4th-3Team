@@ -273,16 +273,19 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 
 `expenses.user_id`는 `receipt_id → receipts.user_id`로 유도할 수 있는 비정규화다. 조회 필터 편의를 위해 남겨 두었다.
 
-`app_extras.sql`은 `docker-compose.yml`의 initdb 마운트로 `01_schema.sql` 다음에 적용된다. 이미 데이터가 있는 DB에는 initdb가 다시 돌지 않으므로 `psql`로 한 번 직접 실행해야 한다. 모든 구문이 `IF NOT EXISTS`(제약은 `pg_constraint` 확인)라 재실행에 안전하다.
+`app_extras.sql`은 빈 볼륨에서는 initdb로 `01_schema.sql` 다음에 적용되고, 이후에는 `docker compose up`마다 `db-migrate` 서비스가 다시 적용한다. 모든 구문이 재실행에 안전하다(`IF NOT EXISTS`, 제약·`NOT NULL`은 `DO $$` 블록에서 확인 후 적용).
 
 ### 스키마 적용 경로
 
-`docker-compose.yml`의 initdb 마운트가 유일한 자동 적용 경로다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다.
+`docker-compose.yml`에 자동 적용 경로가 두 개 있다.
 
-- initdb는 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 이미 데이터가 있는 DB에는 `psql`로 직접 적용해야 한다. `app_extras.sql`은 전부 `IF NOT EXISTS`라 재실행에 안전하다
+- **initdb**: 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다
+- **`db-migrate`**: `db`가 healthy가 되면 `psql -v ON_ERROR_STOP=1`로 `app_extras.sql`을 적용하고 종료하는 one-shot 서비스다. `backend`·`llm`은 이 서비스가 성공해야 기동한다. 기존 볼륨에도 스키마 변경이 `docker compose up`만으로 반영된다. 수동 재적용은 `docker compose up -d db-migrate`
+- `db` healthcheck는 `pg_isready -h 127.0.0.1`(TCP)로 확인한다. initdb 중 임시 서버는 TCP를 열지 않아, 소켓으로 확인하면 init 도중 healthy가 되어 `db-migrate`가 연결 거부로 실패할 수 있다
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
-- 로컬에서 띄운 Backend는 Postgres 연결 시 `Backend/core/db.py`의 `_apply_extras`로 `DB/app_extras.sql`을 best-effort 적용한다. 파일이 없으면 건너뛰고 실패한 문장은 무시하므로 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
-- `setup.sh`·`setup.bat`은 기동 때마다 `psql`로 `app_extras.sql`을 다시 적용한다
+- `Backend/core/db.py`의 `_apply_extras`는 파일을 `;` 단위로 잘라 한 트랜잭션에서 실행한다. `DO $$` 블록이 쪼개져 실패하면 이후 문장이 모두 실패하고 롤백되므로 사실상 적용되지 않는다. compose 컨테이너에서는 파일 경로(`/DB`)도 없다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
+- `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
+- compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
 
 ## 유저 개인화 저장 이관 (대화방 적용, 로드맵·사업계획서 미적용)
 

@@ -94,7 +94,9 @@ services:
       - ./DB/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./DB/app_extras.sql:/docker-entrypoint-initdb.d/02_app_extras.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      # initdb 중 임시 서버는 TCP를 열지 않는다. TCP로 확인해야 init이 끝난 뒤에만 healthy가 되고
+      # db-migrate(-h db 접속)가 연결 거부로 실패하지 않는다.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10

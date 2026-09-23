@@ -29,7 +29,7 @@
 
 ## 3. 스키마 변경안
 
-`DB/app_extras.sql` 끝에 추가했다. 모든 구문은 재실행해도 안전하다. 파일에는 `DO $$` 블록(`chk_users_region`, `room_id SET NOT NULL`)이 있어 `Backend/core/db.py`의 `_apply_extras`(`;` 단위 분할)로는 적용되지 않는다. `psql`로 적용한다(`setup.sh`·`setup.bat` 2단계).
+`DB/app_extras.sql` 끝에 추가했다. 모든 구문은 재실행해도 안전하다. 파일에는 `DO $$` 블록(`chk_users_region`, `room_id SET NOT NULL`)이 있어 `Backend/core/db.py`의 `_apply_extras`(`;` 단위 분할)로는 적용되지 않는다. `docker compose up`마다 `db-migrate` 서비스가 `psql`로 적용한다(`Docs/Design/ERD.md` "스키마 적용 경로").
 
 ```sql
 -- 대화방
@@ -128,4 +128,7 @@ CREATE TABLE IF NOT EXISTS bizplan_drafts (
 ## 8. 남은 위험
 
 - `task_key`가 `단계:인덱스` 형식이라 `constants.js`의 `ROADMAP_TASKS` 항목 순서가 바뀌면 체크가 다른 항목에 붙는다. 지금 프론트가 키에 `v2`를 붙여 대응하는 것과 같이 `version` 컬럼을 올려 무효화한다. 근본 해결은 각 항목에 고정 id를 두는 것이다.
-- `_apply_extras`는 실패한 문장을 조용히 넘긴다. 백필 결과는 7절 2번 쿼리로 직접 확인해야 한다.
+- compose 밖(호스트)에서 띄운 Backend는 `_apply_extras`에 의존하는데, `DO $$` 블록 때문에 파일 전체가 적용되지 않는다. 이 경우 `psql`로 직접 적용해야 한다. 백필 결과는 7절 2번 쿼리로 확인한다.
+- 기존 localStorage의 방 구분·이름·숨김은 서버로 옮기지 않는다. 기존 대화는 카테고리별 "이전 대화" 방 하나로 합쳐져 보이고, 예전에 숨긴 방도 다시 보인다.
+- 방 삭제가 soft delete라 사용자가 지운 대화 원문이 서버에 남는다. 보존 기간과 완전 삭제(회원 탈퇴 등) 정책은 팀 합의가 필요하다.
+- `DELETE /chat/messages?ids=`를 없앴다. 방 단위 삭제는 `DELETE /chat/rooms/{id}`를 쓴다.

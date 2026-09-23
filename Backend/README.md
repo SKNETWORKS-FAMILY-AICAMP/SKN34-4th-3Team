@@ -91,7 +91,7 @@ Content-Type: application/json
 | 상황 | 동작 |
 |------|------|
 | Postgres 없음 | 1.5초 간격 8회 재시도 후 RuntimeError로 기동 중단 |
-| Postgres 연결됨 | 기동 시 `DB/app_extras.sql`을 파일이 있으면 best-effort로 적용(실패 문장은 무시)하고 데모 데이터 시드 |
+| Postgres 연결됨 | 기동 시 `DB/app_extras.sql`을 파일이 있으면 best-effort로 적용(실패 문장은 무시)하고 데모 데이터 시드. 파일의 `DO $$` 블록 때문에 사실상 적용되지 않으므로 스키마는 compose의 `db-migrate` 서비스(또는 `psql`)로 적용한다 |
 | LLM 꺼짐 / OpenAI 키 없음 | 챗봇은 **목업 문구**, 세액감면 근거는 고정 문구. 공고 요약은 캐시가 없으면 404, 붙여넣기 요약은 503. RAG 재색인은 **502** |
 | SMTP 없음 | 메일 실발송 없이 알림함 API만 동작 |
 
