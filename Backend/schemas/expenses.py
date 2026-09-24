@@ -18,12 +18,18 @@ class ReceiptCreateResponse(BaseModel):
     proofTypeLabel: str = Field(default="확인 불가", description="증빙 유형 한글 표기")
 
 
+class ReceiptItem(BaseModel):
+    model_config = ConfigDict(title="품목")
+    name: str = Field(description="품목명")
+    price: int | None = Field(default=None, description="개별 금액. 못 읽었으면 None")
+
+
 class ReceiptExtractionResponse(BaseModel):
     model_config = ConfigDict(title="영수증 추출 결과")
     date: Date = Field(description="거래일")
     vendor: str = Field(description="상호")
     amount: int = Field(description="금액")
-    items: list[str] = Field(description="품목")
+    items: list[ReceiptItem] = Field(description="품목")
     proofType: ProofType = Field(default="unknown", description="인식된 증빙 유형")
     proofTypeLabel: str = Field(default="확인 불가", description="증빙 유형 한글 표기")
     ocrSource: str = Field(default="mock", description="추출 출처")
@@ -40,12 +46,12 @@ class ExpenseItem(BaseModel):
     uploadedAt: datetime | None = Field(default=None, description="영수증을 올린 시각 (UTC)")
     deductible: bool = Field(description="경비 인정 가능 여부")
     tier: DeductibilityTier = Field(description="경비 인정 판정: high/ambiguous/low")
-    tierLabel: str = Field(description="판정 한글 표기: 높음/애매함/어려움")
+    tierLabel: str = Field(description="판정 한글 표기: 높음/확인 필요/어려움")
     proofType: ProofType = Field(default="unknown", description="인식된 증빙 유형")
     proofTypeLabel: str = Field(default="확인 불가", description="증빙 유형 한글 표기")
     proofValid: bool | None = Field(default=None, description="증빙 적격 여부 (None=판단 불가)")
     missingFields: list[str] = Field(default_factory=list, description="빠진 정보 목록")
-    items: list[str] = Field(default_factory=list, description="품목")
+    items: list[ReceiptItem] = Field(default_factory=list, description="품목")
 
 
 class ExpenseListResponse(BaseModel):
@@ -83,6 +89,7 @@ class LawRef(BaseModel):
 class ExpenseAnalysisResponse(BaseModel):
     model_config = ConfigDict(title="영수증 판독·판단 과정")
     fields: list[AnalysisField]
+    items: list[ReceiptItem] = Field(default_factory=list, description="품목별 금액")
     steps: list[AnalysisStep]
     laws: list[LawRef] = Field(default_factory=list, description="관련 법령")
     lawNote: str | None = Field(default=None, description="개별 조문이 없는 항목의 안내")
@@ -97,6 +104,17 @@ class ExpenseCategoryUpdate(BaseModel):
     category: str = Field(description="사무용품 / 통신비 / 차량유지비 / 광고선전비 / 임차료 / 복리후생비 / 접대비 / 교육·도서 / 기타")
 
 
+class ExpenseVendorUpdate(BaseModel):
+    model_config = ConfigDict(title="상호 수정")
+    vendor: str = Field(min_length=1, max_length=200, description="OCR이 잘못 읽었거나 놓친 상호를 직접 입력")
+
+
+class ExpenseItemCreate(BaseModel):
+    model_config = ConfigDict(title="품목 추가")
+    name: str = Field(min_length=1, max_length=200, description="OCR이 읽지 못한 품목명을 직접 입력")
+    price: int | None = Field(default=None, ge=0, description="개별 금액(선택)")
+
+
 class DeductibilityResponse(BaseModel):
     model_config = ConfigDict(title="경비처리 가능성")
     deductible: bool = Field(description="인정 가능 여부")
@@ -105,7 +123,7 @@ class DeductibilityResponse(BaseModel):
     llmUsed: bool = Field(default=False, description="RAG/LLM 설명 여부")
     sources: list[str] = Field(default_factory=list, description="근거 문서 제목")
     tier: DeductibilityTier = Field(description="경비 인정 판정: high/ambiguous/low")
-    tierLabel: str = Field(description="판정 한글 표기: 높음/애매함/어려움")
+    tierLabel: str = Field(description="판정 한글 표기: 높음/확인 필요/어려움")
     proofType: ProofType = Field(default="unknown", description="인식된 증빙 유형")
     proofTypeLabel: str = Field(default="확인 불가", description="증빙 유형 한글 표기")
     proofValid: bool | None = Field(default=None, description="증빙 적격 여부 (None=판단 불가)")

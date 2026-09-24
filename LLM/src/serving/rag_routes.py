@@ -91,6 +91,7 @@ from src.serving.schemas import (
     RagReindexRequest,
     ReadyResponse,
     ReceiptExtractionResponse,
+    ReceiptItemResponse,
     SourceResponse,
 )
 from src.serving.errors import ApiError, upstream_http_exception
@@ -1107,7 +1108,8 @@ async def adapter_receipt_ocr(
 ) -> ReceiptExtractionResponse:
     """4 MiB 이하 영수증 이미지를 OCR로 읽고 LLM으로 정리한다.
 
-    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때만 Vision 입력으로 대신한다.
+    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때, 또는 OCR 글자로 날짜·상호·금액을 하나도
+    정리하지 못했을 때 Vision 입력으로 대신한다.
     """
     media_type = (image.content_type or "").casefold()
     if media_type not in SUPPORTED_RECEIPT_MEDIA_TYPES:
@@ -1137,10 +1139,13 @@ async def adapter_receipt_ocr(
 
     try:
         llm = rag_runtime.llm_factory()
+        generated = None
         if ocr is not None:
             generated = await extract_receipt_from_ocr(llm, ocr_text=ocr.as_prompt_text())
             source, confidence = "ocr_llm", round(ocr.mean_confidence, 1)
-        else:
+        # OCR 글자가 충분해 보여도 뜻 없는 글자뿐이면 LLM이 아무 값도 못 채운다.
+        # 날짜·상호·금액이 하나도 없으면 사진을 직접 보여 주는 Vision으로 한 번 더 읽는다.
+        if generated is None or not (generated.date or generated.vendor or generated.amount):
             image_data_url = (
                 f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
             )
@@ -1150,7 +1155,11 @@ async def adapter_receipt_ocr(
             date=generated.date,
             vendor=generated.vendor.strip() if generated.vendor else None,
             amount=generated.amount,
-            items=[item.strip() for item in generated.items if item.strip()],
+            items=[
+                ReceiptItemResponse(name=item.name.strip(), price=item.price)
+                for item in generated.items
+                if item.name.strip()
+            ],
             category=(
                 generated.category.strip() if generated.category else None
             ),

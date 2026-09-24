@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import ExcelJS from 'exceljs';
 import { api } from '../api.js';
 import { linkBtn } from '../utils.js';
 
@@ -17,7 +16,10 @@ const EXCEL_HEADERS = [
 ];
 
 // 지금 화면에 있는 지출 목록을 그대로 .xlsx 파일로 만든다. 서버를 거치지 않고 브라우저에서 바로 만든다.
+// exceljs는 용량이 커서 누르기 전까지 불러오지 않는다(정적 import면 이 페이지를 열기만 해도
+// 전체 번들에 실려 모두가 받게 된다). 실제로 다운로드 버튼을 눌렀을 때만 그 조각을 받아온다.
 async function downloadExpensesExcel(items) {
+  const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook();
   workbook.creator = '창업ON';
   workbook.created = new Date();
@@ -39,7 +41,7 @@ async function downloadExpensesExcel(items) {
       proofTypeLabel: it.proofTypeLabel,
       proofValidLabel: it.proofValid === true ? '적격' : it.proofValid === false ? '부적격' : '확인 필요',
       missingFields: (it.missingFields || []).join(', '),
-      items: (it.items || []).join(', '),
+      items: (it.items || []).map((i) => (i.price != null ? `${i.name}(${i.price.toLocaleString()}원)` : i.name)).join(', '),
     });
   });
 
@@ -74,14 +76,16 @@ async function downloadExpensesExcel(items) {
 const ANALYZE_STEPS = ['영수증 글자 읽기', '금액·상호·증빙 정리', '경비 인정 가능성 판단'];
 
 const EXP_JUDGE_CATS = ['사무용품', '통신비', '차량유지비', '광고선전비', '임차료', '복리후생비', '접대비', '교육·도서', '기타'];
-// 목록 카드는 폭이 좁아 서버가 주는 긴 tierLabel("애매함 (확인 필요)") 대신 짧은 표기를 쓴다.
-const TIER_SHORT_LABELS = { high: '높음', ambiguous: '애매함', low: '어려움' };
-// 카드 왼쪽 상태색 보더 + 필터 탭에 쓰는 클래스. high=인정 / ambiguous=애매 / low=불인정.
+// 목록 카드는 폭이 좁아 서버가 주는 긴 tierLabel 대신 짧은 표기를 쓴다.
+const TIER_SHORT_LABELS = { high: '높음', ambiguous: '확인 필요', low: '어려움' };
+// 카드의 상태 태그(경비 인정/확인 필요/어려움)에 쓰는 문구.
+const TIER_TAG_TEXT = { high: '경비 인정', ambiguous: '경비 확인 필요', low: '경비 인정 어려움' };
+// 카드 상태 태그 색상 + 필터 탭에 쓰는 클래스. high=인정 / ambiguous=확인 필요 / low=불인정.
 const TIER_CLASS = { high: 'ok', ambiguous: 'check', low: 'bad' };
 const TIER_TABS = [
   { key: 'all', label: '전체' },
   { key: 'high', label: '인정' },
-  { key: 'ambiguous', label: '애매' },
+  { key: 'ambiguous', label: '확인 필요' },
   { key: 'low', label: '불인정' },
 ];
 
@@ -103,11 +107,16 @@ function formatUploadedAt(iso) {
 const STEP_ICONS = { pass: '✔', warn: '!', fail: '✖', unknown: '?' };
 
 // 길어지기 쉬운 상세 내용을 제목 줄만 남기고 접었다 펼 수 있게 한다.
-function Fold({ title, hint, defaultOpen = false, children }) {
-  const [open, setOpen] = useState(defaultOpen);
+// open/onToggle을 주면(제어 모드) 펼침 상태를 부모가 들고 있어, 카드를 접었다 펴도
+// "이렇게 판단했어요" 같은 펼친 상태가 초기화되지 않고 그대로 유지된다.
+function Fold({ title, hint, defaultOpen = false, open: openProp, onToggle, children }) {
+  const [openState, setOpenState] = useState(defaultOpen);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : openState;
+  const toggle = () => (controlled ? onToggle && onToggle(!open) : setOpenState((v) => !v));
   return (
     <section className={'exp-fold' + (open ? ' is-open' : '')}>
-      <button type="button" className="exp-fold__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+      <button type="button" className="exp-fold__head" onClick={toggle} aria-expanded={open}>
         <span className="exp-fold__ttl">{title}</span>
         {hint && <span className="exp-fold__hint">{hint}</span>}
         <span className="exp-fold__chev" aria-hidden="true">{open ? '▴' : '▾'}</span>
@@ -117,8 +126,98 @@ function Fold({ title, hint, defaultOpen = false, children }) {
   );
 }
 
+// 필드 하나의 읽음 상태. 여러 필드를 합칠 때도 재사용한다.
+function fieldState(f) {
+  return f.read === false ? 'miss' : f.read ? 'ok' : 'unk';
+}
+// 여러 필드를 하나의 줄로 합칠 때: 하나라도 못 읽었으면 miss, 전부 읽었으면 ok, 그 외 unk.
+function comboState(fields) {
+  if (fields.some((f) => f.read === false)) return 'miss';
+  if (fields.every((f) => f.read)) return 'ok';
+  return 'unk';
+}
+const STATE_MARK = { miss: '✖', ok: '✔', unk: '?' };
+
 // 영수증에서 읽은 항목(원문 인용 포함). 못 읽은 항목은 빨간색으로 드러낸다.
-function ReceiptFields({ analysis }) {
+// 상호·거래일은 한 줄로(상호는 수정 가능), 품목·금액은 표로 묶어서 보여준다.
+function ReceiptFields({ analysis, expenseId, onUpdated }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [itemNameDraft, setItemNameDraft] = useState('');
+  const [itemPriceDraft, setItemPriceDraft] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+  const [addErr, setAddErr] = useState('');
+  const [delBusyIndex, setDelBusyIndex] = useState(-1);
+  const [delErr, setDelErr] = useState('');
+
+  const [vendorOpen, setVendorOpen] = useState(false);
+  const [vendorDraft, setVendorDraft] = useState('');
+  const [vendorBusy, setVendorBusy] = useState(false);
+  const [vendorErr, setVendorErr] = useState('');
+
+  const byKey = {};
+  analysis.fields.forEach((f) => { byKey[f.key] = f; });
+  const vendorField = byKey.vendor;
+  const dateField = byKey.date;
+  const amountField = byKey.amount;
+  const restFields = analysis.fields.filter((f) => !['vendor', 'date', 'amount', 'items'].includes(f.key));
+  const items = analysis.items || [];
+
+  const openVendorEdit = () => {
+    setVendorDraft((vendorField && vendorField.value) || '');
+    setVendorErr('');
+    setVendorOpen(true);
+  };
+  const submitVendor = async (e) => {
+    e.preventDefault();
+    const text = vendorDraft.trim();
+    if (!text || vendorBusy || !expenseId) return;
+    setVendorBusy(true);
+    setVendorErr('');
+    try {
+      const updated = await api.updateExpenseVendor(expenseId, text);
+      onUpdated && onUpdated(updated);
+      setVendorOpen(false);
+    } catch (e2) {
+      setVendorErr('상호를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setVendorBusy(false);
+    }
+  };
+
+  const submitItem = async (e) => {
+    e.preventDefault();
+    const name = itemNameDraft.trim();
+    if (!name || addBusy || !expenseId) return;
+    const priceNum = itemPriceDraft.trim() ? Number(itemPriceDraft.trim().replace(/[^0-9]/g, '')) : null;
+    setAddBusy(true);
+    setAddErr('');
+    try {
+      const updated = await api.addExpenseItem(expenseId, name, priceNum);
+      onUpdated && onUpdated(updated);
+      setItemNameDraft('');
+      setItemPriceDraft('');
+      setAddOpen(false);
+    } catch (e2) {
+      setAddErr('품목을 추가하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAddBusy(false);
+    }
+  };
+
+  const deleteItem = async (index) => {
+    if (delBusyIndex >= 0 || !expenseId) return;
+    setDelBusyIndex(index);
+    setDelErr('');
+    try {
+      const updated = await api.deleteExpenseItem(expenseId, index);
+      onUpdated && onUpdated(updated);
+    } catch (e2) {
+      setDelErr('품목을 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setDelBusyIndex(-1);
+    }
+  };
+
   return (
     <React.Fragment>
       {analysis.ocrSource === 'mock' && (
@@ -134,11 +233,129 @@ function ReceiptFields({ analysis }) {
         <p className="exp-ana__method"><b>Vision LLM</b> · OCR을 쓰지 못해 LLM이 이미지를 직접 읽었어요</p>
       )}
       <ul className="exp-ana__fields">
-        {analysis.fields.map((f) => {
-          const state = f.read === false ? 'miss' : f.read ? 'ok' : 'unk';
+        {vendorField && dateField && (
+          <li className={'exp-ana__field is-' + comboState([vendorField, dateField])}>
+            <span className="exp-ana__mark" aria-hidden="true">{STATE_MARK[comboState([vendorField, dateField])]}</span>
+            <span className="exp-ana__lbl">상호 · 거래일</span>
+            {vendorOpen ? (
+              <form className="exp-ana__val exp-ana__vendorform" onSubmit={submitVendor}>
+                <input
+                  type="text"
+                  value={vendorDraft}
+                  onChange={(e) => setVendorDraft(e.target.value)}
+                  placeholder="상호 입력"
+                  aria-label="상호 수정"
+                  autoFocus
+                  disabled={vendorBusy}
+                />
+                <button type="submit" disabled={vendorBusy || !vendorDraft.trim()}>저장</button>
+                <button type="button" onClick={() => setVendorOpen(false)} disabled={vendorBusy}>취소</button>
+                {vendorErr && <p className="cal__err">{vendorErr}</p>}
+              </form>
+            ) : (
+              <span className="exp-ana__val">
+                {vendorField.value || '상호 인식 못 함'} · {dateField.value || '거래일 인식 못 함'}
+                {expenseId && (
+                  <button type="button" className="exp-ana__editbtn" onClick={openVendorEdit}>✏️ 상호 수정</button>
+                )}
+              </span>
+            )}
+            {(vendorField.evidence || dateField.evidence) && (
+              <span className="exp-ana__quote" title="영수증에 인쇄된 원문">
+                영수증 원문 “{[vendorField.evidence, dateField.evidence].filter(Boolean).join(' / ')}”
+              </span>
+            )}
+          </li>
+        )}
+
+        {amountField && (
+          <li className={'exp-ana__field exp-ana__field--items is-' + fieldState(amountField)}>
+            <span className="exp-ana__mark" aria-hidden="true">{STATE_MARK[fieldState(amountField)]}</span>
+            <span className="exp-ana__lbl">품목 · 금액</span>
+            <div className="exp-ana__val">
+              {items.length > 0 ? (
+                <table className="exp-ana__itemtable">
+                  <thead>
+                    <tr><th>품목</th><th>금액</th>{expenseId && <th className="exp-ana__itemtable-delcol" aria-hidden="true" />}</tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, i) => (
+                      <tr key={i}>
+                        <td>{it.name}</td>
+                        <td className="u-num">{it.price != null ? `${it.price.toLocaleString()}원` : '-'}</td>
+                        {expenseId && (
+                          <td className="exp-ana__itemtable-delcol">
+                            <button
+                              type="button"
+                              className="exp-ana__itemdel"
+                              onClick={() => deleteItem(i)}
+                              disabled={delBusyIndex >= 0}
+                              aria-label={`${it.name} 품목 삭제`}
+                              title="품목 삭제"
+                            >
+                              {delBusyIndex === i ? '…' : '×'}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <span>품목 인식 못 함</span>
+              )}
+              <div className="exp-ana__itemtotal">
+                합계 <b>{amountField.value || '인식 못 함'}</b>
+              </div>
+              {delErr && <p className="cal__err">{delErr}</p>}
+              {expenseId && (addOpen ? (
+                <form className="exp-ana__itemform" onSubmit={submitItem}>
+                  <input
+                    type="text"
+                    className="exp-ana__itemform-name"
+                    value={itemNameDraft}
+                    onChange={(e) => setItemNameDraft(e.target.value)}
+                    placeholder="OCR이 놓친 품목명"
+                    aria-label="빠진 품목명 입력"
+                    autoFocus
+                    disabled={addBusy}
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="exp-ana__itemform-price"
+                    value={itemPriceDraft}
+                    onChange={(e) => setItemPriceDraft(e.target.value)}
+                    placeholder="금액(선택)"
+                    aria-label="품목 금액 입력"
+                    disabled={addBusy}
+                  />
+                  <button type="submit" className="exp-ana__itemform-submit" disabled={addBusy || !itemNameDraft.trim()} aria-label="품목 추가">
+                    {addBusy ? '…' : '추가'}
+                  </button>
+                  <button
+                    type="button"
+                    className="exp-ana__itemform-cancel"
+                    onClick={() => { setAddOpen(false); setItemNameDraft(''); setItemPriceDraft(''); setAddErr(''); }}
+                    disabled={addBusy}
+                    aria-label="품목 추가 취소"
+                  >
+                    취소
+                  </button>
+                </form>
+              ) : (
+                <button type="button" className="exp-ana__itemadd" onClick={() => setAddOpen(true)}>+ 품목 추가</button>
+              ))}
+              {addErr && <p className="cal__err">{addErr}</p>}
+            </div>
+          </li>
+        )}
+
+        {restFields.map((f) => {
+          const state = fieldState(f);
           return (
             <li key={f.key} className={'exp-ana__field is-' + state}>
-              <span className="exp-ana__mark" aria-hidden="true">{state === 'miss' ? '✖' : state === 'ok' ? '✔' : '?'}</span>
+              <span className="exp-ana__mark" aria-hidden="true">{STATE_MARK[state]}</span>
               <span className="exp-ana__lbl">{f.label}</span>
               <span className="exp-ana__val">
                 {f.value || '인식 못 함'}
@@ -210,6 +427,8 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
   const [catBusy, setCatBusy] = useState(false);
   const [catErr, setCatErr] = useState('');
   const [catOpen, setCatOpen] = useState(false);
+  // 카드를 접었다 펴도 "읽은 내용/판단/법령" 펼침 상태가 그대로 유지되도록 카드 레벨에서 들고 있는다.
+  const [foldOpen, setFoldOpen] = useState({ read: false, judge: false, law: false });
   const catListRef = React.useRef(null);
   const catWrapRef = React.useRef(null);
 
@@ -321,92 +540,85 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
   const uploadedLabel = formatUploadedAt(item.uploadedAt);
 
   return (
-    <li className={'exp-card exp-card--' + tierCls}>
-      <div className="exp-card__main">
+    <li className="exp-row">
+      <div className="exp-row__main">
         <button
           type="button"
-          className="exp-card__thumb"
+          className="exp-row__thumb"
           onClick={() => imgUrl && setZoom(true)}
           disabled={!imgUrl}
           aria-label="영수증 원본 크게 보기"
         >
           {imgUrl ? (
-            <React.Fragment>
-              <img src={imgUrl} alt={`${item.vendor} 영수증`} />
-              <span className="exp-card__zoomhint" aria-hidden="true">🔍 크게 보기</span>
-            </React.Fragment>
+            <img src={imgUrl} alt={`${item.vendor} 영수증`} />
           ) : (
-            <span className="exp-card__thumb-ph">
-              🧾
-              <small>원본 없음</small>
-            </span>
+            <span className="exp-row__thumb-ph" aria-hidden="true">📄</span>
           )}
         </button>
 
-        <div className="exp-card__info">
-          <button type="button" className="exp-card__head" onClick={openDetail} aria-expanded={open}>
-            <span className="exp-card__title">
-              <span className="exp-card__vendor">{item.vendor}</span>
-              {uploadedLabel && (
-                <span className="exp-card__uploaded" title="영수증을 올린 시각">
-                  🕒 {uploadedLabel} 업로드
-                </span>
-              )}
-            </span>
-            <span className="exp-card__right">
-              <span className="u-num exp-card__amount">{item.amount.toLocaleString()}원</span>
-              <span className={'exp-ded exp-ded--' + tierCls} title={item.tierLabel}>
-                경비 인정 {TIER_SHORT_LABELS[item.tier] || item.tierLabel}
-              </span>
-            </span>
-          </button>
-          <div className="exp-card__catrow">
-            <span className="exp-card__catlabel">지출항목</span>
+        <div className="exp-row__body">
+          <div className="exp-row__top">
+            <span className="exp-row__vendor">{item.vendor}</span>
+            <span className="u-num exp-row__amount">{item.amount.toLocaleString()}원</span>
           </div>
-          <div className="exp-dd" ref={catWrapRef}>
-            <button
-              type="button"
-              className={'exp-dd__btn' + (catOpen ? ' is-open' : '')}
-              onClick={() => setCatOpen((v) => !v)}
-              disabled={catBusy}
-              aria-haspopup="listbox"
-              aria-expanded={catOpen}
-              aria-label={`지출항목: ${item.category}. 눌러서 바꾸기`}
-            >
-              <span>{item.category}</span>
-              <span className="exp-dd__chev" aria-hidden="true">{catOpen ? '▴' : '▾'}</span>
-            </button>
-            {catOpen && (
-              <div className="exp-dd__list" role="listbox" aria-label="지출항목" ref={catListRef}>
-                {EXP_JUDGE_CATS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    role="option"
-                    aria-selected={item.category === c}
-                    className={'exp-dd__opt' + (item.category === c ? ' is-on' : '')}
-                    onClick={() => changeCategory(c)}
-                  >
-                    {c}
-                    {item.category === c && <span aria-hidden="true">✔</span>}
-                  </button>
-                ))}
-              </div>
-            )}
+
+          <div className="exp-row__meta">
+            {uploadedLabel && <span title="영수증을 올린 시각">{uploadedLabel} 업로드</span>}
+            <span className="exp-row__dot" aria-hidden="true">·</span>
+            <div className="exp-dd exp-dd--flat" ref={catWrapRef}>
+              <button
+                type="button"
+                className={'exp-row__cat' + (catOpen ? ' is-open' : '')}
+                onClick={() => setCatOpen((v) => !v)}
+                disabled={catBusy}
+                aria-haspopup="listbox"
+                aria-expanded={catOpen}
+                aria-label={`지출항목: ${item.category}. 눌러서 바꾸기`}
+              >
+                {item.category}
+                <span className="exp-dd__chev" aria-hidden="true">{catOpen ? '▴' : '▾'}</span>
+              </button>
+              {catOpen && (
+                <div className="exp-dd__list" role="listbox" aria-label="지출항목" ref={catListRef}>
+                  {EXP_JUDGE_CATS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      role="option"
+                      aria-selected={item.category === c}
+                      className={'exp-dd__opt' + (item.category === c ? ' is-on' : '')}
+                      onClick={() => changeCategory(c)}
+                    >
+                      {c}
+                      {item.category === c && <span aria-hidden="true">✔</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           {catBusy && <p className="exp-card__busy" role="status">지출항목을 바꾸고 판정을 다시 계산하고 있어요…</p>}
           {catErr && <p className="cal__err">{catErr}</p>}
-          <div className="exp-card__tags">
-            <span className="exp-cat">{item.proofTypeLabel}</span>
-            {item.proofValid === false && <span className="exp-cat exp-cat--warn">증빙 부적격</span>}
-            {item.proofValid === null && <span className="exp-cat exp-cat--warn">증빙 확인 필요</span>}
+
+          <div className="exp-row__tags">
+            <span className={'exp-row__tag exp-row__tag--' + tierCls}>
+              {TIER_TAG_TEXT[item.tier] || item.tierLabel}
+            </span>
+            <span className="exp-row__tag">{item.proofTypeLabel}</span>
+            {item.proofValid === false && <span className="exp-row__tag exp-row__tag--warn">증빙 부적격</span>}
+            {item.proofValid === null && <span className="exp-row__tag exp-row__tag--warn">증빙 확인 필요</span>}
             {(item.missingFields || []).map((m) => (
-              <span key={m} className="exp-cat exp-cat--warn">빠짐: {m}</span>
+              <span key={m} className="exp-row__tag exp-row__tag--warn">빠짐: {m}</span>
             ))}
           </div>
-          <button type="button" className="exp-card__toggle" onClick={openDetail} aria-expanded={open}>
-            {open ? '상세 접기 ▴' : '판독·판단·법령 상세 보기 ▾'}
-          </button>
+
+          <div className="exp-row__actions">
+            <button type="button" className="exp-row__link" onClick={openDetail} aria-expanded={open}>
+              {open ? '상세 접기' : '판독·판단·법령 상세보기'}
+            </button>
+            <span className="exp-row__sep" aria-hidden="true">|</span>
+            <button type="button" className="exp-row__link exp-row__link--danger" onClick={remove}>삭제</button>
+          </div>
         </div>
       </div>
 
@@ -434,13 +646,25 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
               <Fold
                 title="📖 영수증에서 읽은 내용"
                 hint={`${analysis.fields.filter((f) => f.read).length}/${analysis.fields.length}개 인식`}
+                open={foldOpen.read}
+                onToggle={(v) => setFoldOpen((f) => ({ ...f, read: v }))}
               >
-                <ReceiptFields analysis={analysis} />
+                <ReceiptFields analysis={analysis} expenseId={item.expenseId} onUpdated={setAnalysis} />
               </Fold>
-              <Fold title="🧭 이렇게 판단했어요" hint={`종합 ${TIER_SHORT_LABELS[analysis.tier] || analysis.tierLabel}`}>
+              <Fold
+                title="🧭 이렇게 판단했어요"
+                hint={`종합 ${TIER_SHORT_LABELS[analysis.tier] || analysis.tierLabel}`}
+                open={foldOpen.judge}
+                onToggle={(v) => setFoldOpen((f) => ({ ...f, judge: v }))}
+              >
                 <ReceiptSteps analysis={analysis} />
               </Fold>
-              <Fold title="📚 세법 근거 · 관련 법령" hint={`법령 ${analysis.laws.length}건`}>
+              <Fold
+                title="📚 세법 근거 · 관련 법령"
+                hint={`법령 ${analysis.laws.length}건`}
+                open={foldOpen.law}
+                onToggle={(v) => setFoldOpen((f) => ({ ...f, law: v }))}
+              >
                 <LawList laws={analysis.laws} note={analysis.lawNote} />
                 <h4 className="exp-ana__ttl">AI가 찾은 세법 자료</h4>
                 {busy && <p className="ai__hint">관련 세법 자료를 찾고 있어요…</p>}
@@ -459,9 +683,6 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
               </Fold>
             </React.Fragment>
           )}
-          <button type="button" style={{ ...linkBtn, marginTop: 10, color: 'var(--red)' }} onClick={remove}>
-            이 영수증 삭제
-          </button>
         </div>
       )}
     </li>
@@ -682,7 +903,7 @@ export function ExpenseTracker({ user, onRequireLogin }) {
                         <span className="exp-stat__num">{highCount}건</span>
                       </div>
                       <div className="exp-stat exp-stat--check">
-                        <span className="exp-stat__lbl">애매함</span>
+                        <span className="exp-stat__lbl">확인 필요</span>
                         <span className="exp-stat__num">{ambiguousCount}건</span>
                       </div>
                       <div className="exp-stat exp-stat--bad">
