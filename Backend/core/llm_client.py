@@ -154,12 +154,18 @@ def explain_expense(
     category: str,
     vendor: str,
     amount: int,
-    items: list[str] | None = None,
+    items: list | None = None,
 ) -> dict | None:
     """`POST /rag/deductibility`. 인덱스 미준비 시 409가 오고 None으로 떨어진다."""
     normalized_category = (category or "").strip() or "미분류"
     normalized_vendor = (vendor or "").strip() or "상호 미상"
-    normalized_items = [item.strip() for item in items or [] if item.strip()]
+    # items는 {name, price} 딕셔너리(신규)와 문자열(마이그레이션 전 데이터)이 섞여 올 수 있다.
+    normalized_items = [
+        name
+        for item in (items or [])
+        for name in [(item.get("name") if isinstance(item, dict) else str(item or "")).strip()]
+        if name
+    ]
     spec = _post(
         "/rag/deductibility",
         {

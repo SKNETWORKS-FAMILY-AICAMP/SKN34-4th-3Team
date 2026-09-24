@@ -1,5 +1,6 @@
 """Django Ninja 라우팅·인증·검증의 HTTP 계약 (DB 없이 repo를 대역으로)."""
 
+import base64
 import os
 import unittest
 from unittest.mock import MagicMock, patch
@@ -50,8 +51,14 @@ class AuthTest(unittest.TestCase):
         self.assertEqual(res.status_code, 403)
 
 
+# 실제 PNG·JPEG 파일의 첫 바이트(매직 바이트). 업로드 시 Content-Type 헤더가 아니라
+# 이 바이트로 형식을 판별하므로(스푸핑 방지), 업로드 성공 테스트는 진짜 이미지 바이트를 써야 한다.
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"
+
+
 class ReceiptUploadTest(unittest.TestCase):
-    def _post(self, content: bytes):
+    def _post(self, content: bytes, *, declared_content_type: str = "image/png", filename: str = "r.png"):
         repo = MagicMock()
         repo.get_user.return_value = {"id": 1, "status": "active"}
         create = MagicMock(return_value={"receiptId": 9, "status": "done"})
@@ -61,19 +68,53 @@ class ReceiptUploadTest(unittest.TestCase):
         ):
             res = client.post(
                 "/expenses/receipts",
-                FILES={"image": SimpleUploadedFile("r.png", content, content_type="image/png")},
+                FILES={
+                    "image": SimpleUploadedFile(
+                        filename, content, content_type=declared_content_type
+                    )
+                },
                 headers={"Authorization": f"Bearer {token}"},
             )
         return res, create
 
     def test_upload_passes_base64_and_mime(self):
-        res, create = self._post(b"abc")
+        content = _PNG_MAGIC + b"...rest-of-file..."
+        res, create = self._post(content)
         self.assertEqual(res.status_code, 200)
-        create.assert_called_once_with(1, "r.png", image_base64="YWJj", mime_type="image/png")
+        create.assert_called_once_with(
+            1,
+            "r.png",
+            image_base64=base64.b64encode(content).decode(),
+            mime_type="image/png",
+            image_bytes=content,
+        )
 
     def test_oversized_upload_is_413(self):
-        res, create = self._post(b"x" * (4 * 1024 * 1024 + 1))
+        res, create = self._post(_PNG_MAGIC + b"x" * (4 * 1024 * 1024 + 1))
         self.assertEqual(res.status_code, 413)
+        create.assert_not_called()
+
+    def test_real_media_type_is_used_even_if_content_type_header_lies(self):
+        # Content-Type 헤더는 "image/png"라고 주장하지만 실제 바이트는 JPEG다. 저장·응답에는
+        # 헤더가 아니라 실제 바이트로 판별한 형식(image/jpeg)이 쓰여야 한다.
+        content = _JPEG_MAGIC + b"...rest-of-file..."
+        res, create = self._post(content, declared_content_type="image/png")
+        self.assertEqual(res.status_code, 200)
+        create.assert_called_once_with(
+            1,
+            "r.png",
+            image_base64=base64.b64encode(content).decode(),
+            mime_type="image/jpeg",
+            image_bytes=content,
+        )
+
+    def test_non_image_upload_is_415(self):
+        # 헤더가 뭐라고 주장하든(HTML·스크립트가 든 파일에도 "image/jpeg"를 붙여 보낼 수 있다)
+        # 실제 바이트가 지원 형식(JPEG·PNG·WebP)이 아니면 저장하지 않고 거부한다.
+        res, create = self._post(
+            b"<script>alert(1)</script>", declared_content_type="image/jpeg"
+        )
+        self.assertEqual(res.status_code, 415)
         create.assert_not_called()
 
 
