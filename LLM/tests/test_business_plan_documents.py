@@ -20,7 +20,9 @@ from src.features.business_plan_documents import (
     BusinessPlanDocumentError, decode_template, inspect_template,
     render_default_hwpx, render_default_pdf, render_hwpx_form, render_pdf_form,
 )
-from src.features.business_plan_documents import _pdf_lines, _static_pdf_font_path
+from src.features.business_plan_documents import (
+    _paginate_expanded_pdf, _pdf_lines, _static_pdf_font_path,
+)
 from tests.django_client import DjangoTestClient
 from src.serving.rag_routes import adapter_business_plan_render
 from src.serving.schemas import BusinessPlanRenderRequest
@@ -67,6 +69,14 @@ def _static_pdf_with_schedule_table() -> bytes:
     return output.getvalue()
 
 
+def _text_position(document: pymupdf.Document, text: str) -> tuple[int, float]:
+    for index, page in enumerate(document):
+        matches = page.search_for(text)
+        if matches:
+            return index, matches[0].y0
+    raise AssertionError(f"PDF에 {text!r} 텍스트가 없습니다.")
+
+
 def test_static_pdf_schedule_table_is_a_separate_fillable_field() -> None:
     data = _static_pdf_with_schedule_table()
     names = inspect_template("pdf", data)
@@ -93,6 +103,41 @@ def test_static_pdf_table_accepts_structured_rows_with_empty_cells() -> None:
     assert "MVP build" in text
     assert "Implement product" in text
     assert "None" not in text
+
+
+def test_static_pdf_table_expands_row_for_long_cell() -> None:
+    data = _static_pdf_with_schedule_table()
+    table = next(name for name in inspect_template("pdf", data) if "[표: Activity" in name)
+    details = " ".join(f"detail{index}" for index in range(80))
+    value = json.dumps({"rows": [{
+        "Activity": "MVP build", "Period": None, "Details": details,
+    }]})
+
+    rendered = pymupdf.open(stream=render_pdf_form(data, {table: value}), filetype="pdf")
+
+    assert len(rendered) == 1
+    assert all(abs(page.rect.height - rendered[0].rect.height) < 1 for page in rendered)
+    text = " ".join(page.get_text() for page in rendered).replace("\xa0", " ")
+    assert "MVP build" in text and "detail0" in text and "detail79" in text
+    assert "작성 내용 이어짐" not in text
+    assert _text_position(rendered, "detail79") < _text_position(rendered, "2-2. Market strategy")
+
+
+def test_static_pdf_table_extends_beyond_original_rows() -> None:
+    data = _static_pdf_with_schedule_table()
+    table = next(name for name in inspect_template("pdf", data) if "[표: Activity" in name)
+    value = json.dumps({"rows": [
+        {"Activity": f"Step {index}", "Period": None, "Details": f"Detail {index}"}
+        for index in range(1, 4)
+    ]})
+
+    rendered = pymupdf.open(stream=render_pdf_form(data, {table: value}), filetype="pdf")
+
+    assert len(rendered) == 1
+    assert all(abs(page.rect.height - rendered[0].rect.height) < 1 for page in rendered)
+    text = " ".join(page.get_text() for page in rendered).replace("\xa0", " ")
+    assert all(f"Step {index}" in text and f"Detail {index}" in text for index in range(1, 4))
+    assert "작성 내용 이어짐" not in text
 
 
 def test_static_pdf_fills_profile_cells_and_removes_wrapped_guidance() -> None:
@@ -131,6 +176,17 @@ def test_static_pdf_fills_profile_cells_and_removes_wrapped_guidance() -> None:
     assert "교수 / 연구원" not in text
     assert "양식의 목차·표는 변경하지 않음" not in text
 
+    long_company = "Inventory Company " * 30 + "COMPANY_END"
+    continued = pymupdf.open(stream=render_pdf_form(raw, {
+        "기업명 [유형: metadata]": long_company,
+    }), filetype="pdf")
+    text = " ".join(page.get_text() for page in continued).replace("\xa0", " ")
+    assert len(continued) == 1
+    assert all(abs(page.rect.height - continued[0].rect.height) < 1 for page in continued)
+    assert "COMPANY_END" in text
+    assert "기업명" in text
+    assert "작성 내용 이어짐" not in text
+
 
 def test_static_pdf_detects_unshaded_fields_on_later_page_without_table_headers() -> None:
     document = pymupdf.open()
@@ -168,6 +224,23 @@ def test_static_pdf_detects_unshaded_fields_on_later_page_without_table_headers(
     assert "Example Corp" not in text
 
 
+def test_expanded_page_does_not_split_only_for_trailing_blank_space() -> None:
+    document = pymupdf.open()
+    page = document.new_page(width=595, height=920)
+    page.insert_text((60, 90), "1-1. Problem", fontsize=16)
+    page.insert_text((60, 420), "Problem details", fontsize=10)
+    page.insert_text((60, 500), "1-2. Purpose", fontsize=16)
+    page.insert_text((60, 700), "Purpose details", fontsize=10)
+    page.insert_text((295, 900), "1", fontsize=9)
+
+    paginated, _ = _paginate_expanded_pdf(document.tobytes(), [(595, 842)])
+    result = pymupdf.open(stream=paginated, filetype="pdf")
+
+    assert len(result) == 1
+    assert result[0].rect.height == 842
+    assert "Purpose details" in result[0].get_text()
+
+
 def test_static_pdf_uses_only_needed_bullet_markers() -> None:
     document = pymupdf.open()
     page = document.new_page()
@@ -178,6 +251,8 @@ def test_static_pdf_uses_only_needed_bullet_markers() -> None:
     for y, symbol, x in ((205, "○", 65), (236, "-", 82), (267, "-", 82),
                          (298, "○", 65), (329, "-", 82)):
         page.insert_text((x, y), symbol, fontname="Korean", fontsize=10)
+    page.insert_text((page.rect.width / 2 - 3, page.rect.height - 30), "1", fontsize=9)
+    document.subset_fonts()
     raw = document.tobytes(garbage=4, deflate=True)
     label = inspect_template("pdf", raw)[0]
     filled = pymupdf.open(stream=render_pdf_form(raw, {label: "A clear problem statement."}), filetype="pdf")
@@ -191,8 +266,10 @@ def test_static_pdf_uses_only_needed_bullet_markers() -> None:
     assert sum(line in {"○", "-"} for line in long_lines) == 1
     assert "plan orders" in " ".join(page.get_text() for page in filled_long).replace("\xa0", " ")
     sentences = (
-        "소상공인은 매장 운영과 고객 응대를 함께 처리하느라 재고를 지속적으로 확인하기 어렵다. "
-        "이로 인해 필요한 물품이 부족해 판매 기회를 놓치거나 재고가 과도하게 남을 수 있다. "
+        "소상공인은 매장 운영과 고객 응대를 함께 처리하느라\n"
+        "- 재고를 지속적으로 확인하기 어렵다. "
+        "이로 인해 필요한 물품이 부족해 판매 기회를 놓치거나 재고가 과도하게 남을 수\n"
+        "- 있다. "
         "이 서비스는 재고 부족을 알려 소상공인의 관리 부담을 줄인다."
     )
     grouped = pymupdf.open(stream=render_pdf_form(raw, {label: sentences}), filetype="pdf")
@@ -204,12 +281,19 @@ def test_static_pdf_uses_only_needed_bullet_markers() -> None:
     second_marker = next(line for line in grouped_lines if line["text"] == "-")
     assert first_text["rect"].y0 <= first_end["rect"].y0 < second_marker["rect"].y0
     assert second_marker["rect"].y0 <= second_text["rect"].y0
-    overflowing = " ".join(f"detail{i}" for i in range(300))
+    overflowing = " ".join(f"detail{i}" for i in range(500))
     continued = pymupdf.open(stream=render_pdf_form(raw, {label: overflowing}), filetype="pdf")
     assert len(continued) > 1
+    assert all(abs(page.rect.height - continued[0].rect.height) < 1 for page in continued)
     all_text = " ".join(page.get_text() for page in continued).replace("\xa0", " ")
-    assert "detail0" in all_text and "detail299" in all_text
-    assert "작성 내용 이어짐" in continued[1].get_text().replace("\xa0", " ")
+    assert "detail0" in all_text and "detail499" in all_text
+    assert "작성 내용 이어짐" not in all_text
+    for index in (0, 100, 499):
+        _text_position(continued, f"detail{index}")
+    for index, page in enumerate(continued, 1):
+        assert any(line["text"] == str(index) and line["rect"].y0 > page.rect.height - 70
+                   for line in _pdf_lines(page))
+    assert _text_position(continued, "detail499") < _text_position(continued, "1-2. Purpose")
     legacy_label = label.split(" [글머리표:", 1)[0]
     response = asyncio.run(adapter_business_plan_render(BusinessPlanRenderRequest(
         sections=[{"key": "section_1", "label": legacy_label,
@@ -219,6 +303,29 @@ def test_static_pdf_uses_only_needed_bullet_markers() -> None:
                                 "contentBase64": base64.b64encode(raw).decode()},
     ), None, None))
     assert response.fileName == "business-plan.pdf"
+
+
+def test_static_pdf_continues_long_text_without_bullet_markers() -> None:
+    document = pymupdf.open()
+    page = document.new_page()
+    page.insert_text((60, 90), "1-1. Item overview", fontsize=16)
+    page.insert_text((60, 250), "1-2. Differentiation", fontsize=16)
+    raw = document.tobytes(garbage=4, deflate=True)
+    label = inspect_template("pdf", raw)[0]
+    content = " ".join(f"detail{index}" for index in range(700))
+
+    rendered = pymupdf.open(stream=render_pdf_form(raw, {label: content}), filetype="pdf")
+
+    assert len(rendered) > 1
+    assert all(abs(page.rect.height - rendered[0].rect.height) < 1 for page in rendered)
+    original_page = rendered[0].get_text().replace("\xa0", " ")
+    all_text = " ".join(page.get_text() for page in rendered).replace("\xa0", " ")
+    assert "detail0" in original_page
+    assert "1-2. Differentiation" in all_text
+    assert "detail699" in all_text
+    assert "작성 내용 이어짐" not in all_text
+    assert _text_position(rendered, "detail699") < _text_position(rendered, "1-2. Differentiation")
+    assert len(re.findall(r"\bdetail\d+\b", all_text)) == 700
 
 
 def test_static_pdf_image_slot_receives_uploaded_png() -> None:
@@ -313,12 +420,18 @@ def test_pdf_form_leaves_missing_field_empty() -> None:
     assert filled.get_fields()["Problem"].get("/V") == ""
 
 
-def test_pdf_form_displays_korean_and_rejects_clipped_content() -> None:
+def test_pdf_form_displays_korean_and_continues_long_content() -> None:
     data = _pdf_form()
     filled = PdfReader(BytesIO(render_pdf_form(data, {"Problem": "고객의 재고 문제"})))
     assert "고객의 재고 문제" in filled.pages[0].extract_text()
-    with pytest.raises(BusinessPlanDocumentError, match="들어가지"):
-        render_pdf_form(data, {"Problem": "긴 사업 설명 " * 100})
+    long_content = "긴 사업 설명 " * 500
+    rendered = PdfReader(BytesIO(render_pdf_form(data, {"Problem": long_content})))
+    assert len(rendered.pages) > 1
+    assert all(abs(float(page.mediabox.height) - float(rendered.pages[0].mediabox.height)) < 1
+               for page in rendered.pages)
+    assert rendered.get_fields()["Problem"].get("/V") == long_content.strip()
+    assert all("작성 내용 이어짐" not in page.extract_text().replace("\xa0", " ")
+               for page in rendered.pages)
 
 
 def test_hwpx_form_keeps_original_content_and_leaves_missing_value_blank() -> None:

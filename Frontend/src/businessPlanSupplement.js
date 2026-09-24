@@ -60,7 +60,12 @@ export function reassessSupplementFields(fields, answers, choices, images = {}) 
 export function templateContext(fields, answers, choices = {}, editedKeys = []) {
   const details = fields.map((field) => {
     const choice = choices[field.field_id];
-    const supplied = Object.fromEntries((field.required_information || []).map((item) =>
+    const answerPrefix = `${field.field_id}:`;
+    const answerItems = Object.keys(answers).filter((key) => key.startsWith(answerPrefix))
+      .map((key) => key.slice(answerPrefix.length));
+    const items = new Set([...(field.required_information || []),
+      ...(field.missing_fields || []), ...answerItems]);
+    const supplied = Object.fromEntries([...items].map((item) =>
       [item, choice === 'no_information' || choice === 'not_applicable'
         ? '' : answers[`${field.field_id}:${item}`]?.trim() || ''])
       .filter(([, value]) => value || choice === 'no_information'));
