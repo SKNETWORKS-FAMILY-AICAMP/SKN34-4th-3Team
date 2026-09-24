@@ -612,13 +612,15 @@
   }
 
   /* ---- 지출관리 ---- */
-  /* 이 페이지만 인디고 계열 강조색을 쓴다(앱 기본 --blue와 별개로 .exp2 안에서만 적용). */
+  /* 색을 3가지로만 쓴다: 인디고(브랜드·기본 강조·확인 필요) / 초록(경비 인정) / 빨강(인정 어려움·경고).
+     회색 계열(ink·line·ground 등)은 색으로 세지 않는다. */
   .exp2 {
     --exp-accent: #4f46e5;
     --exp-accent-wash: rgba(79, 70, 229, 0.08);
     --exp-ok: #22c55e;
-    --exp-check: #f59e0b;
+    --exp-ok-wash: rgba(34, 197, 94, 0.14);
     --exp-bad: #ef4444;
+    --exp-bad-wash: rgba(239, 68, 68, 0.12);
     /* 전체 박스를 살짝 줄여서 웬만한 개수의 영수증은 스크롤 없이 다 보이게 한다. */
     padding: 18px 20px;
   }
@@ -704,7 +706,7 @@
     border: 0;
     border-radius: 8px;
     padding: 0 14px;
-    background: var(--blue);
+    background: var(--exp-accent);
     color: #fff;
     font-weight: 700;
     font-size: 12.5px;
@@ -720,34 +722,6 @@
     margin: 0;
     padding: 0;
   }
-  .exp-cat {
-    font-size: 11px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: var(--ground);
-    border: 1px solid var(--line);
-    color: var(--ink-soft);
-  }
-  .exp-ded {
-    align-self: flex-end;
-    font-size: 11px;
-    font-weight: 700;
-    white-space: nowrap;
-    padding: 3px 9px;
-    border-radius: 999px;
-  }
-  .exp-ded--ok {
-    color: #16833f;
-    background: rgba(34, 197, 94, 0.14);
-  }
-  .exp-ded--check {
-    color: #b45309;
-    background: rgba(245, 158, 11, 0.15);
-  }
-  .exp-ded--bad {
-    color: #b91c1c;
-    background: rgba(239, 68, 68, 0.13);
-  }
   .exp-excel {
     display: inline-flex;
     align-items: center;
@@ -756,23 +730,23 @@
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--card, transparent);
-    color: var(--green);
+    color: var(--exp-ok);
     font: inherit;
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
   }
   .exp-excel:hover {
-    border-color: var(--green);
-    background: color-mix(in srgb, var(--green) 10%, transparent);
+    border-color: var(--exp-ok);
+    background: var(--exp-ok-wash);
   }
   .exp-upload {
     border: 1px dashed var(--line-strong);
     border-radius: 10px;
     padding: 12px;
     width: 100%;
-    background: var(--blue-wash);
-    color: var(--blue-deep);
+    background: var(--exp-accent-wash);
+    color: var(--exp-accent);
     font-weight: 700;
     font-size: 13px;
     cursor: pointer;
@@ -825,7 +799,7 @@
     color: var(--ink);
   }
   .exp-stat--ok .exp-stat__num { color: var(--exp-ok); }
-  .exp-stat--check .exp-stat__num { color: var(--exp-check); }
+  .exp-stat--check .exp-stat__num { color: var(--exp-accent); }
   .exp-stat--bad .exp-stat__num { color: var(--exp-bad); }
   .exp-stat--accent .exp-stat__num { color: var(--exp-accent); }
   @media (max-width: 640px) {
@@ -1013,7 +987,7 @@
     border: 1px solid var(--line);
     border-radius: 20px;
     background: var(--surface-solid);
-    box-shadow: 0 18px 50px rgba(47, 123, 240, 0.12);
+    box-shadow: 0 18px 50px rgba(79, 70, 229, 0.14);
     animation: expAiIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   .exp-ai__glow {
@@ -1029,13 +1003,13 @@
   .exp-ai__glow--a {
     top: -100px;
     left: calc(50% - 190px);
-    background: radial-gradient(closest-side, #5c9dff, transparent);
+    background: radial-gradient(closest-side, var(--exp-accent), transparent);
     animation: expAiDrift 6s ease-in-out infinite alternate;
   }
   .exp-ai__glow--b {
     top: -80px;
     left: calc(50% - 30px);
-    background: radial-gradient(closest-side, #a78bfa, transparent);
+    background: radial-gradient(closest-side, var(--exp-accent), transparent);
     animation: expAiDrift 7s ease-in-out infinite alternate-reverse;
   }
   /* 작은 로딩 아이콘: 회전하는 그라데이션 링 + 숨 쉬는 중심 */
@@ -1049,13 +1023,13 @@
     inset: 0;
     border-radius: 50%;
     overflow: hidden;
-    box-shadow: 0 6px 18px rgba(92, 157, 255, 0.4);
+    box-shadow: 0 6px 18px rgba(79, 70, 229, 0.4);
   }
   .exp-ai__orb-ring::before {
     content: '';
     position: absolute;
     inset: -60%;
-    background: conic-gradient(from 0deg, #5c9dff, #a78bfa, #34d399, #5c9dff);
+    background: conic-gradient(from 0deg, var(--exp-accent), #818cf8, var(--exp-accent));
     animation: expAiSpin 1.6s linear infinite;
   }
   .exp-ai__orb-ring::after {
@@ -1069,7 +1043,7 @@
     position: absolute;
     inset: 15px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #5c9dff, #a78bfa);
+    background: linear-gradient(135deg, var(--exp-accent), #818cf8);
     animation: expAiBreathe 1.6s ease-in-out infinite;
   }
   .exp-ai__text {
@@ -1125,12 +1099,12 @@
   }
   .exp-ai__steps li.is-active .exp-ai__dot {
     border-color: var(--line);
-    border-top-color: var(--blue);
+    border-top-color: var(--exp-accent);
     animation: expAiSpin 0.8s linear infinite;
   }
   .exp-ai__steps li.is-done .exp-ai__dot {
     border-color: transparent;
-    background: linear-gradient(135deg, #5c9dff, #34d399);
+    background: var(--exp-ok);
   }
   .exp-ai__steps li.is-done .exp-ai__dot::after {
     content: '';
@@ -1168,181 +1142,129 @@
     }
   }
   .exp-list--cards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-  .exp-card {
-    /* flex 항목은 기본적으로 내용 최소 너비만큼 늘어날 수 있어, 안에 긴 내용(표·법령
-       텍스트 등)이 있는 섹션을 펼치면 카드 폭이 그때만 넓어져 보였다. 0으로 고정해
-       어떤 섹션을 펼쳐도 카드 폭이 항상 같게 한다. */
-    min-width: 0;
+
+  /* ---- 영수증 목록: 다른 패널(.tool__panel, .exp2__main)과 같은 톤의 테두리 카드 ---- */
+  .exp-row {
+    padding: 14px;
     border: 1px solid var(--line);
-    border-left: 4px solid var(--line-strong);
     border-radius: 12px;
-    padding: 10px;
     background: var(--ground);
   }
-  .exp-card--ok { border-left-color: #22c55e; }
-  .exp-card--check { border-left-color: #f59e0b; }
-  .exp-card--bad { border-left-color: #ef4444; }
-  .exp-card__main {
+  .exp-row__main {
     display: flex;
     gap: 14px;
-    align-items: flex-start;
+    /* stretch: 사진이 옆 텍스트 영역과 같은 높이로 늘어난다(카드 높이에 맞춤). */
+    align-items: stretch;
   }
-  .exp-card__thumb {
-    position: relative;
-    width: 88px;
-    height: 110px;
+  .exp-row__thumb {
     flex: none;
+    width: 64px;
+    height: auto;
     padding: 0;
-    border-radius: 8px;
+    border: none;
+    border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--line-strong);
-    background: var(--card, #fff);
+    background: var(--ground);
     cursor: zoom-in;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .exp-card__thumb:disabled {
+  .exp-row__thumb:disabled {
     cursor: default;
   }
-  .exp-card__thumb img {
+  .exp-row__thumb img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     object-position: top center;
   }
-  .exp-card__zoomhint {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 4px 0;
-    font-size: 10.5px;
-    font-weight: 700;
-    text-align: center;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.55);
-  }
-  .exp-card__thumb-ph {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    font-size: 26px;
+  .exp-row__thumb-ph {
+    font-size: 18px;
     opacity: 0.45;
   }
-  .exp-card__thumb-ph small {
-    font-size: 10.5px;
-  }
-  .exp-card__info {
+  .exp-row__body {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 6px;
   }
-  .exp-card__head {
+  .exp-row__top {
     display: flex;
+    align-items: baseline;
     justify-content: space-between;
-    align-items: flex-start;
     gap: 10px;
-    width: 100%;
-    border: 0;
-    background: transparent;
-    padding: 0;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    text-align: left;
   }
-  .exp-card__title {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+  .exp-row__vendor {
     min-width: 0;
-  }
-  .exp-card__vendor {
-    min-width: 0;
-    max-width: 100%;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
+    color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .exp-card__right {
+  .exp-row__amount {
     flex: none;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 5px;
-  }
-  .exp-card__amount {
-    flex: none;
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 700;
-    white-space: nowrap;
+    color: var(--ink);
   }
-  .exp-card__uploaded {
-    font-size: 11.5px;
-    font-weight: 400;
-    color: var(--ink-faint);
-    white-space: nowrap;
-  }
-  .exp-card__catrow {
+  .exp-row__meta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-top: 2px;
-  }
-  .exp-card__catlabel {
+    gap: 5px;
     font-size: 12px;
-    font-weight: 700;
-    color: var(--ink-soft);
+    color: var(--ink-faint);
+  }
+  .exp-row__dot {
+    color: var(--ink-faint);
   }
   .exp-dd {
     position: relative;
-    width: 100%;
-    max-width: 260px;
+    display: inline-block;
   }
-  .exp-dd__btn {
-    display: flex;
+  .exp-row__cat {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: 10px;
-    background: var(--card, #fff);
-    color: var(--ink);
+    gap: 4px;
+    border: 1px solid var(--exp-accent);
+    border-radius: 999px;
+    background: var(--exp-accent-wash);
+    padding: 3px 10px 3px 11px;
+    color: var(--exp-accent);
     font: inherit;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 700;
     cursor: pointer;
   }
-  .exp-dd__btn:hover:not(:disabled),
-  .exp-dd__btn.is-open {
-    border-color: var(--blue);
+  .exp-row__cat:hover:not(:disabled),
+  .exp-row__cat.is-open {
+    background: var(--exp-accent);
+    color: #fff;
   }
-  .exp-dd__btn:disabled {
+  .exp-row__cat:disabled {
     opacity: 0.55;
     cursor: default;
   }
   .exp-dd__chev {
-    color: var(--ink-faint);
-    font-size: 11px;
+    color: inherit;
+    font-size: 10px;
   }
   .exp-dd__list {
     position: absolute;
     z-index: 20;
     top: calc(100% + 4px);
     left: 0;
-    right: 0;
+    width: 168px;
     max-height: 152px;
     overflow-y: scroll;
     border: 1px solid var(--line-strong);
@@ -1372,8 +1294,8 @@
   }
   .exp-dd__opt:hover,
   .exp-dd__opt.is-on {
-    background: var(--blue-wash);
-    color: var(--blue-deep);
+    background: var(--exp-accent-wash);
+    color: var(--exp-accent);
   }
   .exp-dd__opt.is-on {
     font-weight: 700;
@@ -1383,10 +1305,61 @@
     font-size: 11.5px;
     color: var(--ink-faint);
   }
-  .exp-card__tags {
+  .exp-row__tags {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
+  }
+  .exp-row__tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--ground);
+    color: var(--ink-soft);
+  }
+  .exp-row__tag--ok {
+    background: var(--exp-ok-wash);
+    color: #15803d;
+  }
+  .exp-row__tag--check {
+    background: var(--exp-accent-wash);
+    color: var(--exp-accent);
+  }
+  .exp-row__tag--bad {
+    background: var(--exp-bad-wash);
+    color: #b91c1c;
+  }
+  .exp-row__tag--warn {
+    background: transparent;
+    border: 1px solid var(--exp-bad);
+    color: var(--exp-bad);
+  }
+  .exp-row__actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+  }
+  .exp-row__link {
+    border: none;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--exp-accent);
+    cursor: pointer;
+  }
+  .exp-row__link:hover {
+    text-decoration: underline;
+  }
+  .exp-row__link--danger {
+    color: var(--exp-bad);
+  }
+  .exp-row__sep {
+    color: var(--line-strong);
+    font-size: 12px;
   }
   .exp-lightbox {
     position: fixed;
@@ -1419,59 +1392,12 @@
     font-size: 16px;
     cursor: pointer;
   }
-  @media (max-width: 520px) {
-    .exp-card__thumb {
-      width: 84px;
-      height: 108px;
-    }
-  }
-  .exp-cat--warn {
-    color: var(--red);
-    border-color: var(--red);
-    background: transparent;
-  }
   .exp-card__detail {
     margin-top: 10px;
     padding-top: 10px;
     border-top: 1px dashed var(--line-strong);
     font-size: 12.5px;
     color: var(--ink-soft);
-  }
-  .exp-card__actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 2px;
-  }
-  .exp-card__toggle {
-    align-self: flex-start;
-    padding: 5px 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--card, transparent);
-    color: var(--blue-deep);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .exp-card__delete {
-    flex: none;
-    padding: 5px 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--surface-solid);
-    color: var(--ink-faint);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  .exp-card__delete:hover {
-    border-color: var(--red);
-    color: var(--red);
-    background: color-mix(in srgb, var(--red) 8%, var(--surface-solid));
   }
   .exp-fold {
     border: 1px solid var(--line);
@@ -1525,7 +1451,7 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 8px;
-    color: var(--blue-deep);
+    color: var(--exp-accent);
     text-decoration: none;
   }
   .exp-law__item a:hover b {
@@ -1555,7 +1481,7 @@
     margin: 0 0 10px;
     padding: 8px 10px;
     border-radius: 8px;
-    background: var(--blue-wash);
+    background: var(--exp-accent-wash);
     color: var(--ink-soft);
     line-height: 1.5;
   }
@@ -1578,7 +1504,7 @@
     color: var(--ink-faint);
   }
   .exp-ana__method b {
-    color: var(--blue-deep);
+    color: var(--exp-accent);
   }
   .exp-ana__fields {
     list-style: none;
@@ -1599,14 +1525,14 @@
     background: var(--card, #fff);
   }
   .exp-ana__field.is-ok .exp-ana__mark {
-    color: var(--green);
+    color: var(--exp-ok);
   }
   .exp-ana__field.is-miss {
-    border-color: var(--red);
+    border-color: var(--exp-bad);
   }
   .exp-ana__field.is-miss .exp-ana__mark,
   .exp-ana__field.is-miss .exp-ana__val {
-    color: var(--red);
+    color: var(--exp-bad);
   }
   .exp-ana__field.is-unk .exp-ana__mark {
     color: var(--ink-faint);
@@ -1630,8 +1556,8 @@
   .exp-ana__quote {
     grid-column: 3;
     padding: 3px 8px;
-    border-left: 3px solid var(--blue);
-    background: var(--blue-wash);
+    border-left: 3px solid var(--exp-accent);
+    background: var(--exp-accent-wash);
     border-radius: 0 6px 6px 0;
     color: var(--ink-soft);
     font-size: 11.5px;
@@ -1658,8 +1584,9 @@
     color: var(--ink-faint);
     border-bottom: 1px solid var(--line);
   }
-  .exp-ana__itemtable th:last-child,
-  .exp-ana__itemtable td:last-child {
+  /* 금액은 항상 2번째 칸(품목 다음) — 삭제 버튼 칸이 있어도 :last-child에 기대지 않는다. */
+  .exp-ana__itemtable th:nth-child(2),
+  .exp-ana__itemtable td:nth-child(2) {
     text-align: right;
     padding-right: 0;
   }
@@ -1672,6 +1599,36 @@
   }
   .exp-ana__itemtable tr:last-child td {
     border-bottom: none;
+  }
+  /* 삭제 버튼 칸은 내용 폭만큼만 좁게 잡아, 품목·금액 칸을 넓게 유지한다. */
+  .exp-ana__itemtable-delcol {
+    width: 22px;
+    padding-left: 4px !important;
+    padding-right: 0 !important;
+    text-align: center !important;
+  }
+  .exp-ana__itemdel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    padding: 0;
+    background: transparent;
+    color: var(--ink-faint);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .exp-ana__itemdel:hover:not(:disabled) {
+    background: var(--exp-bad-wash);
+    color: var(--exp-bad);
+  }
+  .exp-ana__itemdel:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .exp-ana__itemtotal {
     font-size: 12.5px;
@@ -1692,33 +1649,20 @@
     cursor: pointer;
   }
   .exp-ana__itemadd:hover {
-    border-color: var(--blue);
-    color: var(--blue-deep);
+    border-color: var(--exp-accent);
+    color: var(--exp-accent);
   }
-  /* 좁은 카드 안에서도 품목명·금액이 뭉개지지 않게 각각 자기 줄을 쓴다. */
+  /* 품목 추가: 이름·금액·버튼을 한 줄로 — 라벨 없이 placeholder로만 안내해 폼을 짧게 유지한다. */
   .exp-ana__itemform {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 6px;
-    padding: 8px;
+    padding: 6px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: var(--ground);
   }
-  .exp-ana__itemform-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .exp-ana__itemform-lbl {
-    flex: none;
-    width: 42px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--ink-faint);
-  }
-  .exp-ana__itemform-row input {
-    flex: 1;
+  .exp-ana__itemform input {
     min-width: 0;
     padding: 6px 8px;
     border: 1px solid var(--line-strong);
@@ -1728,16 +1672,18 @@
     font: inherit;
     font-size: 12px;
   }
-  .exp-ana__itemform-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
+  .exp-ana__itemform-name {
+    flex: 1.4;
   }
-  .exp-ana__itemform-actions button {
+  .exp-ana__itemform-price {
+    flex: 1;
+  }
+  .exp-ana__itemform-submit,
+  .exp-ana__itemform-cancel {
     flex: none;
     border: 1px solid var(--line-strong);
     border-radius: 7px;
-    padding: 5px 12px;
+    padding: 6px 10px;
     background: var(--surface-solid);
     color: var(--ink-soft);
     font: inherit;
@@ -1745,14 +1691,24 @@
     font-weight: 600;
     cursor: pointer;
   }
-  .exp-ana__itemform-actions button[type='submit'] {
-    border-color: var(--blue);
+  .exp-ana__itemform-submit {
+    min-width: 40px;
+    border-color: var(--exp-accent);
     color: #fff;
-    background: var(--blue);
+    background: var(--exp-accent);
   }
-  .exp-ana__itemform-actions button:disabled {
+  .exp-ana__itemform-submit:disabled,
+  .exp-ana__itemform-cancel:disabled {
     opacity: 0.55;
     cursor: default;
+  }
+  @media (max-width: 420px) {
+    .exp-ana__itemform {
+      flex-wrap: wrap;
+    }
+    .exp-ana__itemform-name {
+      flex-basis: 100%;
+    }
   }
 
   /* ---- 지출관리: 상호 수정 ---- */
@@ -1760,7 +1716,7 @@
     margin-left: 8px;
     border: none;
     background: transparent;
-    color: var(--blue-deep);
+    color: var(--exp-accent);
     font: inherit;
     font-size: 11px;
     font-weight: 600;
@@ -1800,9 +1756,9 @@
     cursor: pointer;
   }
   .exp-ana__vendorform button[type='submit'] {
-    border-color: var(--blue);
+    border-color: var(--exp-accent);
     color: #fff;
-    background: var(--blue);
+    background: var(--exp-accent);
   }
   .exp-ana__vendorform button:disabled {
     opacity: 0.55;
@@ -1850,13 +1806,13 @@
     background: var(--ink-faint);
   }
   .exp-ana__step.is-pass .exp-ana__dot {
-    background: var(--green);
+    background: var(--exp-ok);
   }
   .exp-ana__step.is-warn .exp-ana__dot {
-    background: var(--amber);
+    background: var(--exp-accent);
   }
   .exp-ana__step.is-fail .exp-ana__dot {
-    background: var(--red);
+    background: var(--exp-bad);
   }
   .exp-ana__step b {
     color: var(--ink);

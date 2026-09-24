@@ -289,8 +289,11 @@ export const api = {
   deleteExpense: (expenseId, opt) => apiDelete(`/expenses/${expenseId}`, opt),
   expenseAnalysis: (expenseId, opt) => apiGet(`/expenses/${expenseId}/analysis`, opt),
   addExpenseItem: (expenseId, name, price, opt) => apiPost(`/expenses/${expenseId}/items`, { name, price }, opt),
+  deleteExpenseItem: (expenseId, itemIndex, opt) => apiDelete(`/expenses/${expenseId}/items/${itemIndex}`, opt),
   // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
   generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
+  // PDF에서 텍스트만 뽑아 오는 즉시 처리라 일반 업로드 수준의 시간이면 충분하다.
+  extractBizplanTemplateFile: (file, opt) => apiUpload('/bizplan/template-file', file, { fieldName: 'file', timeout: 30000, ...opt }),
   evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
   bizplanCoach: (body, opt) => apiPost('/bizplan/coach', body, { timeout: 45000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.

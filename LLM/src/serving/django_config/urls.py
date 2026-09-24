@@ -22,6 +22,7 @@ urlpatterns = [
     path("rag/business-plan", views.public_business_plan),
     path("rag/business-plan-coach", views.public_business_plan_coach),
     path("rag/business-plan-evaluate", views.public_business_plan_evaluate),
+    path("rag/business-plan-template-file", views.business_plan_template_file),
     path("ocr/receipt", views.receipt_ocr),
 ]
 

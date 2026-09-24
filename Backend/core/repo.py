@@ -371,6 +371,16 @@ def get_receipt_meta(receipt_id: int) -> dict | None:
     return db.fetchone("SELECT id, user_id, created_at FROM receipts WHERE id = ?", (receipt_id,))
 
 
+def get_receipt_metas(receipt_ids: list[int]) -> dict[int, dict]:
+    """get_extractions와 짝을 이루는 배치 조회. 목록 조회에서 영수증마다 따로 묻지 않는다."""
+    if not receipt_ids:
+        return {}
+    rows = db.fetchall(
+        "SELECT id, user_id, created_at FROM receipts WHERE id = ANY(?)", (list(receipt_ids),)
+    )
+    return {row["id"]: row for row in rows}
+
+
 def get_receipt_image(receipt_id: int) -> dict | None:
     return db.fetchone(
         "SELECT id, user_id, image_data, mime_type FROM receipts WHERE id = ?", (receipt_id,)
@@ -440,6 +450,17 @@ def get_receipt(receipt_id: int) -> dict | None:
 
 def get_extraction(receipt_id: int) -> dict | None:
     return db.fetchone("SELECT * FROM receipt_extractions WHERE receipt_id = ?", (receipt_id,))
+
+
+def get_extractions(receipt_ids: list[int]) -> dict[int, dict]:
+    """지출 목록처럼 여러 영수증을 한 번에 보여줄 때, receipt_id마다 따로 조회하지
+    않도록(N+1) 한 번의 쿼리로 묶어서 가져온다."""
+    if not receipt_ids:
+        return {}
+    rows = db.fetchall(
+        "SELECT * FROM receipt_extractions WHERE receipt_id = ANY(?)", (list(receipt_ids),)
+    )
+    return {row["receipt_id"]: row for row in rows}
 
 
 def update_extraction_items(receipt_id: int, items: list, read_meta: dict | None) -> None:

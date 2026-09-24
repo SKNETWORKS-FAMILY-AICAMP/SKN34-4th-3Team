@@ -24,6 +24,7 @@ ROUTES: tuple[tuple[str, str, type[BaseModel] | None, type[BaseModel]], ...] = (
     ("/rag/business-plan", "post", schemas.BusinessPlanRequest, schemas.BusinessPlanResponse),
     ("/rag/business-plan-coach", "post", schemas.BizplanCoachRequest, schemas.BizplanCoachResponse),
     ("/rag/business-plan-evaluate", "post", schemas.BusinessPlanEvaluateRequest, schemas.BusinessPlanEvaluateResponse),
+    ("/rag/business-plan-template-file", "post", None, schemas.BusinessPlanTemplateFileResponse),
     ("/ocr/receipt", "post", None, schemas.ReceiptExtractionResponse),
 )
 
@@ -57,6 +58,14 @@ def openapi_document() -> dict:
                 "content": {"multipart/form-data": {"schema": {
                     "type": "object", "required": ["image"],
                     "properties": {"image": {"type": "string", "format": "binary"}},
+                }}},
+            }
+        elif path == "/rag/business-plan-template-file":
+            operation["requestBody"] = {
+                "required": True,
+                "content": {"multipart/form-data": {"schema": {
+                    "type": "object", "required": ["file"],
+                    "properties": {"file": {"type": "string", "format": "binary"}},
                 }}},
             }
         _add_model(components, response_model)

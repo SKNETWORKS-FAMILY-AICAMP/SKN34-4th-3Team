@@ -288,3 +288,26 @@ async def receipt_ocr(request: HttpRequest) -> HttpResponse:
     except Exception:
         logger.exception("LLM OCR request failed")
         return _error(500)
+
+
+@csrf_exempt
+async def business_plan_template_file(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return _method_not_allowed("POST")
+    if request.content_type != "multipart/form-data":
+        return _error(415, "Content-Type must be multipart/form-data")
+    try:
+        upload = await sync_to_async(lambda: request.FILES.get("file"), thread_sensitive=True)()
+        if upload is None:
+            return _error(422, "body.file: Field required")
+        result = await rag_routes.adapter_business_plan_template_file(
+            _AsyncUploadedFile(upload), _runtime
+        )
+        return _json_result(result)
+    except RequestDataTooBig:
+        return _error(413)
+    except ApiError as exc:
+        return _error(exc.status_code, exc.detail)
+    except Exception:
+        logger.exception("LLM business plan template file request failed")
+        return _error(500)

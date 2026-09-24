@@ -144,12 +144,18 @@ def explain_expense(
     category: str,
     vendor: str,
     amount: int,
-    items: list[str] | None = None,
+    items: list | None = None,
 ) -> dict | None:
     """`POST /rag/deductibility`. 인덱스 미준비 시 409가 오고 None으로 떨어진다."""
     normalized_category = (category or "").strip() or "미분류"
     normalized_vendor = (vendor or "").strip() or "상호 미상"
-    normalized_items = [item.strip() for item in items or [] if item.strip()]
+    # items는 {name, price} 딕셔너리(신규)와 문자열(마이그레이션 전 데이터)이 섞여 올 수 있다.
+    normalized_items = [
+        name
+        for item in (items or [])
+        for name in [(item.get("name") if isinstance(item, dict) else str(item or "")).strip()]
+        if name
+    ]
     spec = _post(
         "/rag/deductibility",
         {
@@ -186,6 +192,20 @@ def evaluate_business_plan(fields: dict) -> dict | None:
 def bizplan_coach(fields: dict) -> dict | None:
     """`POST /rag/business-plan-coach`. 사업계획서 아이디어 어시스턴트에게 질문한다."""
     return _post("/rag/business-plan-coach", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def extract_business_plan_template(filename: str, file_base64: str, mime_type: str = "application/pdf") -> dict | None:
+    """`POST /rag/business-plan-template-file`. 공고 첨부 PDF 양식에서 텍스트만 추출한다(LLM 미사용, 즉시 응답)."""
+    if not file_base64:
+        return None
+    return _post_multipart(
+        "/rag/business-plan-template-file",
+        filename=filename,
+        image_base64=file_base64,
+        mime_type=mime_type,
+        timeout=LLM_TIMEOUT_OCR,
+        field_name="file",
+    )
 
 
 def summarize_announcement(raw_content: str, source: str | None = None) -> dict | None:
@@ -228,6 +248,7 @@ def _post_multipart(
     image_base64: str,
     mime_type: str,
     timeout: float,
+    field_name: str = "image",
 ) -> dict | None:
     try:
         raw = base64.b64decode(image_base64)
@@ -236,7 +257,7 @@ def _post_multipart(
     boundary = f"----skn34{uuid.uuid4().hex}"
     header = (
         f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="image"; filename="{filename}"\r\n'
+        f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'
         f"Content-Type: {mime_type or 'image/jpeg'}\r\n\r\n"
     ).encode("utf-8")
     footer = f"\r\n--{boundary}--\r\n".encode("ascii")

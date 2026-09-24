@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -76,6 +77,28 @@ def load_pdf_pages(
     if not page_documents:
         raise PdfTextNotFoundError(f"No extractable text in PDF: {file_name}")
     return page_documents
+
+
+def extract_pdf_text(data: bytes) -> str:
+    """사용자가 올린 PDF 원본 바이트에서 텍스트만 뽑아낸다.
+
+    load_pdf_pages와 달리 RAG 문서 catalog·정책 metadata와 무관하게, 요청 한 번에
+    끝나는 1회성 추출(예: 지원사업 공고 첨부 사업계획서 양식 읽기)에 쓴다.
+
+    Raises:
+        PdfDocumentError: PDF를 정상적으로 읽지 못했을 때.
+        PdfTextNotFoundError: 모든 페이지에서 텍스트를 추출하지 못했을 때.
+    """
+    try:
+        reader = PdfReader(BytesIO(data))
+        page_texts = [(page.extract_text() or "").strip() for page in reader.pages]
+    except (OSError, PdfReadError) as exc:
+        raise PdfDocumentError("Unable to read PDF") from exc
+
+    text = "\n\n".join(page_text for page_text in page_texts if page_text)
+    if not text.strip():
+        raise PdfTextNotFoundError("No extractable text in PDF")
+    return text
 
 
 def split_pdf_pages(

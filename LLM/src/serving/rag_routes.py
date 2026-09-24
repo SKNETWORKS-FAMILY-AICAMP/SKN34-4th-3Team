@@ -19,7 +19,7 @@ from src.data.postgres_repository import (
     DatabaseDataNotFoundError,
     get_user_profile as get_database_user_profile,
 )
-from src.features.document_processing import PdfDocumentError
+from src.features.document_processing import PdfDocumentError, extract_pdf_text
 from src.features.elasticsearch_indexing import reindex_postgres_to_elasticsearch
 from src.features.indexing import (
     load_or_build_document_index,
@@ -56,6 +56,7 @@ from src.serving.schemas import (
     BusinessPlanResponse,
     BusinessPlanSectionResponse,
     BusinessPlanSectionScoreResponse,
+    BusinessPlanTemplateFileResponse,
     BackendUserContext,
     DeductibilityRequest,
     DeductibilityResponse,
@@ -950,7 +951,8 @@ async def adapter_receipt_ocr(
 ) -> ReceiptExtractionResponse:
     """4 MiB 이하 영수증 이미지를 OCR로 읽고 LLM으로 정리한다.
 
-    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때만 Vision 입력으로 대신한다.
+    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때, 또는 OCR 글자로 날짜·상호·금액을 하나도
+    정리하지 못했을 때 Vision 입력으로 대신한다.
     """
     media_type = (image.content_type or "").casefold()
     if media_type not in SUPPORTED_RECEIPT_MEDIA_TYPES:
@@ -980,10 +982,13 @@ async def adapter_receipt_ocr(
 
     try:
         llm = rag_runtime.llm_factory()
+        generated = None
         if ocr is not None:
             generated = await extract_receipt_from_ocr(llm, ocr_text=ocr.as_prompt_text())
             source, confidence = "ocr_llm", round(ocr.mean_confidence, 1)
-        else:
+        # OCR 글자가 충분해 보여도 뜻 없는 글자뿐이면 LLM이 아무 값도 못 채운다.
+        # 날짜·상호·금액이 하나도 없으면 사진을 직접 보여 주는 Vision으로 한 번 더 읽는다.
+        if generated is None or not (generated.date or generated.vendor or generated.amount):
             image_data_url = (
                 f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
             )
@@ -1019,6 +1024,39 @@ async def adapter_receipt_ocr(
             exc,
             fallback_message="Receipt extraction failed.",
         ) from exc
+
+
+MAX_TEMPLATE_FILE_BYTES = 4 * 1024 * 1024
+SUPPORTED_TEMPLATE_MEDIA_TYPES = {"application/pdf"}
+# BusinessPlanRequest.templateText 필드 길이 제한과 맞춘다.
+MAX_TEMPLATE_TEXT_CHARACTERS = 6000
+
+
+async def adapter_business_plan_template_file(
+    file: AsyncUploadedFile,
+    rag_runtime: RagRuntime,
+) -> BusinessPlanTemplateFileResponse:
+    """4 MiB 이하 PDF(지원사업 공고 첨부 사업계획서 양식)에서 텍스트만 추출한다.
+
+    LLM을 부르지 않는 순수 텍스트 추출이라 즉시 응답한다. 추출된 텍스트는 프런트가
+    그대로 사업계획서 초안 생성 요청의 templateText로 보낸다.
+    """
+    _ = rag_runtime
+    media_type = (file.content_type or "").casefold()
+    if media_type not in SUPPORTED_TEMPLATE_MEDIA_TYPES:
+        raise ApiError(status_code=415, detail="template file must be a PDF")
+    raw_file = await file.read(MAX_TEMPLATE_FILE_BYTES + 1)
+    if not raw_file:
+        raise ApiError(status_code=422, detail="template file must not be empty")
+    if len(raw_file) > MAX_TEMPLATE_FILE_BYTES:
+        raise ApiError(status_code=413, detail="template file must not exceed 4 MiB")
+
+    try:
+        text = await asyncio.to_thread(extract_pdf_text, raw_file)
+    except PdfDocumentError as exc:
+        raise ApiError(status_code=422, detail="양식 PDF에서 글자를 읽지 못했어요.") from exc
+
+    return BusinessPlanTemplateFileResponse(templateText=text[:MAX_TEMPLATE_TEXT_CHARACTERS])
 
 
 async def _retrieve_tax_evidence(

@@ -25,6 +25,23 @@ router = Router(tags=["지출"], auth=user_auth)
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
 
 
+def _sniff_image_media_type(content: bytes) -> str | None:
+    """업로드된 바이트에서 실제 이미지 형식을 읽어 낸다.
+
+    Content-Type 헤더는 업로드하는 쪽이 원하는 값으로 마음대로 채울 수 있어(예: 실제로는
+    HTML·스크립트인 파일에 "image/jpeg"를 붙여 보낼 수 있다), 저장·조회 응답에 그 값을
+    그대로 쓰면 나중에 이 영수증 이미지를 열어 볼 때 브라우저가 그 값을 그대로 믿게
+    된다. 그래서 헤더는 무시하고 파일 내용 앞부분(매직 바이트)으로 형식을 직접 판별한다.
+    """
+    if content[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if content[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 @router.post("/receipts", response=ReceiptCreateResponse, summary="영수증 등록")
 def upload_receipt(
     request,
@@ -35,12 +52,15 @@ def upload_receipt(
     content = image.read()
     if len(content) > MAX_RECEIPT_BYTES:
         raise HttpError(413, "영수증 이미지는 4MB 이하여야 합니다.")
+    mime_type = _sniff_image_media_type(content)
+    if mime_type is None:
+        raise HttpError(415, "영수증 이미지는 JPEG, PNG, WebP만 지원합니다.")
     image_b64 = base64.b64encode(content).decode("ascii") if content else None
     return expense_service.create_receipt(
         request.auth["id"],
         filename,
         image_base64=image_b64,
-        mime_type=image.content_type or "image/jpeg",
+        mime_type=mime_type,
         image_bytes=content or None,
     )
 
@@ -127,6 +147,20 @@ def add_item(
 ):
     """OCR이 읽지 못한 품목을 사용자가 직접 추가하고, 갱신된 판독 결과를 돌려줍니다."""
     return expense_service.add_item(expense_id, request.auth["id"], body.name, body.price)
+
+
+@router.delete(
+    "/{expense_id}/items/{item_index}",
+    response=ExpenseAnalysisResponse,
+    summary="품목 삭제",
+)
+def delete_item(
+    request,
+    expense_id: int = Path(description="지출 ID"),
+    item_index: int = Path(description="화면에 보이는 품목 순서(0부터 시작)"),
+):
+    """품목을 지우고, 갱신된 판독 결과를 돌려줍니다."""
+    return expense_service.delete_item(expense_id, request.auth["id"], item_index)
 
 
 @router.patch(

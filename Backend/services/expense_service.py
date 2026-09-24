@@ -148,11 +148,13 @@ def _apply_rule(expense: dict, category: str) -> None:
     expense["deductible_basis"] = basis
 
 
-def _migrate_legacy(expense: dict) -> dict:
-    """예전 분류(식비·교통·경조사비 등)로 저장된 지출을 새 지출항목 규칙으로 다시 계산해 저장한다."""
-    if expense["category"] in CATEGORY_RULES:
-        return expense
-    extraction = repo.get_extraction(expense["receipt_id"]) or {}
+def _compute_legacy_migration(expense: dict, extraction: dict) -> dict:
+    """예전 분류(식비·교통·경조사비 등)를 새 지출항목 규칙으로 다시 계산한다.
+
+    DB는 건드리지 않는 순수 계산이다. 목록 조회(list_expenses)처럼 이미 배치로 가져온
+    extraction을 재사용해야 하는 곳과, 실제로 저장까지 하는 _migrate_legacy가 이 함수를
+    같이 쓴다.
+    """
     # 옛 "교통"·"경조사비"는 분류에 실패했을 때의 기본값이기도 해서, 상호·품목 키워드를 먼저 본다.
     category = _classify(
         extraction.get("vendor") or "", expense["amount"], None, list(extraction.get("items") or [])
@@ -166,15 +168,37 @@ def _migrate_legacy(expense: dict) -> dict:
     proof_valid = _check_proof(proof_type, expense["amount"])
     missing = _missing_fields(extraction.get("vendor"), extraction.get("date"), expense["amount"], proof_type)
     note = _proof_note(proof_valid, expense["amount"], proof_type)
+    return {
+        "category": category,
+        "deductible": deductible,
+        "deductible_confidence": confidence,
+        "deductible_basis": f"{basis} {note}" if note else basis,
+        "deductible_tier": _tier(deductible, confidence, proof_valid),
+        "proof_valid": proof_valid,
+        "missing_fields": missing,
+    }
+
+
+def _migrate_legacy(expense: dict) -> dict:
+    """예전 분류로 저장된 지출을 새 지출항목 규칙으로 다시 계산해 저장한다(단건 조회·수정 경로 전용).
+
+    영수증 하나를 직접 열거나 고칠 때만 쓴다. 목록 조회는 매번 여러 건을 쓰기까지 하면
+    느려지고 읽기 요청에 쓰기가 섞이므로, 대신 _compute_legacy_migration으로 계산만 하고
+    저장은 하지 않는다(list_expenses 참고).
+    """
+    if expense["category"] in CATEGORY_RULES:
+        return expense
+    extraction = repo.get_extraction(expense["receipt_id"]) or {}
+    fields = _compute_legacy_migration(expense, extraction)
     repo.update_expense(
         expense["id"],
-        category,
-        deductible,
-        confidence,
-        f"{basis} {note}" if note else basis,
-        _tier(deductible, confidence, proof_valid),
-        proof_valid,
-        missing,
+        fields["category"],
+        fields["deductible"],
+        fields["deductible_confidence"],
+        fields["deductible_basis"],
+        fields["deductible_tier"],
+        fields["proof_valid"],
+        fields["missing_fields"],
     )
     return repo.get_expense(expense["id"]) or expense
 
@@ -346,7 +370,19 @@ def list_expenses(
     from_date: date | None = None,
     to_date: date | None = None,
 ) -> list[dict]:
-    rows = [_migrate_legacy(e) for e in repo.list_expenses(user_id)]
+    rows = repo.list_expenses(user_id)
+    # 읽기 요청은 쓰기를 하지 않는다: 영수증마다 따로 묻지 않도록(N+1) 한 번에 배치로
+    # 가져오고, 예전 분류는 저장하지 않은 채 화면에 보여줄 값만 그 자리에서 계산한다.
+    # 실제로 새 분류로 저장하는 것은 그 지출을 직접 열거나 고칠 때(_migrate_legacy)다.
+    receipt_ids = [e["receipt_id"] for e in rows]
+    extractions = repo.get_extractions(receipt_ids)
+    receipt_metas = repo.get_receipt_metas(receipt_ids)
+    migrated_rows = []
+    for e in rows:
+        if e["category"] not in CATEGORY_RULES:
+            e = {**e, **_compute_legacy_migration(e, extractions.get(e["receipt_id"], {}))}
+        migrated_rows.append(e)
+    rows = migrated_rows
     if category:
         category = _normalize_category(category)
         rows = [e for e in rows if e["category"] == category]
@@ -356,8 +392,8 @@ def list_expenses(
         rows = [e for e in rows if e["date"] <= to_date]
     result = []
     for e in rows:
-        extraction = repo.get_extraction(e["receipt_id"]) or {}
-        uploaded_at = (repo.get_receipt_meta(e["receipt_id"]) or {}).get("created_at")
+        extraction = extractions.get(e["receipt_id"], {})
+        uploaded_at = receipt_metas.get(e["receipt_id"], {}).get("created_at")
         if uploaded_at is not None and uploaded_at.tzinfo is None:
             uploaded_at = uploaded_at.replace(tzinfo=timezone.utc)
         proof_type = extraction.get("proof_type") or "unknown"
@@ -587,6 +623,27 @@ def add_item(expense_id: int, user_id: int, name: str, price: int | None) -> dic
     meta = dict(extraction.get("read_meta") or {})
     read = dict(meta.get("read") or {})
     read["items"] = True
+    meta["read"] = read
+
+    repo.update_extraction_items(expense["receipt_id"], items, meta)
+    return analysis(expense_id, user_id)
+
+
+def delete_item(expense_id: int, user_id: int, item_index: int) -> dict:
+    """품목(OCR이 읽었든 직접 추가했든)을 화면에 보이는 순서 기준으로 지운다."""
+    expense = repo.get_expense(expense_id)
+    if not expense or expense["user_id"] != user_id:
+        raise HttpError(404, "지출을 찾을 수 없습니다.")
+
+    extraction = repo.get_extraction(expense["receipt_id"]) or {}
+    items = list(extraction.get("items") or [])
+    if item_index < 0 or item_index >= len(items):
+        raise HttpError(404, "해당 품목을 찾을 수 없습니다.")
+    del items[item_index]
+
+    meta = dict(extraction.get("read_meta") or {})
+    read = dict(meta.get("read") or {})
+    read["items"] = bool(items)
     meta["read"] = read
 
     repo.update_extraction_items(expense["receipt_id"], items, meta)

@@ -215,6 +215,12 @@ class LegalBasisResponse(BaseModel):
     llmUsed: bool
 
 
+class BusinessPlanTemplateFileResponse(BaseModel):
+    """업로드된 지원사업 공고 양식(PDF)에서 추출한 텍스트."""
+
+    templateText: str = Field(description="PDF에서 추출한 텍스트. BusinessPlanRequest.templateText로 그대로 쓴다.")
+
+
 class BusinessPlanRequest(BaseModel):
     """Backend가 전달하는 사업계획서 초안 생성 입력."""
 

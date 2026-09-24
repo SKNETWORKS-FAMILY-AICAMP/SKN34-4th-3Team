@@ -23,6 +23,11 @@ class BusinessPlanRequest(BaseModel):
     )
 
 
+class BusinessPlanTemplateFileResponse(BaseModel):
+    model_config = ConfigDict(title="공고 양식 파일 추출 결과")
+    templateText: str = Field(description="업로드한 PDF에서 추출한 텍스트. BusinessPlanRequest.templateText로 그대로 쓴다")
+
+
 class BusinessPlanSection(BaseModel):
     model_config = ConfigDict(title="사업계획서 항목")
     key: str = Field(description="항목 식별자(기본 모드: problem/solution/scaleUp/team)")

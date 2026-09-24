@@ -231,6 +231,10 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
   const [evaluating, setEvaluating] = useState(false);
   const [err, setErr] = useState('');
   const [savedNote, setSavedNote] = useState('');
+  const [templateFileBusy, setTemplateFileBusy] = useState(false);
+  const [templateFileName, setTemplateFileName] = useState('');
+  const [templateFileErr, setTemplateFileErr] = useState('');
+  const templateFileRef = useRef(null);
 
   // 로그인한 사용자의 임시저장 초안을 불러온다.
   useEffect(() => {
@@ -328,6 +332,38 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
     setTimeout(() => setSavedNote(''), 2000);
   };
 
+  const pickTemplateFile = () => templateFileRef.current && templateFileRef.current.click();
+
+  const onTemplateFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!userId) {
+      onRequireLogin && onRequireLogin();
+      return;
+    }
+    if (file.type !== 'application/pdf') {
+      setTemplateFileErr('PDF 파일만 올릴 수 있어요.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setTemplateFileErr('양식 파일은 4MB 이하여야 해요.');
+      return;
+    }
+    setTemplateFileBusy(true);
+    setTemplateFileErr('');
+    try {
+      const res = await api.extractBizplanTemplateFile(file);
+      setField('templateText', res.templateText);
+      setTemplateFileName(file.name);
+    } catch (e2) {
+      if (e2 && e2.status === 401) onRequireLogin && onRequireLogin();
+      else setTemplateFileErr('양식 PDF에서 글자를 읽지 못했어요. 직접 붙여넣어 주세요.');
+    } finally {
+      setTemplateFileBusy(false);
+    }
+  };
+
   const activeIdx = ALL_STEPS.findIndex((s) => s.key === active);
   const nextStep = ALL_STEPS[activeIdx + 1];
   const activeSection = plan && plan.sections && plan.sections.find((s) => s.key === active);
@@ -419,9 +455,23 @@ export function BusinessPlanPage({ user, onRequireLogin }) {
                   지원사업 공고 양식 (선택)
                   <em className="bp-field__sub">넣으면 그 양식에 맞춰 작성해요</em>
                 </span>
+                <input
+                  ref={templateFileRef}
+                  type="file"
+                  accept="application/pdf"
+                  style={{ display: 'none' }}
+                  onChange={onTemplateFile}
+                />
+                <button type="button" className="exp-upload" onClick={pickTemplateFile} disabled={templateFileBusy}>
+                  {templateFileBusy ? '양식 PDF에서 글자를 읽고 있어요…' : '📄 공고 양식 PDF 올리기'}
+                </button>
+                {templateFileName && !templateFileBusy && (
+                  <p className="bp-hint">"{templateFileName}"에서 읽은 내용을 아래에 채웠어요. 필요하면 직접 고쳐도 돼요.</p>
+                )}
+                {templateFileErr && <p className="cal__err">{templateFileErr}</p>}
                 <textarea rows={5} value={form.templateText}
-                  placeholder={'공고에 나온 사업계획서 항목 구성을 그대로 붙여넣으세요.\n예)\n1. 창업아이템 개요\n2. 개발 동기 및 목적\n3. 시장분석 및 경쟁력 확보방안\n4. 사업화 추진전략'}
-                  onChange={(e) => setField('templateText', e.target.value)} />
+                  placeholder={'PDF를 올리면 자동으로 채워져요. 직접 붙여넣어도 돼요.\n예)\n1. 창업아이템 개요\n2. 개발 동기 및 목적\n3. 시장분석 및 경쟁력 확보방안\n4. 사업화 추진전략'}
+                  onChange={(e) => { setField('templateText', e.target.value); setTemplateFileName(''); }} />
               </label>
               <p className="bp-hint">
                 {usingTemplate

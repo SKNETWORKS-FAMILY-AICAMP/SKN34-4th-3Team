@@ -1,4 +1,5 @@
-from ninja import Router
+from ninja import File, Router
+from ninja.files import UploadedFile
 
 from api.deps import user_auth
 from schemas.bizplan import (
@@ -8,6 +9,7 @@ from schemas.bizplan import (
     BusinessPlanEvaluateResponse,
     BusinessPlanRequest,
     BusinessPlanResponse,
+    BusinessPlanTemplateFileResponse,
 )
 from services import bizplan_service
 
@@ -30,3 +32,13 @@ def evaluate(request, body: BusinessPlanEvaluateRequest):
 def coach(request, body: BizplanCoachRequest):
     """작성 중인 사업계획서 내용을 참고해 아이디어 구체화를 돕습니다. 대화 기록은 저장하지 않습니다."""
     return bizplan_service.coach(body.model_dump())
+
+
+@router.post("/template-file", response=BusinessPlanTemplateFileResponse, summary="공고 양식 파일에서 텍스트 추출")
+def template_file(request, file: UploadedFile = File(..., description="지원사업 공고 첨부 사업계획서 양식(PDF)")):
+    """올린 PDF에서 텍스트만 뽑아 돌려줍니다. 이 텍스트를 그대로 /generate의 templateText로 보내면 됩니다."""
+    return bizplan_service.extract_template_file(
+        file.name or "template.pdf",
+        file.read(),
+        file.content_type or "application/pdf",
+    )
