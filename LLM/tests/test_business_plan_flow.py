@@ -155,6 +155,85 @@ def test_field_analysis_maps_user_facts_and_marks_missing_schedule() -> None:
     assert "저렴한 구독료와 주문 수수료" in model.last_prompt_text
 
 
+def test_field_analysis_batches_large_templates_with_original_field_ids() -> None:
+    from langchain_core.runnables import RunnableLambda
+
+    class BatchModel:
+        def __init__(self) -> None:
+            self.prompts = []
+
+        def with_structured_output(self, schema):
+            async def respond(prompt):
+                text = prompt.to_string()
+                self.prompts.append(text)
+                fields = []
+                for index in range(1, 18):
+                    if f"section_{index}: 항목 {index}" in text:
+                        fields.append({
+                            "field_id": f"section_{index}", "type": "text",
+                            "instruction": f"항목 {index}", "required_information": [],
+                            "status": "ready", "missing_fields": [],
+                            "missing_reason": "", "mapped_information": ["입력값"],
+                        })
+                return schema.model_validate({"fields": fields})
+
+            return RunnableLambda(respond)
+
+    model = BatchModel()
+    result = asyncio.run(analyze_business_plan_fields(
+        model, template_fields=[f"항목 {index}" for index in range(1, 18)],
+        user_information={"사업명": "입력값"},
+    ))
+    assert len(model.prompts) == 3
+    assert [field.field_id for field in result.fields] == [
+        f"section_{index}" for index in range(1, 18)
+    ]
+    assert all(field.status == "ready" for field in result.fields)
+    assert any("section_17: 항목 17" in prompt for prompt in model.prompts)
+
+
+def test_draft_batches_large_templates_without_repeating_other_fields() -> None:
+    from langchain_core.runnables import RunnableLambda
+
+    class BatchModel:
+        def __init__(self) -> None:
+            self.prompts = []
+
+        def with_structured_output(self, schema):
+            async def respond(prompt):
+                text = prompt.to_string()
+                self.prompts.append(text)
+                lines = set(text.splitlines())
+                return schema.model_validate({
+                    "sections": [
+                        {"key": f"section_{index}", "label": f"항목 {index}",
+                         "content": f"내용 {index}"}
+                        for index in range(1, 18)
+                        if f"{index}. 항목 {index}" in lines
+                    ],
+                    "summary": "요약",
+                })
+
+            return RunnableLambda(respond)
+
+    model = BatchModel()
+    result = asyncio.run(generate_business_plan(
+        model, business_name="사업", tagline="", startup_status="예비창업자",
+        industry="", business_region="", business_type="",
+        target_customer="", problem_input="", solution_input="",
+        core_features="", differentiator="", revenue_model="",
+        team_input="", target_program="", extra_notes="",
+        template_fields=[f"항목 {index}" for index in range(1, 18)],
+    ))
+    assert len(model.prompts) == 3
+    assert [section.content for section in result.sections] == [
+        f"내용 {index}" for index in range(1, 18)
+    ]
+    assert all(sum(f"{index}. 항목 {index}" in prompt.splitlines()
+                   for index in range(1, 18)) <= 8
+               for prompt in model.prompts)
+
+
 def test_profile_name_is_ready_and_missing_personal_details_require_supplement() -> None:
     fields = ["창업아이템명 [유형: metadata]", "신청자 성명 [유형: metadata]",
               "생년월일 [유형: metadata]", "기업명 [유형: metadata]",

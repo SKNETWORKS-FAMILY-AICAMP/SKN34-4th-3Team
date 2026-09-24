@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import date as DateValue
@@ -501,13 +502,25 @@ async def analyze_business_plan_fields(
     llm: BaseChatModel, *, template_fields: list[str], user_information: dict[str, str]
 ) -> BusinessPlanFieldAnalysis:
     chain = BUSINESS_PLAN_FIELD_ANALYSIS_PROMPT | llm.with_structured_output(BusinessPlanFieldAnalysis)
-    result = BusinessPlanFieldAnalysis.model_validate(await chain.ainvoke({
-        "field_list": "\n".join(f"section_{index}: {name}"
-                               for index, name in enumerate(template_fields, 1)),
-        "user_information": "\n".join(f"{key}: {value or '(입력 없음)'}"
-                                       for key, value in user_information.items()),
-    }, config={"run_name": "backend_business_plan_field_analysis"}))
-    by_id = {field.field_id: field for field in result.fields}
+    user_text = "\n".join(f"{key}: {value or '(입력 없음)'}"
+                          for key, value in user_information.items())
+    semaphore = asyncio.Semaphore(3)
+
+    async def analyze_chunk(start: int, fields: list[str]) -> BusinessPlanFieldAnalysis:
+        async with semaphore:
+            return BusinessPlanFieldAnalysis.model_validate(await chain.ainvoke({
+                "field_list": "\n".join(
+                    f"section_{index}: {name}"
+                    for index, name in enumerate(fields, start + 1)
+                ),
+                "user_information": user_text,
+            }, config={"run_name": "backend_business_plan_field_analysis"}))
+
+    results = await asyncio.gather(*(
+        analyze_chunk(start, template_fields[start:start + 8])
+        for start in range(0, len(template_fields), 8)
+    ))
+    by_id = {field.field_id: field for result in results for field in result.fields}
     normalized_fields = []
     for index, name in enumerate(template_fields, 1):
         field_id = f"section_{index}"
@@ -608,16 +621,22 @@ async def generate_business_plan(
     field_context = {item["id"]: item for item in context.get("fields", [])}
     edited_keys = set(context.get("editedKeys", []))
     if reviewed_sections:
+        section_list = "\n".join(
+            f"{index}. key={section['key']}, label={section['label']}"
+            for index, section in enumerate(reviewed_sections, 1)
+        )
         sections_instruction = (
             "보완한 초안의 항목을 같은 key·label과 순서로 각각 한 번씩 작성하세요:\n"
-            + "\n".join(f"{index}. key={section['key']}, label={section['label']}"
-                        for index, section in enumerate(reviewed_sections, 1))
+            + section_list
         )
     elif template_fields:
+        section_list = "\n".join(
+            f"{index}. {name}" for index, name in enumerate(template_fields, 1)
+        )
         sections_instruction = (
             "첨부 양식의 입력 항목을 같은 순서·이름으로 각각 한 번씩 작성하세요. "
             "key는 section_1, section_2처럼 순서대로 지정하세요:\n"
-            + "\n".join(f"{index}. {name}" for index, name in enumerate(template_fields, 1))
+            + section_list
         )
     elif template_text.strip():
         sections_instruction = BUSINESS_PLAN_TEMPLATE_SECTIONS_INSTRUCTION.format(
@@ -630,10 +649,12 @@ async def generate_business_plan(
             "\n[입력 칸별 분석 및 사용자 보완 정보]\n"
             + json.dumps(context["fields"], ensure_ascii=False)
             + "\n각 칸의 instruction, required_information, mapped와 사용자 보완 답변을 따르세요. "
+            "answers에 제공된 사실은 해당 field_id의 content에 빠짐없이 반영하세요. "
             "표의 content는 반드시 JSON 문자열 {\"rows\":[{\"열 이름\":\"값\" 또는 null}]} 형식으로 쓰세요. "
             "명시되지 않은 날짜·기간·금액·경력·성과의 셀 값은 null로 두세요. "
             "고정 행 이름이 있으면 그 순서와 이름을 유지하세요. "
-            "[글머리표: ...]가 있는 글 칸은 인쇄된 ○와 -의 순서에 맞춰 논점을 짧은 문장으로 줄바꿈해 작성하세요. "
+            "[글머리표: ...]가 있는 글 칸은 인쇄된 ○와 -의 순서에 맞춰 논점을 짧은 문장으로 작성하세요. "
+            "각 줄은 완결된 문장으로 쓰고 문장 중간에서 줄바꿈하거나 다음 글머리표로 이어 쓰지 마세요. "
             "필요한 문장이 적으면 글머리표를 모두 채우려고 반복하지 마세요. "
             "status가 not_applicable인 글 칸은 '해당 사항 없음', 표 칸은 빈 문자열로 두세요. "
             "status가 unsupported 또는 non_input인 칸은 빈 문자열로 두세요. "
@@ -658,9 +679,7 @@ async def generate_business_plan(
     elif reviewed_sections:
         sections_instruction += "\n필요한 정보가 없으면 content를 '정보 부족'으로 적으세요."
     chain = BUSINESS_PLAN_PROMPT | llm.with_structured_output(BusinessPlanGeneration)
-    result = BusinessPlanGeneration.model_validate(
-        await chain.ainvoke(
-            {
+    request = {
                 "sections_instruction": sections_instruction,
                 "business_name": business_name or "(입력 없음)",
                 "tagline": tagline or "(입력 없음)",
@@ -682,10 +701,53 @@ async def generate_business_plan(
                     f"[{section['label']}]\n{section['content']}"
                     for section in (reviewed_sections or [])
                 ) or "(없음)",
-            },
-            config={"run_name": "backend_business_plan"},
+            }
+    if (template_fields and len(template_fields) > 8
+            and (not reviewed_sections or len(reviewed_sections) == len(template_fields))):
+        semaphore = asyncio.Semaphore(3)
+        context_json = json.dumps(context["fields"], ensure_ascii=False) if field_context else ""
+
+        async def generate_chunk(start: int) -> BusinessPlanGeneration:
+            end = min(start + 8, len(template_fields))
+            chunk_request = request.copy()
+            if reviewed_sections:
+                chunk_list = "\n".join(
+                    f"{index}. key={section['key']}, label={section['label']}"
+                    for index, section in enumerate(reviewed_sections[start:end], start + 1)
+                )
+                chunk_request["reviewed_sections_text"] = "\n\n".join(
+                    f"[{section['label']}]\n{section['content']}"
+                    for section in reviewed_sections[start:end]
+                ) or "(없음)"
+            else:
+                chunk_list = "\n".join(
+                    f"{index}. {name}"
+                    for index, name in enumerate(template_fields[start:end], start + 1)
+                )
+            instruction = sections_instruction.replace(section_list, chunk_list, 1)
+            if context_json:
+                chunk_ids = {f"section_{index}" for index in range(start + 1, end + 1)}
+                instruction = instruction.replace(context_json, json.dumps(
+                    [field for field in context["fields"] if field["id"] in chunk_ids],
+                    ensure_ascii=False,
+                ), 1)
+            chunk_request["sections_instruction"] = instruction
+            async with semaphore:
+                return BusinessPlanGeneration.model_validate(await chain.ainvoke(
+                    chunk_request, config={"run_name": "backend_business_plan"},
+                ))
+
+        parts = await asyncio.gather(*(
+            generate_chunk(start) for start in range(0, len(template_fields), 8)
+        ))
+        result = BusinessPlanGeneration(
+            sections=[section for part in parts for section in part.sections],
+            summary=" ".join(part.summary for part in parts),
         )
-    )
+    else:
+        result = BusinessPlanGeneration.model_validate(await chain.ainvoke(
+            request, config={"run_name": "backend_business_plan"},
+        ))
     by_key = {section.key.strip(): section for section in result.sections}
     by_label = {section.label.strip(): section for section in result.sections}
     if reviewed_sections:

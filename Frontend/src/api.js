@@ -300,7 +300,7 @@ export const api = {
   addExpenseItem: (expenseId, name, price, opt) => apiPost(`/expenses/${expenseId}/items`, { name, price }, opt),
   deleteExpenseItem: (expenseId, itemIndex, opt) => apiDelete(`/expenses/${expenseId}/items/${itemIndex}`, opt),
   // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
-  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
+  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 130000, ...opt }),
   evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
   // 사업계획서 입력 정리·양식 검사·문서 출력 계약.
   refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),

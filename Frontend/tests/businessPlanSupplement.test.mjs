@@ -42,6 +42,24 @@ test('explicit lack of information remains missing and does not send stale answe
   assert.equal(context.fields[0].answers['기간'], '');
 });
 
+test('supplement answer reaches the matching template field after its missing label is cleared', () => {
+  const field = makeField('section_7', '4-1', 'multiline_text',
+    ['대표자·팀원의 보유역량 / 기술보호 노력']);
+  field.required_information = ['대표자 경력', '팀원 역량'];
+  const answers = {
+    'section_7:대표자·팀원의 보유역량 / 기술보호 노력': '대표자가 개발을 맡고 기술 문서를 접근 권한으로 보호한다.',
+  };
+  const updated = reassessSupplementFields([field], answers, {});
+  assert.equal(updated[0].status, 'ready');
+  assert.deepEqual(updated[0].missing_fields, []);
+  const context = JSON.parse(templateContext(updated, answers).split('\n', 2)[1]);
+  assert.equal(context.fields[0].answers['대표자·팀원의 보유역량 / 기술보호 노력'],
+    answers['section_7:대표자·팀원의 보유역량 / 기술보호 노력']);
+  const noInformation = JSON.parse(templateContext(updated, answers,
+    { section_7: 'no_information' }).split('\n', 2)[1]);
+  assert.equal(noInformation.fields[0].answers['대표자·팀원의 보유역량 / 기술보호 노력'], '');
+});
+
 test('an image field becomes ready only when its file is attached', () => {
   const field = makeField('photo', 'overview', 'image', ['이미지 파일']);
   assert.equal(reassessSupplementFields([field], {}, {}, {})[0].status, 'missing');

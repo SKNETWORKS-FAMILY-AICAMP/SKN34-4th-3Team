@@ -73,7 +73,7 @@ LLM_TIMEOUT_CHAT_TAX = float(os.getenv("LLM_TIMEOUT_CHAT_TAX", "120"))
 LLM_TIMEOUT_LEGAL_BASIS = float(os.getenv("LLM_TIMEOUT_LEGAL_BASIS", "30"))
 LLM_TIMEOUT_DEDUCTIBILITY = float(os.getenv("LLM_TIMEOUT_DEDUCTIBILITY", "30"))
 LLM_TIMEOUT_SUMMARIZE = float(os.getenv("LLM_TIMEOUT_SUMMARIZE", "45"))
-LLM_TIMEOUT_BIZPLAN = float(os.getenv("LLM_TIMEOUT_BIZPLAN", "60"))
+LLM_TIMEOUT_BIZPLAN = float(os.getenv("LLM_TIMEOUT_BIZPLAN", "120"))
 # 프런트엔드 업로드 요청(Frontend/src/api.js의 uploadReceipt) 자체가 45초에 끊긴다.
 # 이 값이 그보다 길면 Backend가 응답을 다 만들어도 프런트는 이미 포기한 뒤라, 사용자는
 # 아무것도 못 본 채 지출만(성공 또는 목 값으로) 조용히 저장돼 버린다(2026-09-24). 항상

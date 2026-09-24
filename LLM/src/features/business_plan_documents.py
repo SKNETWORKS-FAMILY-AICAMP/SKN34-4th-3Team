@@ -372,6 +372,12 @@ def _static_pdf_layout(document: pymupdf.Document) -> list[StaticPdfField]:
             start = heading["rect"].y1 + 18
             end = (headings[index + 1]["rect"].y0 - 8
                    if index + 1 < len(headings) else page.rect.height - 58)
+            # A table is a separate input field. Empty space below it does not
+            # belong to the preceding prose field.
+            table_starts = [pymupdf.Rect(table.bbox).y0 for table in tables
+                            if start < pymupdf.Rect(table.bbox).y0 < end]
+            if table_starts:
+                end = min(end, min(table_starts) - 7)
             guidance = [line["rect"].y1 for line in lines
                         if heading["rect"].y1 < line["rect"].y0 < start + 30
                         and (line["text"].startswith("※") or
@@ -505,9 +511,9 @@ def _wrap_static_text(text: str, font: pymupdf.Font, size: float, width: float) 
 
 
 def _draw_static_value(page: pymupdf.Page, regions: list[pymupdf.Rect],
-                       value: str, font_path: str) -> None:
+                       value: str, font_path: str, *, center_vertically: bool = False) -> str:
     if not value.strip():
-        return
+        return ""
     font = pymupdf.Font(fontfile=font_path)
     font_name = "BizplanKorean"
     page.insert_font(fontname=font_name, fontfile=font_path)
@@ -515,15 +521,18 @@ def _draw_static_value(page: pymupdf.Page, regions: list[pymupdf.Rect],
         lines = _wrap_static_text(value.strip(), font, size,
                                   min(rect.width for rect in regions) - 8)
         capacities = [max(0, int((rect.height - 8) / (size * 1.45))) for rect in regions]
-        if len(lines) <= sum(capacities):
+        if len(lines) <= sum(capacities) or size == 8.0:
             position = 0
             for rect, capacity in zip(regions, capacities):
-                for offset, line in enumerate(lines[position:position + capacity]):
-                    page.insert_text((rect.x0 + 3, rect.y0 + size + 3 + offset * size * 1.45),
+                visible = lines[position:position + capacity]
+                top = (max(3, (rect.height - (size + (len(visible) - 1) * size * 1.45)) / 2)
+                       if center_vertically and visible else 3)
+                for offset, line in enumerate(visible):
+                    page.insert_text((rect.x0 + 3, rect.y0 + size + top + offset * size * 1.45),
                                      line, fontname=font_name, fontsize=size, color=(0, 0, 0))
                 position += capacity
-            return
-    raise BusinessPlanDocumentError("초안 내용이 PDF 양식의 작성 공간에 들어가지 않습니다. 내용을 줄여 주세요.")
+            return "\n".join(lines[position:]).strip()
+    raise BusinessPlanDocumentError("PDF 글꼴 크기 설정이 올바르지 않습니다.")
 
 
 def _static_bullet_layout(page: pymupdf.Page, field: StaticPdfField,
@@ -537,10 +546,14 @@ def _static_bullet_layout(page: pymupdf.Page, field: StaticPdfField,
                      key=lambda line: line["rect"].y0)
     if not markers:
         return None
-    items = [sentence.strip() for line in value.splitlines()
-             for sentence in re.split(r"(?<=[.!?。])\s+(?=\S)",
-                                      re.sub(r"^\s*[○●•\-–]\s*", "", line).strip())
-             if sentence.strip()]
+    fragments = [re.sub(r"^\s*[○●•\-–]\s*", "", line).strip()
+                 for line in value.splitlines() if line.strip()]
+    joined = " ".join(fragment for fragment in fragments if fragment)
+    if re.search(r"[.!?。]", joined):
+        items = [sentence.strip() for sentence in re.split(r"(?<=[.!?。])\s+(?=\S)", joined)
+                 if sentence.strip()]
+    else:
+        items = fragments
     if not items:
         return markers, [], ""
     font = pymupdf.Font(fontfile=font_path)
@@ -570,22 +583,223 @@ def _static_bullet_layout(page: pymupdf.Page, field: StaticPdfField,
     return best_layout
 
 
-def _append_static_overflow(document: pymupdf.Document, field_name: str,
-                            value: str, font_path: str) -> None:
-    if not value:
-        return
-    font = pymupdf.Font(fontfile=font_path)
-    label = re.sub(r"\s*\[(?:작성 안내|글머리표):[^\]]+\]", "", field_name).strip()
-    lines = _wrap_static_text(value, font, 10, 490)
-    while lines:
-        page = document.new_page(width=595, height=842)
-        page.insert_font(fontname="BizplanKorean", fontfile=font_path)
-        page.insert_text((50, 64), "작성 내용 이어짐", fontname="BizplanKorean", fontsize=13)
-        for offset, line in enumerate(_wrap_static_text(label, font, 10, 490)[:3]):
-            page.insert_text((50, 88 + offset * 16), line, fontname="BizplanKorean", fontsize=10)
-        for offset, line in enumerate(lines[:43]):
-            page.insert_text((50, 150 + offset * 15), line, fontname="BizplanKorean", fontsize=10)
-        lines = lines[43:]
+def _expand_static_pages(document: pymupdf.Document, expansions: list[dict],
+                         font_path: str) -> bytes:
+    """Insert writable space below a field and move the following template content."""
+    if not expansions:
+        return document.tobytes(garbage=4, deflate=True)
+    output = pymupdf.open()
+    for page_index, source in enumerate(document):
+        page_expansions = sorted((item for item in expansions if item["page"] == page_index),
+                                 key=lambda item: item["y"])
+        if not page_expansions:
+            output.insert_pdf(document, from_page=page_index, to_page=page_index)
+            continue
+        target = output.new_page(width=source.rect.width,
+                                 height=source.rect.height + sum(item["height"] for item in page_expansions))
+        target.insert_font(fontname="BizplanKorean", fontfile=font_path)
+        cursor = 0.0
+        shift = 0.0
+        for item in page_expansions:
+            anchor = max(cursor, min(item["y"], source.rect.height))
+            if anchor > cursor:
+                clip = pymupdf.Rect(0, cursor, source.rect.width, anchor)
+                target.show_pdf_page(clip + (0, shift, 0, shift), document, page_index, clip=clip)
+            top = anchor + shift
+            size = item["size"]
+            leading = size * 1.45
+            if "table_rows" in item:
+                row_top = top
+                for row in item["table_rows"]:
+                    if row.get("top_border"):
+                        target.draw_line((item["grid_x"][0], row_top),
+                                         (item["grid_x"][-1], row_top), width=0.5)
+                    for x, lines in row["cells"]:
+                        for offset, line in enumerate(lines):
+                            target.insert_text((x, row_top + size + 4 + offset * leading), line,
+                                               fontname="BizplanKorean", fontsize=size)
+                    row_top += row["height"]
+                for x in item["grid_x"]:
+                    target.draw_line((x, top), (x, top + item["height"]), width=0.5)
+            else:
+                y = top + size + 4
+                for marker, lines in item["paragraphs"]:
+                    if marker:
+                        target.insert_text((item["marker_x"], y), marker,
+                                           fontname="BizplanKorean", fontsize=size)
+                    for line in lines:
+                        target.insert_text((item["x"], y), line,
+                                           fontname="BizplanKorean", fontsize=size)
+                        y += leading
+                    y += 5
+                for x in item.get("grid_x", []):
+                    target.draw_line((x, top), (x, top + item["height"]), width=0.5)
+            shift += item["height"]
+            cursor = anchor
+        if cursor < source.rect.height:
+            clip = pymupdf.Rect(0, cursor, source.rect.width, source.rect.height)
+            target.show_pdf_page(clip + (0, shift, 0, shift), document, page_index, clip=clip)
+    return output.tobytes(garbage=4, deflate=True)
+
+
+def _numeric_footer(page: pymupdf.Page) -> dict | None:
+    return next((line for line in _pdf_lines(page)
+                 if re.fullmatch(r"\d+", line["text"])
+                 and line["rect"].y0 > page.rect.height - 70
+                 and abs((line["rect"].x0 + line["rect"].x1) / 2
+                         - page.rect.width / 2) < 35), None)
+
+
+def _page_body_end(page: pymupdf.Page, footer: dict | None) -> float:
+    """Find the last visible body element, excluding the footer and blank margin."""
+    footer_top = footer["rect"].y0 if footer else page.rect.height
+    bottoms = [line["rect"].y1 for line in _pdf_lines(page)
+               if line["rect"].y0 < footer_top - 5]
+    bottoms.extend(rect.y1 for drawing in page.get_drawings()
+                   if (rect := pymupdf.Rect(drawing["rect"])).y0 < footer_top - 5
+                   and rect.height < page.rect.height * 0.85)
+    bottoms.extend(rect.y1 for block in page.get_text("dict")["blocks"]
+                   if block["type"] == 1
+                   and (rect := pymupdf.Rect(block["bbox"])).y0 < footer_top - 5)
+    return min(footer_top - 8, max(bottoms, default=0) + 10)
+
+
+def _reflow_page_cut(page: pymupdf.Page, start: float, limit: float,
+                     body_end: float, next_capacity: float) -> float:
+    lines = sorted(_pdf_lines(page), key=lambda line: line["rect"].y0)
+    headings = [line for line in lines if SECTION_HEADING.match(line["text"])
+                or line["text"].startswith("□")]
+    for index in range(len(headings) - 1, -1, -1):
+        heading = headings[index]
+        group_end = headings[index + 1]["rect"].y0 if index + 1 < len(headings) else body_end
+        if (start + 60 < heading["rect"].y0 < limit < group_end
+                and group_end - heading["rect"].y0 <= next_capacity):
+            return heading["rect"].y0 - 10
+    tables = [pymupdf.Rect(table.bbox) for table in page.find_tables().tables]
+    for table in tables:
+        if (start + 60 < table.y0 < limit < table.y1
+                and table.height <= next_capacity):
+            return table.y0 - 8
+    gaps = [(left["rect"].y1 + right["rect"].y0) / 2
+            for left, right in zip(lines, lines[1:])
+            if left["rect"].y1 + 1 < right["rect"].y0
+            and start + 50 < (left["rect"].y1 + right["rect"].y0) / 2 <= limit]
+    safe_gaps = [gap for gap in gaps if not any(rect.y0 < gap < rect.y1
+                                                and rect.height <= next_capacity for rect in tables)]
+    return max(safe_gaps or gaps, default=limit)
+
+
+def _paginate_expanded_pdf(data: bytes, page_sizes: list[tuple[float, float]]) -> tuple[bytes, list[int]]:
+    """Flow enlarged template pages onto pages of their original fixed size."""
+    with pymupdf.open(stream=data, filetype="pdf") as document:
+        if all(page.rect.height <= page_sizes[index][1] + 0.5
+               for index, page in enumerate(document)):
+            return data, list(range(len(document)))
+        output = pymupdf.open()
+        page_starts = []
+        numbered = any(_numeric_footer(page) for page in document)
+        for index, source in enumerate(document):
+            page_starts.append(len(output))
+            width, height = page_sizes[index]
+            if source.rect.height <= height + 0.5:
+                output.insert_pdf(document, from_page=index, to_page=index)
+                continue
+            footer = _numeric_footer(source)
+            body_end = _page_body_end(source, footer)
+            start = 0.0
+            first = True
+            while start < body_end - 0.5:
+                destination_top = 0 if first else 60
+                capacity = height - 58 - destination_top
+                limit = min(start + capacity, body_end)
+                end = (body_end if limit >= body_end else
+                       _reflow_page_cut(source, start, limit, body_end, height - 118))
+                if end <= start + 40:
+                    end = limit
+                page = output.new_page(width=width, height=height)
+                clip = pymupdf.Rect(0, start, width, end)
+                page.show_pdf_page(pymupdf.Rect(0, destination_top, width,
+                                                destination_top + end - start),
+                                   document, index, clip=clip)
+                start = end
+                first = False
+        if numbered:
+            for index, page in enumerate(output):
+                footer = _numeric_footer(page)
+                if footer:
+                    page.add_redact_annot(footer["rect"] + (-2, -2, 2, 2),
+                                          fill=False, cross_out=False)
+                    page.apply_redactions(images=0, graphics=0, text=0)
+                number = str(index + 1)
+                x = (page.rect.width - pymupdf.get_text_length(number, fontname="helv", fontsize=9)) / 2
+                page.insert_text((x, page.rect.height - 29), number, fontname="helv", fontsize=9)
+        return output.tobytes(garbage=4, deflate=True), page_starts
+
+
+def _static_text_expansion(field: StaticPdfField, overflow: str,
+                           font: pymupdf.Font, *, bullet_layout: tuple | None = None) -> dict:
+    size = bullet_layout[1][-1][2] if bullet_layout and bullet_layout[1] else 8.0
+    marker = bullet_layout[0][-1] if bullet_layout else None
+    rect = (next(rect for rect in field.regions
+                 if rect.y0 - 12 <= marker["rect"].y0 < rect.y1)
+            if marker else field.regions[-1])
+    x = max(rect.x0, marker["rect"].x1 + 12) + 3 if marker else rect.x0 + 3
+    paragraphs = [(marker["text"] if marker else "",
+                   _wrap_static_text(text, font, size, rect.x1 - x - 5))
+                  for text in (overflow.splitlines() if marker else [overflow]) if text.strip()]
+    height = sum(max(1, len(lines)) * size * 1.45 + 5 for _, lines in paragraphs) + 8
+    return {"page": field.page_index, "y": rect.y1, "height": height,
+            "x": x, "marker_x": marker["rect"].x0 if marker else 0,
+            "size": size, "paragraphs": paragraphs}
+
+
+def _static_row_grid(page: pymupdf.Page, region: pymupdf.Rect) -> list[float]:
+    for table in page.find_tables().tables:
+        for row in table.rows:
+            cells = [pymupdf.Rect(cell) for cell in row.cells if cell]
+            if any(cell.y0 <= region.y0 + 3 and region.y1 <= cell.y1
+                   and cell.x0 <= region.x0 <= region.x1 <= cell.x1 for cell in cells):
+                return sorted({x for cell in cells for x in (cell.x0, cell.x1)})
+    return []
+
+
+def _static_table_expansions(field: StaticPdfField,
+                             overflow_cells: list[tuple[int, int, str]],
+                             extra_rows: list[list[str]], font: pymupdf.Font) -> list[dict]:
+    if not field.table_cells:
+        return []
+    expansions = []
+    for row_index in sorted({row for row, _, _ in overflow_cells}):
+        row = field.table_cells[row_index]
+        cells = []
+        for _, column, text in (item for item in overflow_cells if item[0] == row_index):
+            rect = row[column]
+            if rect:
+                cells.append((rect.x0 + 4, _wrap_static_text(text, font, 8, rect.width - 8)))
+        if not cells:
+            continue
+        height = max(len(lines) * 11.6 + 8 for _, lines in cells)
+        grid_x = sorted({x for rect in row if rect for x in (rect.x0, rect.x1)})
+        expansions.append({"page": field.page_index, "y": max(rect.y1 for rect in row if rect) - 2,
+                           "height": height, "size": 8, "grid_x": grid_x,
+                           "table_rows": [{"height": height, "cells": cells}]})
+    if extra_rows:
+        last_row = field.table_cells[-1]
+        grid_x = sorted({x for rect in last_row if rect for x in (rect.x0, rect.x1)})
+        table_rows = []
+        for values in extra_rows:
+            cells = []
+            for column, text in enumerate(values):
+                rect = last_row[column]
+                if rect and text:
+                    cells.append((rect.x0 + 4, _wrap_static_text(text, font, 8, rect.width - 8)))
+            height = max(28, max((len(lines) * 11.6 + 8 for _, lines in cells), default=0))
+            table_rows.append({"height": height, "cells": cells, "top_border": True})
+        expansions.append({"page": field.page_index,
+                           "y": max(rect.y1 for rect in last_row if rect) - 2,
+                           "height": sum(row["height"] for row in table_rows), "size": 8,
+                           "grid_x": grid_x, "table_rows": table_rows})
+    return expansions
 
 
 def _image_size(mime_type: str, raw: bytes) -> tuple[int, int]:
@@ -610,6 +824,7 @@ def _image_size(mime_type: str, raw: bytes) -> tuple[int, int]:
 def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
                        images: dict[str, tuple[str, bytes]] | None = None) -> bytes:
     with pymupdf.open(stream=data, filetype="pdf") as document:
+        page_sizes = [(page.rect.width, page.rect.height) for page in document]
         fields = _static_pdf_layout(document)
         images = images or {}
         if set(images) - {field.name for field in fields if field.kind == "image"}:
@@ -618,6 +833,8 @@ def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
         bullet_layouts = {field.name: layout
                           for field in fields if (layout := _static_bullet_layout(
                               document[field.page_index], field, values.get(field.name, ""), font_path))}
+        expansions: list[dict] = []
+        font = pymupdf.Font(fontfile=font_path)
         for page_index, page in enumerate(document):
             page_lines = _pdf_lines(page)
             guidance_continuations: set[int] = set()
@@ -660,6 +877,7 @@ def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
             page.apply_redactions(images=0, graphics=0, text=0)
 
         # A single blank value cell next to a name label is the form's title slot.
+        title_overflow: tuple[pymupdf.Rect, str] | None = None
         if title.strip():
             first_page = document[0]
             for table in first_page.find_tables().tables:
@@ -677,7 +895,11 @@ def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
                             cell = pymupdf.Rect(first_cell)
                             target = pymupdf.Rect(cell.x1 + 4, cell.y0 + 3,
                                                   first_page.rect.width - 55, cell.y1 - 3)
-                            _draw_static_value(first_page, [target], title, font_path)
+                            overflow = _draw_static_value(
+                                first_page, [target], title, font_path,
+                            )
+                            if overflow:
+                                title_overflow = (target, overflow)
                             break
                 else:
                     continue
@@ -686,7 +908,10 @@ def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
         for field in fields:
             value = values.get(field.name, "")
             if field.kind == "table":
-                _draw_static_table(document[field.page_index], field, value, font_path)
+                overflow_cells, extra_rows = _draw_static_table(
+                    document[field.page_index], field, value, font_path)
+                expansions.extend(_static_table_expansions(
+                    field, overflow_cells, extra_rows, font))
             elif field.kind == "image" and field.name in images:
                 mime_type, raw = images[field.name]
                 _image_size(mime_type, raw)
@@ -704,12 +929,29 @@ def _render_static_pdf(data: bytes, values: dict[str, str], title: str,
                     for offset, line in enumerate(lines):
                         page.insert_text((slot.x0 + 3, slot.y0 + size + 2 + offset * size * 1.45),
                                          line, fontname="BizplanKorean", fontsize=size, color=(0, 0, 0))
+                overflow = bullet_layouts[field.name][2]
+                if overflow:
+                    expansions.append(_static_text_expansion(
+                        field, overflow, font, bullet_layout=bullet_layouts[field.name]))
             elif field.kind != "image":
-                _draw_static_value(document[field.page_index], field.regions, value, font_path)
-        for field in fields:
-            if field.name in bullet_layouts:
-                _append_static_overflow(document, field.name, bullet_layouts[field.name][2], font_path)
-        return document.tobytes(garbage=4, deflate=True)
+                overflow = _draw_static_value(
+                    document[field.page_index], field.regions, value, font_path,
+                    center_vertically=field.kind == "metadata",
+                )
+                if overflow:
+                    expansion = _static_text_expansion(field, overflow, font)
+                    if field.kind == "metadata":
+                        expansion["grid_x"] = _static_row_grid(
+                            document[field.page_index], field.regions[-1])
+                    expansions.append(expansion)
+        if title_overflow:
+            rect, overflow = title_overflow
+            expansion = _static_text_expansion(
+                StaticPdfField("사업명", 0, [rect], "metadata"), overflow, font)
+            expansion["grid_x"] = _static_row_grid(document[0], rect)
+            expansions.append(expansion)
+        expanded = _expand_static_pages(document, expansions, font_path)
+        return _paginate_expanded_pdf(expanded, page_sizes)[0]
 
 
 def _parse_table_value(value: str, columns: tuple[str, ...]) -> list[list[str]]:
@@ -737,11 +979,12 @@ def _parse_table_value(value: str, columns: tuple[str, ...]) -> list[list[str]]:
 
 
 def _draw_static_table(page: pymupdf.Page, field: StaticPdfField,
-                       value: str, font_path: str) -> None:
+                       value: str, font_path: str) -> tuple[list[tuple[int, int, str]], list[list[str]]]:
     if not value.strip() or not field.table_cells:
-        return
+        return [], []
     rows = _parse_table_value(value, field.columns)
-    if len(rows) > len(field.table_cells):
+    capacity = len(field.table_cells)
+    if len(rows) > capacity and field.fixed_row_labels:
         raise BusinessPlanDocumentError(f"표의 입력 행이 부족합니다: {field.name}")
     fixed_row_indices: dict[str, int] = {}
     if field.fixed_row_labels:
@@ -750,7 +993,8 @@ def _draw_static_table(page: pymupdf.Page, field: StaticPdfField,
             for index, cells in enumerate(field.table_cells)
         }
     used_rows: set[int] = set()
-    for position, row in enumerate(rows):
+    overflow_cells: list[tuple[int, int, str]] = []
+    for position, row in enumerate(rows[:capacity]):
         row_index = fixed_row_indices.get(row[0], -1) if field.fixed_row_labels else position
         if row_index < 0 or row_index in used_rows:
             raise BusinessPlanDocumentError(f"표의 고정 행 이름이 양식과 다릅니다: {field.name}")
@@ -760,7 +1004,13 @@ def _draw_static_table(page: pymupdf.Page, field: StaticPdfField,
                 continue
             rect = field.table_cells[row_index][column]
             if rect and cell_value:
-                _draw_static_value(page, [rect + (2, 1, -2, -1)], cell_value, font_path)
+                overflow = _draw_static_value(
+                    page, [rect + (2, 1, -2, -1)], cell_value, font_path,
+                    center_vertically=True,
+                )
+                if overflow:
+                    overflow_cells.append((row_index, column, overflow))
+    return overflow_cells, rows[capacity:]
 
 
 def render_pdf_form(data: bytes, values: dict[str, str], title: str = "",
@@ -772,10 +1022,13 @@ def render_pdf_form(data: bytes, values: dict[str, str], title: str = "",
         raise BusinessPlanDocumentError("PDF 텍스트 입력 필드에는 이미지를 배치할 수 없습니다.")
     writer = PdfWriter()
     writer.append(PdfReader(BytesIO(data)))
+    page_sizes = [(float(page.mediabox.width), float(page.mediabox.height)) for page in writer.pages]
     filled_values = {name: values.get(name, "").strip() for name in names}
     font = _register_korean_font()
     drawn_names: set[str] = set()
-    for page in writer.pages:
+    field_pages: dict[str, int] = {}
+    overflow_fields: list[tuple[int, str, pymupdf.Rect, str]] = []
+    for page_index, page in enumerate(writer.pages):
         writer.update_page_form_field_values(
             page,
             filled_values,
@@ -802,8 +1055,13 @@ def render_pdf_form(data: bytes, values: dict[str, str], title: str = "",
             if width < 25 or height < 14:
                 raise BusinessPlanDocumentError(f"PDF 입력칸이 너무 작습니다: {name}")
             lines = _wrap_pdf_field(filled_values[name], font, 9, width - 6)
-            if len(lines) * 12 + 4 > height:
-                raise BusinessPlanDocumentError(f"PDF 입력칸에 초안 내용이 들어가지 않습니다: {name}")
+            visible_lines = max(0, int((height - 4) // 12))
+            if len(lines) > visible_lines and filled_values[name]:
+                page_height = float(media_box.height)
+                overflow_fields.append((page_index, name,
+                                        pymupdf.Rect(x0, page_height - y1, x1, page_height - y0),
+                                        "\n".join(lines[visible_lines:])))
+            lines = lines[:visible_lines]
             painter.setStrokeColor(colors.HexColor("#777777"))
             painter.setLineWidth(0.5)
             painter.rect(x0, y0, width, height, stroke=1, fill=0)
@@ -813,6 +1071,7 @@ def render_pdf_form(data: bytes, values: dict[str, str], title: str = "",
                 painter.drawString(x0 + 3, y1 - 12 - index * 12, line)
             drawn = True
             drawn_names.add(name)
+            field_pages[name] = page_index
         if drawn:
             painter.save()
             overlay.seek(0)
@@ -822,6 +1081,31 @@ def render_pdf_form(data: bytes, values: dict[str, str], title: str = "",
         raise BusinessPlanDocumentError("일부 PDF 텍스트 필드의 입력 위치를 확인할 수 없습니다.")
     output = BytesIO()
     writer.write(output)
+    if overflow_fields:
+        with pymupdf.open(stream=output.getvalue(), filetype="pdf") as document:
+            font_path = _static_pdf_font_path()
+            font = pymupdf.Font(fontfile=font_path)
+            expansions = []
+            for page_index, name, rect, value in overflow_fields:
+                expansion = _static_text_expansion(
+                    StaticPdfField(name, page_index, [rect]), value, font)
+                expansion["y"] -= 2
+                expansion["grid_x"] = [rect.x0, rect.x1]
+                expansions.append(expansion)
+            expanded = _expand_static_pages(document, expansions, font_path)
+        paginated, page_starts = _paginate_expanded_pdf(expanded, page_sizes)
+        with pymupdf.open(stream=paginated, filetype="pdf") as document:
+            for name, value in filled_values.items():
+                widget = pymupdf.Widget()
+                widget.field_name = name
+                widget.field_value = value
+                widget.field_type = pymupdf.PDF_WIDGET_TYPE_TEXT
+                widget.field_flags = pymupdf.PDF_FIELD_IS_READ_ONLY
+                widget.rect = pymupdf.Rect(0, 0, 1, 1)
+                widget.border_width = 0
+                widget.text_fontsize = 1
+                document[page_starts[field_pages[name]]].add_widget(widget)
+            return document.tobytes(garbage=4, deflate=True)
     return output.getvalue()
 
 
