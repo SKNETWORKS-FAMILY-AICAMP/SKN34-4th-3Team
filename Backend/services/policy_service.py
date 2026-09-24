@@ -29,6 +29,7 @@ def _to_item(
         "benefit": policy["benefit"],
         "source": policy["source"],
         "sourceUrl": announcement.get("source_url") if announcement else None,
+        "announcementId": announcement["id"] if announcement else None,
         "applyEndDate": announcement["apply_end_date"] if announcement else None,
         "matchScore": match_score,
         "eligible": eligible,
@@ -62,13 +63,14 @@ def search(
     user_id: int | None = None,
     offset: int = 0,
     limit: int = 20,
+    only_announcements: bool = False,
 ) -> list[dict]:
     """SQL로 거르고, 점수화·정렬은 파이썬에서 한 뒤 페이지를 자른다.
 
     정렬이 전역이어야 해서 후보 전체를 점수화한 다음 자른다. 필터가 걸리면 DB가
     읽는 행이 줄고, 필터가 없어도 응답 본문은 한 페이지로 작아진다.
     """
-    rows = repo.search_policies(keyword, region, industry)
+    rows = repo.search_policies(keyword, region, industry, only_announcements=only_announcements)
     announcements = repo.announcement_map()
     user = repo.get_user(user_id) if user_id else None
     profile = repo.get_profile(user_id) if user_id else None

@@ -494,6 +494,7 @@ def search_policies(
     keyword: str | None = None,
     region: str | None = None,
     industry: str | None = None,
+    only_announcements: bool = False,
 ) -> list[dict]:
     """필터에 맞는 정책 전체. 정렬이 점수 기반이라 여기서는 자르지 않는다.
 
@@ -502,9 +503,11 @@ def search_policies(
     """
     where: list[str] = []
     params: list = []
+    if only_announcements:
+        where.append("EXISTS (SELECT 1 FROM announcements a WHERE a.policy_id = policies.id)")
     if keyword:
-        where.append("(title LIKE ? OR benefit LIKE ?)")
-        params += [f"%{keyword}%", f"%{keyword}%"]
+        where.append("(title LIKE ? OR benefit LIKE ? OR source LIKE ? OR industry LIKE ? OR region LIKE ?)")
+        params += [f"%{keyword}%"] * 5
     if region:
         # 수집 단계에서 17개 시·도로 정규화하므로 부분 일치가 필요 없다.
         # '전국'은 지역 조건과 무관하게 모두에게 해당한다.
