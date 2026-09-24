@@ -84,7 +84,7 @@
 `setup.bat`은 cmd.exe용이다. 본론에 앞서 `.env`를 검사한다. 파일이 없거나 `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB` 중 하나라도 비어 있으면 그 자리에서 멈춘다. 어느 키가 비었는지는 `setup.sh`만 알려 주고 `setup.bat`은 세 키를 함께 안내한다. `OPENAI_API_KEY`가 없으면 "AI 답변이 목업이 된다"고 경고만 하고 계속한다.
 
 1. `compose build`
-2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 `IF NOT EXISTS`라 재실행에 안전하고 기존 행을 지우지 않는다. 기존 볼륨에 LLM 세금 캐시 테이블 `tax_rag_cache`를 추가하는 것도 이 단계다
+2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 재실행에 안전하고 기존 행을 지우지 않는다. 기존 볼륨에 LLM 세금 캐시 테이블 `tax_rag_cache`를 추가하는 것도 이 단계다. 3단계에서 `docker-compose.yml`의 `db-migrate` 서비스가 같은 파일을 다시 적용하므로 중복이지만 무해하다. `docker compose up`을 직접 불러도 `db-migrate`가 적용한다
 3. `backend`·`llm` 기동
 4. 헬스체크. `/health`의 `storage`가 `postgres`인지, `ragReady`가 참인지 확인해 각각 폴백·목업 상태를 경고. 응답이 없으면 해당 컨테이너 로그 30줄을 찍고 멈춘다
 
@@ -98,11 +98,11 @@
 
 ### 지역명 정규화 제약을 기존 DB에 적용 (PR #27 후속)
 
-`users.region`의 `chk_users_region` 제약은 `DB/app_extras.sql`에만 정의돼 있고, 이 파일은 빈 볼륨으로 컨테이너를 처음 띄울 때만 자동 실행된다. 이미 `db_data` 볼륨이 있는 DB에는 직접 실행해야 한다. 제약 추가 구문은 `pg_constraint` 확인으로 감싸 두었으니 몇 번 다시 돌려도 안전하다.
+`users.region`의 `chk_users_region` 제약은 `DB/app_extras.sql`에만 정의돼 있다. 이 파일은 `docker compose up`마다 `db-migrate` 서비스가 적용하므로 기존 `db_data` 볼륨에도 제약이 추가된다. 제약 추가 구문은 `pg_constraint` 확인으로 감싸 두었으니 몇 번 다시 돌려도 안전하다.
 
 1. 기존 값 확인. `SELECT region, COUNT(*) FROM users GROUP BY region;` 로 17개 시·도 밖의 값을 찾는다
 2. 해당 값을 짧은 이름으로 고치거나 NULL로 비운다
-3. `docker exec -i startup_db psql -U <user> -d <db> < DB/app_extras.sql` 실행
+3. 제약이 아직 없으면 `docker compose up -d db-migrate` 실행
 4. 기존 행까지 검사하려면 `ALTER TABLE users VALIDATE CONSTRAINT chk_users_region;` 을 덧붙인다. 제약은 `NOT VALID`로 추가되므로 이 단계 전에는 신규 INSERT·UPDATE만 검사된다
 
 ## 5. 관련 문서

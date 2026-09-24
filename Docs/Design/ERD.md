@@ -273,20 +273,23 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 
 `expenses.user_id`는 `receipt_id → receipts.user_id`로 유도할 수 있는 비정규화다. 조회 필터 편의를 위해 남겨 두었다.
 
-`app_extras.sql`은 `docker-compose.yml`의 initdb 마운트로 `01_schema.sql` 다음에 적용된다. 이미 데이터가 있는 DB에는 initdb가 다시 돌지 않으므로 `psql`로 한 번 직접 실행해야 한다. 모든 구문이 `IF NOT EXISTS`(제약은 `pg_constraint` 확인)라 재실행에 안전하다.
+`app_extras.sql`은 빈 볼륨에서는 initdb로 `01_schema.sql` 다음에 적용되고, 이후에는 `docker compose up`마다 `db-migrate` 서비스가 다시 적용한다. 모든 구문이 재실행에 안전하다(`IF NOT EXISTS`, 제약·`NOT NULL`은 `DO $$` 블록에서 확인 후 적용).
 
 ### 스키마 적용 경로
 
-`docker-compose.yml`의 initdb 마운트가 유일한 자동 적용 경로다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다.
+`docker-compose.yml`에 자동 적용 경로가 두 개 있다.
 
-- initdb는 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 이미 데이터가 있는 DB에는 `psql`로 직접 적용해야 한다. `app_extras.sql`은 전부 `IF NOT EXISTS`라 재실행에 안전하다
+- **initdb**: 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다
+- **`db-migrate`**: `db`가 healthy가 되면 `psql -v ON_ERROR_STOP=1`로 `app_extras.sql`을 적용하고 종료하는 one-shot 서비스다. `backend`·`llm`은 이 서비스가 성공해야 기동한다. 기존 볼륨에도 스키마 변경이 `docker compose up`만으로 반영된다. 수동 재적용은 `docker compose up -d db-migrate`
+- `db` healthcheck는 `pg_isready -h 127.0.0.1`(TCP)로 확인한다. initdb 중 임시 서버는 TCP를 열지 않아, 소켓으로 확인하면 init 도중 healthy가 되어 `db-migrate`가 연결 거부로 실패할 수 있다
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
-- 로컬에서 띄운 Backend는 Postgres 연결 시 `Backend/core/db.py`의 `_apply_extras`로 `DB/app_extras.sql`을 best-effort 적용한다. 파일이 없으면 건너뛰고 실패한 문장은 무시하므로 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
-- `setup.sh`·`setup.bat`은 기동 때마다 `psql`로 `app_extras.sql`을 다시 적용한다
+- `Backend/core/db.py`의 `_apply_extras`는 파일을 `;` 단위로 잘라 한 트랜잭션에서 실행한다. `DO $$` 블록이 쪼개져 실패하면 이후 문장이 모두 실패하고 롤백되므로 사실상 적용되지 않는다. compose 컨테이너에서는 파일 경로(`/DB`)도 없다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
+- `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
+- compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
 
-## 제안: 유저 개인화 저장 이관 (미적용)
+## 유저 개인화 저장 이관 (대화방 적용, 로드맵·사업계획서 미적용)
 
-지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 위 다이어그램(현행 스키마)에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 스키마는 `DB/app_extras.sql`에 반영됐고, 코드는 대화방만 전환했다(로드맵 체크·사업계획서 초안은 아직 localStorage). 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
 
 ```mermaid
 erDiagram
@@ -303,12 +306,13 @@ erDiagram
         string title "NULL이면 첫 질문을 제목으로"
         datetime created_at
         datetime updated_at "마지막 메시지 시각"
+        datetime deleted_at "NULL이면 활성, 삭제는 표시만"
     }
 
     chat_messages {
         int id PK
         int user_id FK
-        int room_id FK "신규, ON DELETE CASCADE"
+        int room_id FK "NOT NULL, ON DELETE CASCADE"
         string category
         string question
         string answer
@@ -331,6 +335,6 @@ erDiagram
     }
 ```
 
-- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다.
+- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
 - **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
 - **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 공고 양식에 따라 초안 항목 수·키가 달라져 `form`·`plan`·`eval_result`를 JSONB로 둔다.

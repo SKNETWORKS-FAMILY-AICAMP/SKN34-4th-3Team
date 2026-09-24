@@ -1,0 +1,35 @@
+# 개발 전용 오버라이드. 배포 서버는 쓰지 않는다.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+services:
+  backend:
+    # .py 수정 시 자동 재시작. /DB 의 .sql 저장 시에도 재시작되어
+    # init_db()의 _apply_extras 가 app_extras.sql 을 다시 적용한다.
+    command: ["uv", "run", "uvicorn", "config.asgi:application",
+              "--host", "0.0.0.0", "--port", "8000", "--lifespan", "off",
+              "--reload", "--reload-dir", "/app", "--reload-dir", "/DB",
+              "--reload-include", "*.sql"]
+    environment:
+      # Windows Docker Desktop bind mount 는 파일 변경 이벤트가 전달되지 않을 수 있어 폴링한다.
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      # _apply_extras 는 Backend 상위의 DB/app_extras.sql 을 찾는다(/app/.. → /DB).
+      - ./DB:/DB:ro
+
+  # Vite 개발 서버(HMR). 배포용 frontend(nginx 정적 빌드)와 별개다.
+  frontend-dev:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npx vite --host 0.0.0.0"
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      # 컨테이너에는 브라우저가 없어 vite.config.js 의 open: true 가 xdg-open 오류를 낸다.
+      BROWSER: none
+      VITE_PROXY_TARGET: http://backend:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./Frontend:/app
+      # 호스트(Windows)용 node_modules 와 섞이지 않게 컨테이너 전용 볼륨으로 가린다.
+      - /app/node_modules
+    depends_on:
+      - backend
