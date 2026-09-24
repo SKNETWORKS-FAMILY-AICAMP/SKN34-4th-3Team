@@ -679,16 +679,17 @@ async def generate_business_plan(
     else:
         expected_fields = [(key, label) for key, label, _ in BUSINESS_PLAN_DEFAULT_FIELDS]
     missing_content = "" if has_template else "정보 부족"
-    sections = [
-        BusinessPlanSectionGeneration(
-            key=key,
-            label=label,
-            content=(by_key.get(key) or by_label.get(label)).content
-            if by_key.get(key) or by_label.get(label)
-            else missing_content,
-        )
-        for key, label in expected_fields
-    ] if expected_fields is not None else result.sections
+    if expected_fields is not None:
+        sections = []
+        for key, label in expected_fields:
+            matched_section = by_key.get(key) or by_label.get(label)
+            sections.append(BusinessPlanSectionGeneration(
+                key=key,
+                label=label,
+                content=matched_section.content if matched_section else missing_content,
+            ))
+    else:
+        sections = result.sections
     if field_context:
         sections = [section.model_copy(update={"content": ""})
                     if field_context.get(section.key, {}).get("status") in {"unsupported", "non_input"}
