@@ -109,7 +109,7 @@ flowchart LR
 
 영수증 등의 지출 자료를 기반으로 **영수증 등록 → 영수증 정보 추출 → 지출 분류 → 경비처리 가능성 안내** 기능을 제공한다.
 
-- 현재 상태: Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB `receipts`·`receipt_extractions`·`expenses` 테이블은 남아 있으나 이를 부르는 화면이 없다. `Frontend/src/pages/MyPage.jsx`의 `ExpenseTracker`는 렌더되지 않는 미사용 컴포넌트다
+- 현재 상태: 지출관리 화면(`Frontend/src/pages/ExpenseTracker.jsx`)에 연결돼 영수증 등록·OCR·분류·경비처리 판정·엑셀 다운로드를 제공한다(PR #7·#12). 상세는 `Docs/FEATURE_ROADMAP_EXPENSE.md`
 - 경비처리 질의응답은 핵심 기능인 AI 상담(`category=expense`)으로 계속 제공한다
 
 ### ② 공공입찰 검토

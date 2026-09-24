@@ -1,12 +1,12 @@
 # 진행 현황
 
-- 갱신일: 2026-09-15
-- 기준 브랜치/커밋: `develop` / `e48c609`
+- 갱신일: 2026-09-24
+- 기준 브랜치/커밋: `develop` / `82abd5c`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 1건, 보류 2건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~55)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
+**미해결 1건, 보류 1건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~55)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
 
 ## 1. 병합 현황
 
@@ -38,13 +38,26 @@
 | `feature/LLM-inhence` | `4461a51` (PR #40) | 세금 질문 Semantic Cache(`LLM/src/rag/tax_cache.py`), DB 커넥션 풀·그래프 재사용 |
 | `develop` 직접 커밋 | `17a42bc`, `e48c609` | `TaxTool.jsx` 누락 import, `tax_rag_cache` 테이블(`DB/app_extras.sql`) |
 
+위 표의 커밋·PR 번호는 이전 저장소 기준이다. 2026-09-18 저장소를 새로 시작한 뒤의 병합은 아래와 같다.
+
+| 브랜치 | 병합 커밋 | 비고 |
+| --- | --- | --- |
+| `feature/refactoring` | `fc56aab` (PR #2) | Backend Django 전환, SQLite 제거 |
+| `feature/LLM-imporve` | `06a2c68` (PR #3), `c7b901c` (PR #4), `4c8b12d` (PR #5) | LLM 서빙 Django 전환, Elasticsearch(Nori) 하이브리드 검색기 교체, ES 디스크 누적 수정 |
+| `feature/merge_test` | `0bd04a3` (PR #6) | 추가 기능 문서화 |
+| `feature_frontend` | `1f6405e` (PR #7) | 사업계획서 3단 레이아웃·공고 양식 기반 초안, 영수증 여러 장 등록, 지출 엑셀 다운로드 |
+| `feature/DB` | `7da85c0` (PR #8) | 유저 개인화 DB 스키마 |
+| `feature/merge_test` | `bd2f51b` (PR #9) | 채팅방 ID 오류 수정, `app_extras.sql` 자동 적용 |
+| `feature/refactoring` | `8fa2e64` (PR #10) | 프론트 개발 서버 코드 변경 즉시 반영 |
+| `feature/LLM-plan` | `dc27346` (PR #11) | 사업계획서 입력 정리·양식 검사·HWPX/PDF 출력 |
+| `feature/merge_test` | `82abd5c` (PR #12) | 영수증 OCR 개선(품목별 금액, 품목·상호 직접 수정), 사업계획서·OCR 유닛테스트 |
+
 ## 2. 미해결·보류 항목
 
 | 항목 | 상태 | 내용 |
 | --- | --- | --- |
 | 결함 40. 공고문 붙여넣기 요약을 부르는 화면이 없음 | 미해결 | `POST /announcements/summary`와 `api.summarizeAnnouncement`는 살아 있으나 프론트 재설계(`9c8e075`)가 원문 입력 화면을 없애 호출자가 0건이다. 화면 설계 결정이 필요하다 |
 | P1-3. 부트스트랩 결함 2건(결함 12·13) | 보류 | `Backend/core/db.py`의 `_apply_extras`가 `rollback()` 없이 실패를 삼키고, Postgres 경로가 기본 테이블을 만들지 않는다. 둘 다 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다 |
-| 지출 분석(FS-14~17) | 보류 | 추가 기능(추후 개발)으로 돌렸다(`Docs/README.md` 8절). Backend `/expenses/*`, LLM `/ocr/receipt`·`/rag/deductibility`, DB 테이블은 유지하나 부르는 화면이 없고, `Frontend/src/pages/MyPage.jsx`의 `ExpenseTracker`는 미사용이다. 경비처리 질의응답은 AI 상담(`category=expense`)으로 제공한다 |
 
 ## 3. 해결된 이슈
 
@@ -68,6 +81,7 @@
 | P2-2(일부). Backend 이미지 빌드가 락파일 무시 | `uv sync --frozen` 적용 | `c74013d` |
 | AI 상담·공고문 분석 | 생성 주체 순서, 비로그인 401 안내, LLM 인덱스 기동 워밍업(결함 37~39). 콜드 스타트 경합은 llm 헬스체크 + `service_healthy`로 보완 | `c4eb000`, `a835832` |
 | 실행 절차 부재 | `setup.sh`가 0바이트였음 | `1781790` |
+| 지출 분석(FS-14~17) 화면 부재 | 보류했던 지출관리를 `Frontend/src/pages/ExpenseTracker.jsx`로 다시 연결(`SubPage.jsx`에서 렌더) | PR #7 `1f6405e`, PR #12 `82abd5c` |
 | 프론트 챗 타임아웃이 서버 예산보다 짧음 | `apiPost` 기본 30초가 tax 예산 120초보다 짧았음. `api.chat`이 tax 계열 135초·그 외 60초를 씀 | `e619d23` |
 
 **교훈 두 가지.**
@@ -111,10 +125,10 @@
 - 시연 결함 목록(43~): `Docs/reports/INTEGRATION_ISSUES_0914.md`
 - 작업 체크리스트: `Docs/TODO.md`
 - 데이터 구조와 스키마 적용 경로: `Docs/Design/ERD.md`
-- Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md` (구 초안 `LLM_API_SPEC.md`는 기록용 보존)
-- Backend 연동 인계 지침: `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md`
+- Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
 - 세금 Semantic Cache 효과: `Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md`
+- 사업계획서 작업 흐름: `Docs/reports/BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md`
 - 화면 변경 기록: `Frontend/CHANGES.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`
 - 전체 로컬 실행: `setup.sh` · `setup.bat` (각 파일 상단 주석)
