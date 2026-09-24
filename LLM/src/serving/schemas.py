@@ -215,27 +215,81 @@ class LegalBasisResponse(BaseModel):
     llmUsed: bool
 
 
+class BusinessPlanReviewedSection(BaseModel):
+    key: str = Field(max_length=100)
+    label: str = Field(max_length=200)
+    content: str = Field(max_length=5000)
+
+
 class BusinessPlanRequest(BaseModel):
     """Backend가 전달하는 사업계획서 초안 생성 입력."""
 
     businessName: str = ""
+    applicantName: str = Field(default="", max_length=100)
     tagline: str = ""
+    startupStatus: str = Field(default="", max_length=100)
+    industry: str = Field(default="", max_length=100)
+    businessRegion: str = Field(default="", max_length=100)
+    businessType: str = Field(default="", max_length=100)
     targetCustomer: str = ""
     problem: str = ""
     solution: str = ""
+    coreFeatures: str = Field(default="", max_length=1000)
     differentiator: str = ""
+    revenueModel: str = Field(default="", max_length=500)
     team: str = ""
     targetProgram: str = ""
     extraNotes: str = ""
     templateText: str = Field(
         default="",
-        max_length=6000,
-        description="지원사업 공고의 사업계획서 양식 원문. 비어 있으면 기본 PSST 4항목으로 생성한다.",
+        max_length=12000,
+        description="지원사업 공고의 사업계획서 양식 원문. 비어 있으면 기본 양식 13개 항목으로 생성한다.",
     )
+    templateFields: list[str] = Field(default_factory=list, max_length=40)
+    reviewedSections: list[BusinessPlanReviewedSection] = Field(default_factory=list, max_length=40)
+    announcementId: int | None = Field(default=None, gt=0)
+    announcementCriteria: str = Field(default="", max_length=6000)
+
+
+class BusinessPlanRefinedFields(BaseModel):
+    businessName: str = Field(default="", max_length=100)
+    tagline: str = Field(default="", max_length=200)
+    startupStatus: str = Field(default="", max_length=100)
+    industry: str = Field(default="", max_length=100)
+    businessRegion: str = Field(default="", max_length=100)
+    businessType: str = Field(default="", max_length=100)
+    targetCustomer: str = Field(default="", max_length=500)
+    problem: str = Field(default="", max_length=1000)
+    solution: str = Field(default="", max_length=1000)
+    coreFeatures: str = Field(default="", max_length=1000)
+    differentiator: str = Field(default="", max_length=500)
+    revenueModel: str = Field(default="", max_length=500)
+    team: str = Field(default="", max_length=500)
+    extraNotes: str = Field(default="", max_length=1000)
+
+
+class BusinessPlanRefineRequest(BaseModel):
+    input: BusinessPlanRefinedFields
+
+
+class BusinessPlanRefineResponse(BaseModel):
+    refined: BusinessPlanRefinedFields
+    llmUsed: bool
+
+
+class BusinessPlanTemplateRequest(BaseModel):
+    fileName: str = Field(min_length=1, max_length=255)
+    contentBase64: str = Field(min_length=1, max_length=5_592_416)
+
+
+class BusinessPlanTemplateResponse(BaseModel):
+    kind: Literal["pdf", "hwpx"]
+    fields: list[str]
+    outputFormats: list[Literal["pdf", "hwpx"]]
 
 
 class BusinessPlanSectionResponse(BaseModel):
-    """생성된 사업계획서의 항목 하나. 기본 모드는 PSST 4항목, 양식 모드는 공고 양식을 따른다."""
+    """생성된 사업계획서의 항목 하나. 기본 모드는 기본 양식 13개 칸, 양식 모드는 제출 양식을 따른다."""
 
     key: str
     label: str
@@ -278,9 +332,31 @@ class BizplanCoachResponse(BaseModel):
 
 
 class BusinessPlanEvaluateRequest(BaseModel):
-    """예비진단 대상 초안. 기본 모드는 PSST 4항목, 양식 모드는 공고 양식을 따른다."""
+    """예비진단 대상 초안. 기본 모드는 기본 양식 13개 칸, 양식 모드는 제출 양식을 따른다."""
 
-    sections: list[BizplanSectionInput] = Field(default_factory=list, max_length=20)
+    sections: list[BizplanSectionInput] = Field(default_factory=list, max_length=40)
+    announcementCriteria: str = Field(default="", max_length=6000)
+    templateCriteria: str = Field(default="", max_length=6000)
+
+
+class BusinessPlanImageInput(BaseModel):
+    key: str = Field(min_length=1, max_length=100)
+    mimeType: Literal["image/png", "image/jpeg"]
+    contentBase64: str = Field(min_length=1, max_length=2_796_204)
+
+
+class BusinessPlanRenderRequest(BaseModel):
+    title: str = Field(default="사업계획서", max_length=200)
+    sections: list[BizplanSectionInput] = Field(min_length=1, max_length=40)
+    format: Literal["pdf", "hwpx"]
+    template: BusinessPlanTemplateRequest | None = None
+    images: list[BusinessPlanImageInput] = Field(default_factory=list, max_length=20)
+
+
+class BusinessPlanRenderResponse(BaseModel):
+    fileName: str
+    mimeType: str
+    contentBase64: str
 
 
 class BusinessPlanSectionScoreResponse(BaseModel):

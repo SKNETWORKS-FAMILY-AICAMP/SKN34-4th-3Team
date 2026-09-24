@@ -1,6 +1,26 @@
 # 개발 전용 오버라이드. 배포 서버는 쓰지 않는다.
 # docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 services:
+  llm:
+    command:
+      [
+        "uv",
+        "run",
+        "--frozen",
+        "uvicorn",
+        "src.serving.django_config.asgi:application",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--lifespan",
+        "off",
+        "--reload",
+        "--reload-dir",
+        "/app/src",
+      ]
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"
   backend:
     # .py 수정 시 자동 재시작. /DB 의 .sql 저장 시에도 재시작되어
     # init_db()의 _apply_extras 가 app_extras.sql 을 다시 적용한다.

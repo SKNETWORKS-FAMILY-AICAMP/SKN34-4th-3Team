@@ -23,11 +23,13 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
   const body = (
     <React.Fragment>
       <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' ? ' fp--wideplus' : '')}>
-        <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
-          <div className="fp__head-in">
-            <h1 className="fp__title">{meta.title}</h1>
+        {pageKey !== 'bizplan' && (
+          <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
+            <div className="fp__head-in">
+              <h1 className="fp__title">{meta.title}</h1>
+            </div>
           </div>
-        </div>
+        )}
         <div className="fp__body">
           {pageKey === 'roadmap' && (
             <RoadmapGuide
@@ -53,7 +55,8 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
           )}
           {pageKey === 'bizplan' && (
             <div className="exp-page">
-              <BusinessPlanPage user={user} onRequireLogin={onLoginClick} />
+              <BusinessPlanPage user={user} onRequireLogin={onLoginClick}
+                savedPolicies={savedPolicies} onToggleSavedPolicy={onToggleSavedPolicy} />
             </div>
           )}
         </div>

@@ -1,6 +1,8 @@
 import asyncio
 import base64
+import binascii
 import logging
+import re
 from collections.abc import Callable
 from functools import partial
 from threading import RLock
@@ -20,6 +22,11 @@ from src.data.postgres_repository import (
     get_user_profile as get_database_user_profile,
 )
 from src.features.document_processing import PdfDocumentError
+from src.features.business_plan_documents import (
+    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, convert_hwpx_to_pdf, decode_template,
+    inspect_template, render_default_hwpx, render_default_pdf,
+    render_hwpx_form, render_pdf_form,
+)
 from src.features.elasticsearch_indexing import reindex_postgres_to_elasticsearch
 from src.features.indexing import (
     load_or_build_document_index,
@@ -29,10 +36,13 @@ from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
 from src.rag.bizplan_coach import generate_bizplan_coach_response
 from src.rag.backend_tasks import (
+    BUSINESS_PLAN_ANALYSIS_MARKER,
+    analyze_business_plan_fields,
     evaluate_business_plan,
     extract_receipt,
     extract_receipt_from_ocr,
     generate_business_plan,
+    refine_business_plan_input,
     generate_deductibility,
     generate_legal_basis,
     summarize_announcement,
@@ -54,6 +64,12 @@ from src.serving.schemas import (
     BusinessPlanEvaluateResponse,
     BusinessPlanRequest,
     BusinessPlanResponse,
+    BusinessPlanRefineRequest,
+    BusinessPlanRefineResponse,
+    BusinessPlanTemplateRequest,
+    BusinessPlanTemplateResponse,
+    BusinessPlanRenderRequest,
+    BusinessPlanRenderResponse,
     BusinessPlanSectionResponse,
     BusinessPlanSectionScoreResponse,
     BackendUserContext,
@@ -780,18 +796,61 @@ async def adapter_business_plan(
     """사용자가 입력한 사업 정보만으로 PSST 사업계획서 초안을 생성한다. 법령 근거는 쓰지 않는다."""
     _ = settings_config
     try:
+        if request_body.templateText == BUSINESS_PLAN_ANALYSIS_MARKER:
+            # TODO(Backend API): expose a typed /bizplan/template-analyze response with
+            # field_id, type, required_information, status and missing_fields. Until then
+            # JSON in section.content preserves the existing Backend pass-through contract.
+            if not request_body.templateFields:
+                raise ApiError(status_code=422, detail="분석할 양식 입력 항목이 없습니다.")
+            analysis = await analyze_business_plan_fields(
+                rag_runtime.llm_factory(),
+                template_fields=request_body.templateFields,
+                user_information={
+                    "사업명": request_body.businessName,
+                    "신청자 성명": request_body.applicantName,
+                    "창업 상태": request_body.startupStatus,
+                    "업종": request_body.industry,
+                    "사업 지역": request_body.businessRegion,
+                    "사업 형태": request_body.businessType,
+                    "팀 구성": request_body.team,
+                    "목표 고객": request_body.targetCustomer,
+                    "핵심 문제": request_body.problem,
+                    "해결 방안": request_body.solution,
+                    "핵심 기능": request_body.coreFeatures,
+                    "차별점": request_body.differentiator,
+                    "수익 방식": request_body.revenueModel,
+                    "추가 설명": request_body.extraNotes,
+                },
+            )
+            return BusinessPlanResponse(
+                sections=[BusinessPlanSectionResponse(
+                    key=field.field_id, label=label,
+                    content=field.model_dump_json(ensure_ascii=False),
+                ) for label, field in zip(request_body.templateFields, analysis.fields)],
+                summary="양식 입력 영역 분석 결과", llmUsed=True,
+            )
         generated = await generate_business_plan(
             rag_runtime.llm_factory(),
             business_name=request_body.businessName,
+            applicant_name=request_body.applicantName,
             tagline=request_body.tagline,
+            startup_status=request_body.startupStatus,
+            industry=request_body.industry,
+            business_region=request_body.businessRegion,
+            business_type=request_body.businessType,
             target_customer=request_body.targetCustomer,
             problem_input=request_body.problem,
             solution_input=request_body.solution,
+            core_features=request_body.coreFeatures,
             differentiator=request_body.differentiator,
+            revenue_model=request_body.revenueModel,
             team_input=request_body.team,
             target_program=request_body.targetProgram,
             extra_notes=request_body.extraNotes,
             template_text=request_body.templateText,
+            template_fields=request_body.templateFields,
+            reviewed_sections=[section.model_dump() for section in request_body.reviewedSections],
+            announcement_criteria=request_body.announcementCriteria,
         )
         return BusinessPlanResponse(
             sections=[
@@ -874,6 +933,8 @@ async def adapter_business_plan_evaluate(
         generated = await evaluate_business_plan(
             rag_runtime.llm_factory(),
             sections=[section.model_dump() for section in request_body.sections],
+            announcement_criteria=request_body.announcementCriteria,
+            template_criteria=request_body.templateCriteria,
         )
         return BusinessPlanEvaluateResponse(
             overallScore=generated.overall_score,
@@ -900,6 +961,103 @@ async def adapter_business_plan_evaluate(
             exc,
             fallback_message="Business plan evaluation failed.",
         ) from exc
+
+
+async def adapter_business_plan_refine(
+    request_body: BusinessPlanRefineRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRefineResponse:
+    _ = settings_config
+    try:
+        refined = await refine_business_plan_input(
+            rag_runtime.llm_factory(), request_body.input.model_dump()
+        )
+        return BusinessPlanRefineResponse(refined=refined.model_dump(), llmUsed=True)
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise upstream_http_exception(exc, fallback_message="Business plan refinement failed.") from exc
+
+
+async def adapter_business_plan_template_inspect(
+    request_body: BusinessPlanTemplateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanTemplateResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        kind, data = decode_template(request_body.fileName, request_body.contentBase64)
+        fields = await asyncio.to_thread(inspect_template, kind, data)
+        return BusinessPlanTemplateResponse(
+            kind=kind, fields=fields,
+            outputFormats=["pdf"] if kind == "pdf" else ["hwpx", "pdf"],
+        )
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
+
+
+async def adapter_business_plan_render(
+    request_body: BusinessPlanRenderRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRenderResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        sections = [section.model_dump() for section in request_body.sections]
+        if request_body.template:
+            kind, data = decode_template(
+                request_body.template.fileName, request_body.template.contentBase64
+            )
+            fields = await asyncio.to_thread(inspect_template, kind, data)
+            values = {section["label"]: section["content"] for section in sections}
+            if set(fields) != set(values) or len(fields) != len(sections):
+                # Previously saved drafts predate the optional printed-bullet hint.
+                without_bullets = lambda label: re.sub(r"\s*\[글머리표:[^\]]+\]", "", label)
+                old_values = {without_bullets(label): content for label, content in values.items()}
+                if len(old_values) != len(fields) or set(old_values) != {without_bullets(label) for label in fields}:
+                    raise BusinessPlanDocumentError("초안 항목이 양식의 입력 항목과 일치하지 않습니다.")
+                values = {label: old_values[without_bullets(label)] for label in fields}
+            sections_by_key = {section["key"]: section for section in sections}
+            images = {}
+            total_image_bytes = 0
+            for image in request_body.images:
+                section = sections_by_key.get(image.key)
+                if not section or not re.search(r"이미지|사진|도면|로고|image|photo|logo", section["label"], re.I):
+                    raise BusinessPlanDocumentError("이미지 첨부 항목이 양식의 이미지 영역과 일치하지 않습니다.")
+                try:
+                    raw = base64.b64decode(image.contentBase64, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise BusinessPlanDocumentError("이미지 파일 데이터가 올바르지 않습니다.") from exc
+                if not raw or len(raw) > 2 * 1024 * 1024 or section["label"] in images:
+                    raise BusinessPlanDocumentError("이미지는 항목당 2 MiB 이하의 파일 하나만 첨부할 수 있습니다.")
+                total_image_bytes += len(raw)
+                if total_image_bytes > 4 * 1024 * 1024:
+                    raise BusinessPlanDocumentError("첨부 이미지의 합계는 4 MiB 이하여야 합니다.")
+                images[section["label"]] = (image.mimeType, raw)
+            if kind == "pdf":
+                if request_body.format != "pdf":
+                    raise BusinessPlanDocumentError("PDF 양식은 PDF로만 출력할 수 있습니다.")
+                result = await asyncio.to_thread(render_pdf_form, data, values, request_body.title, images)
+            else:
+                hwpx = await asyncio.to_thread(render_hwpx_form, data, values, images)
+                result = hwpx if request_body.format == "hwpx" else await asyncio.to_thread(convert_hwpx_to_pdf, hwpx)
+        elif request_body.images:
+            raise BusinessPlanDocumentError("이미지를 배치할 PDF/HWPX 양식이 필요합니다.")
+        elif request_body.format == "hwpx":
+            result = await asyncio.to_thread(render_default_hwpx, request_body.title, sections)
+        else:
+            result = await asyncio.to_thread(render_default_pdf, request_body.title, sections)
+        name = "business-plan." + request_body.format
+        mime = "application/pdf" if request_body.format == "pdf" else "application/hwp+zip"
+        return BusinessPlanRenderResponse(
+            fileName=name, mimeType=mime,
+            contentBase64=base64.b64encode(result).decode("ascii"),
+        )
+    except BusinessPlanRendererUnavailable as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
 
 
 async def adapter_summarize_announcement(
