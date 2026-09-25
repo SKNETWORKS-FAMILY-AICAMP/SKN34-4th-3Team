@@ -328,13 +328,14 @@ erDiagram
 
     bizplan_drafts {
         int user_id PK "FK"
-        jsonb form
-        jsonb plan "sections 가변"
-        jsonb eval_result
+        jsonb data "작성 화면 상태 전체"
+        jsonb form "미사용"
+        jsonb plan "미사용"
+        jsonb eval_result "미사용"
         datetime updated_at
     }
 ```
 
 - **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
 - **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
-- **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 공고 양식에 따라 초안 항목 수·키가 달라져 `form`·`plan`·`eval_result`를 JSONB로 둔다.
+- **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 저장 필드가 자주 늘어나 작성 화면 상태 전체(양식·이미지 Base64 포함)를 `data` JSONB 하나에 둔다. `form`·`plan`·`eval_result`는 쓰지 않으며 삭제는 팀 합의 뒤 진행한다.

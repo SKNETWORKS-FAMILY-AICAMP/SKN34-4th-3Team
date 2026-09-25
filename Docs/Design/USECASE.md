@@ -146,7 +146,7 @@ flowchart TD
 
 `청년창업 세액감면 자동판정`은 설계 초안에서 `답변 근거 확인`을 include했으나 구현에서는 뺐다. 판정 응답은 LLM이 생성한 `legalBasis` 문장만 담고 근거 문서 목록을 저장·조회하지 않는다(`GET /chat/messages/{id}/sources`는 챗 메시지 전용).
 
-`명세 외 구현 기능`(UX1~5)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 브라우저 localStorage `changeup:roadmap-done:v2:{userId}`에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4·5는 화면까지 연결돼 있다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
+`명세 외 구현 기능`(UX1~5)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 서버 `user_roadmap_progress`(`/users/me/roadmap-progress`)에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4·5는 화면까지 연결돼 있다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
 
 ## 3. 관리자 · 외부 시스템 — 상세 유스케이스
 

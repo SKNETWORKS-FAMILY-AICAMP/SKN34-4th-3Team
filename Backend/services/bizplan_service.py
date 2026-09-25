@@ -1,5 +1,6 @@
 import base64
 import binascii
+import json
 from pathlib import Path
 
 from ninja.errors import HttpError
@@ -18,6 +19,8 @@ from core.llm_client import (
 
 MAX_TEMPLATE_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
+# 임시저장에는 양식(4 MiB)과 이미지(합계 4 MiB)가 Base64로 들어가 최대 약 10.7 MB가 된다.
+MAX_DRAFT_BYTES = 12 * 1024 * 1024
 
 
 def _announcement_context(announcement_id: int | None) -> tuple[str, str]:
@@ -139,3 +142,17 @@ def render(body: dict) -> dict:
     if total_bytes > 4 * 1024 * 1024:
         raise HttpError(413, "첨부 이미지의 합계는 4 MiB 이하여야 합니다.")
     return _call_document_api(render_business_plan, body)
+
+
+def get_draft(user_id: int) -> dict:
+    row = repo.get_bizplan_draft(user_id)
+    if not row:
+        return {"data": None, "updatedAt": None}
+    return {"data": row.get("data") or {}, "updatedAt": row.get("updated_at")}
+
+
+def save_draft(user_id: int, data: dict) -> None:
+    size = len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+    if size > MAX_DRAFT_BYTES:
+        raise HttpError(413, "임시저장 내용은 12 MiB 이하여야 합니다. 첨부 파일을 줄여 주세요.")
+    repo.upsert_bizplan_draft(user_id, data)

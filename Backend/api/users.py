@@ -4,6 +4,8 @@ from api.deps import user_auth
 from schemas.users import (
     BusinessProfileResponse,
     BusinessProfileUpdate,
+    RoadmapProgressResponse,
+    RoadmapTaskUpdate,
     UpdatedResponse,
     UserMeResponse,
     UserMeUpdate,
@@ -47,4 +49,25 @@ def update_business_profile(
 ):
     """세액감면·정책 추천에 쓰이는 사업자 프로필을 저장합니다."""
     user_service.update_business_profile(request.auth["id"], body.model_dump())
+    return {"updated": True}
+
+
+@router.get(
+    "/me/roadmap-progress",
+    response=RoadmapProgressResponse,
+    summary="창업 로드맵 진행 상태 조회",
+)
+def roadmap_progress(request):
+    """완료로 체크한 로드맵 항목 키 목록을 반환합니다."""
+    return user_service.get_roadmap_progress(request.auth["id"])
+
+
+@router.put(
+    "/me/roadmap-progress",
+    response=UpdatedResponse,
+    summary="창업 로드맵 항목 체크/해제",
+)
+def update_roadmap_task(request, body: RoadmapTaskUpdate):
+    """항목 하나의 완료 여부를 저장합니다."""
+    user_service.set_roadmap_task(request.auth["id"], body.taskKey, body.done)
     return {"updated": True}

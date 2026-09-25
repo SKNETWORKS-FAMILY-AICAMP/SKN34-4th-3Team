@@ -254,6 +254,8 @@ export const api = {
   updateMe: (body, opt) => apiPut('/users/me', body, opt),
   businessProfile: (opt) => apiGet('/users/me/business-profile', opt),
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
+  roadmapProgress: (opt) => apiGet('/users/me/roadmap-progress', opt),
+  setRoadmapTask: (taskKey, done, opt) => apiPut('/users/me/roadmap-progress', { taskKey, done }, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),
@@ -306,6 +308,9 @@ export const api = {
   refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
   inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
   renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
+  // 임시저장에는 양식·이미지 Base64가 들어가 최대 10MB대라 전송 시간을 넉넉히 둔다.
+  bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
+  saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

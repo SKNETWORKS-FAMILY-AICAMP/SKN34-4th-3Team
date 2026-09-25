@@ -37,6 +37,18 @@ class BusinessProfileUpdate(BaseModel):
     foundedAt: date | None = Field(default=None, description="창업일")
 
 
+class RoadmapProgressResponse(BaseModel):
+    model_config = ConfigDict(title="창업 로드맵 진행 상태")
+    version: int = Field(description="항목 구성 버전")
+    done: list[str] = Field(description='완료한 항목 키 목록(예: "A:0")')
+
+
+class RoadmapTaskUpdate(BaseModel):
+    model_config = ConfigDict(title="창업 로드맵 항목 체크")
+    taskKey: str = Field(pattern=r"^[A-Z]:\d+$", max_length=20, description='"단계:항목 인덱스" (예: "A:0")')
+    done: bool = Field(description="완료 여부")
+
+
 class UpdatedResponse(BaseModel):
     model_config = ConfigDict(title="수정 결과")
     updated: bool = Field(default=True, description="수정 성공 여부")

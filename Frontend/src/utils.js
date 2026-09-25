@@ -170,8 +170,9 @@ export const loadStoredUser = () => {
   }
 };
 
-// 창업 로드맵 체크리스트 — 서버 저장이 없어 이 브라우저에 계정별로 남긴다.
-// 목표 내용을 근거 기반으로 교체하면서 항목이 달라졌으므로, 예전 체크 기록이 다른 목표에 붙지 않게 키에 버전(v2)을 둔다.
+// 창업 로드맵 체크리스트 — 서버(user_roadmap_progress)가 원본이다.
+// 예전에 이 브라우저에 남긴 체크는 로그인 때 한 번 서버로 옮기고 지운다(App.jsx). 그 이관에만 쓴다.
+// 키의 v2는 서버 version과 같은 의미다.
 
 export const ROADMAP_KEY = (userId) => `changeup:roadmap-done:v2:${userId}`;
 
@@ -184,9 +185,9 @@ export const loadRoadmapDone = (userId) => {
   }
 };
 
-export const saveRoadmapDone = (userId, obj) => {
+export const clearLegacyRoadmapDone = (userId) => {
   try {
-    localStorage.setItem(ROADMAP_KEY(userId), JSON.stringify(obj));
+    localStorage.removeItem(ROADMAP_KEY(userId));
   } catch (e) {
     /* 저장 불가 환경은 무시 */
   }

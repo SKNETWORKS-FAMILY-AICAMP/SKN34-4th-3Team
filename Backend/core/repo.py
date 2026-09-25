@@ -649,6 +649,41 @@ def unsave_policy(user_id: int, policy_id: int) -> None:
     )
 
 
+def list_roadmap_done(user_id: int, version: int) -> list[str]:
+    rows = db.fetchall(
+        "SELECT task_key FROM user_roadmap_progress WHERE user_id = ? AND version = ? ORDER BY task_key",
+        (user_id, version),
+    )
+    return [row["task_key"] for row in rows]
+
+
+def set_roadmap_task(user_id: int, version: int, task_key: str, done: bool) -> None:
+    # 완료한 항목만 행으로 둔다. 해제하면 행을 지운다.
+    if done:
+        db.execute(
+            "INSERT INTO user_roadmap_progress(user_id,version,task_key) VALUES (?,?,?) "
+            "ON CONFLICT (user_id, version, task_key) DO NOTHING",
+            (user_id, version, task_key),
+        )
+    else:
+        db.execute(
+            "DELETE FROM user_roadmap_progress WHERE user_id = ? AND version = ? AND task_key = ?",
+            (user_id, version, task_key),
+        )
+
+
+def get_bizplan_draft(user_id: int) -> dict | None:
+    return db.fetchone("SELECT data, updated_at FROM bizplan_drafts WHERE user_id = ?", (user_id,))
+
+
+def upsert_bizplan_draft(user_id: int, data: dict) -> None:
+    db.execute(
+        "INSERT INTO bizplan_drafts(user_id,data,updated_at) VALUES (?,?,now()) "
+        "ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+        (user_id, json.dumps(data, ensure_ascii=False)),
+    )
+
+
 def insert_policy(admin_id: int, body: dict) -> int:
     return db.insert(
         "INSERT INTO policies(admin_id,title,region,industry,target,benefit,eligibility_rule,source,created_at) VALUES (?,?,?,?,?,?,?,?,?)",

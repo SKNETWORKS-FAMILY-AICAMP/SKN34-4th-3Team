@@ -70,7 +70,7 @@
 
 ## 7. 사업계획서
 
-사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`, 전체 메뉴 → "사업계획서")이 부른다. 준비 → AI 설계 → 마무리 3단 구성이며, 세 기능 모두 로그인이 필요하고 검색(RAG) 없이 LLM을 한 번 부르는 방식이다. 입력값·초안·예비진단 결과는 서버에 저장하지 않고 브라우저 localStorage(`changeup:bizplan-draft:{userId}`)에 임시저장한다. 기능 정리는 `Docs/reports/FEATURE_ROADMAP_EXPENSE.md` 3절 참고.
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`, 전체 메뉴 → "사업계획서")이 부른다. 준비 → AI 설계 → 마무리 3단 구성이며, 세 기능 모두 로그인이 필요하고 검색(RAG) 없이 LLM을 한 번 부르는 방식이다. 입력값·초안·예비진단 결과는 "임시저장" 버튼으로 서버(`bizplan_drafts.data`, `PUT /bizplan/draft`)에 유저당 1건 저장하고, 화면을 열면 `GET /bizplan/draft`로 복원한다. 기능 정리는 `Docs/reports/FEATURE_ROADMAP_EXPENSE.md` 3절 참고.
 
 | 기능ID | 기능명 | 관련 유스케이스 | 설명 | 주요 흐름 | 예외/제약사항 | 화면 연결 |
 | --- | --- | --- | --- | --- | --- | :-: |
