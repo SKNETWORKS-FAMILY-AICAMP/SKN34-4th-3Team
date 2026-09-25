@@ -244,7 +244,7 @@ erDiagram
     - `Reminder`는 사용자가 특정 일정(세금·지원금·개인 무관)에 건 알림이다. `dispatched`로 발송 여부를 추적한다
 - **Policy – CalendarEvent**: 정책의 신청 마감일(`Announcement.apply_end_date`)을 기준으로 생성되는 POLICY 타입 `CalendarEvent`를 위한 관계다. `Announcement`에 `apply_start_date`/`apply_end_date` 구조화 필드를 추가한 이유는, `AnnouncementSummary.period`가 AI 요약 문자열이라 캘린더 렌더링에 쓸 신뢰 가능한 날짜 값이 아니기 때문이다.
 - **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다(현재 구현은 한 장에 하나를 만든다). `receipts.image_data`는 업로드 원본을 다시 보여주기 위한 것이고, `receipt_extractions.read_meta`는 OCR이 실제로 읽은 항목과 기본값으로 채운 항목을 구분하는 JSON이다. `expenses.deductible_tier`·`proof_valid`·`missing_fields`는 경비 인정 3단계 판정·적격증빙 여부·빠진 정보다(FS-17).
-- **사업계획서(FS-29~31)**: 테이블이 없다. 입력값·초안·예비진단 결과는 브라우저 localStorage에만 임시저장한다. 창업 로드맵 체크리스트와 상담 대화방 구분·이름도 같은 방식이다. DB 이관안은 아래 "제안: 유저 개인화 저장 이관" 절과 `Docs/reports/USER_PERSONALIZATION_DB.md` 참고.
+- **사업계획서(FS-29~31)**: 입력값·초안·예비진단 결과는 "임시저장" 버튼으로 `bizplan_drafts.data`에 유저당 1건 저장한다. 창업 로드맵 체크리스트는 `user_roadmap_progress`, 상담 대화방은 `chat_rooms`에 둔다. 자세한 내용은 아래 "유저 개인화 저장 이관" 절 참고.
 - **Policy – Announcement – AnnouncementSummary**: 정책(마스터 데이터) 하나에 여러 시점의 공고문이 달릴 수 있고(1:N), 공고문 하나는 AI 요약 결과 하나를 가진다(1:1).
 - **User – Policy (SavedPolicy)**: 관심 정책 저장(FS-23)을 위한 다대다 조인 테이블.
 - **AdminUser – Policy / TaxDocument**: 관리자가 등록한 데이터의 출처를 추적하기 위한 FK.
@@ -287,9 +287,9 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 - `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
 - compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
 
-## 유저 개인화 저장 이관 (대화방 적용, 로드맵·사업계획서 미적용)
+## 유저 개인화 저장 이관 (대화방·로드맵·사업계획서 적용)
 
-지금 브라우저 localStorage에만 있는 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 두기 위한 안이다. 스키마는 `DB/app_extras.sql`에 반영됐고, 코드는 대화방만 전환했다(로드맵 체크·사업계획서 초안은 아직 localStorage). 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+브라우저 localStorage에만 있던 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 둔다. 스키마는 `DB/app_extras.sql`에 있고, 코드는 세 기능 모두 전환했다(로드맵·사업계획서는 `feature/personalize`, 기존 localStorage 값은 로그인 때 한 번 서버로 옮긴다). 로드맵·사업계획서 연결 내용은 `Docs/reports/USER_PERSONALIZATION_PLAN.md`에 있다. 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
 
 ```mermaid
 erDiagram
