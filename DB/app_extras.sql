@@ -116,3 +116,5 @@ BEGIN
         ALTER TABLE chat_messages ALTER COLUMN room_id SET NOT NULL;
     END IF;
 END $$;
+
+ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
