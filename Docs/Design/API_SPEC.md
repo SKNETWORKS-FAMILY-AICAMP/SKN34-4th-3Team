@@ -36,9 +36,12 @@
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /chat/categories/{category}/suggested-questions | 카테고리별 추천 질문 목록(하드코딩) | **불필요** | - | `{ category, questions: [...] }` (알 수 없는 category는 tax 목록) | FS-05 |
-| POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy / roadmap) | 필요 | `{ category, question, roadmapStep? }` (`roadmapStep`은 `A`~`F`·`Z`, `roadmap`에서만 허용) | `{ messageId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
+| POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy / roadmap) | 필요 | `{ category, question, roadmapStep?, roomId? }` (`roadmapStep`은 `A`~`F`·`Z`, `roadmap`에서만 허용. `roomId`를 비우면 새 대화방) | `{ messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
 | GET | /chat/messages | 내 대화 기록 조회 | 필요 | `?category`(선택) | `{ messages: [...] }` | FS-05 |
-| DELETE | /chat/messages | 내 대화 기록 삭제(전체·카테고리·대화방 단위) | 필요 | `?category`(선택), `?ids`(선택, 쉼표 구분 메시지 id. 지정 시 `category`는 무시하고 해당 메시지만 삭제) | `{ deleted: true, count: n }` | FS-05 |
+| DELETE | /chat/messages | 내 대화방 전체(또는 카테고리 단위) 삭제 | 필요 | `?category`(선택). 예전 방식의 `?ids`는 `400`(대화방 하나는 `DELETE /chat/rooms/{roomId}`) | `{ deleted: true, count: n }` | FS-05 |
+| GET | /chat/rooms | 대화방 목록(최근 대화 순) | 필요 | `?category`(필수) | `{ rooms: [{ id, category, title, firstQuestion, createdAt, updatedAt }] }` (`title`이 없으면 `firstQuestion`을 제목으로 씀) | FS-05 |
+| PATCH | /chat/rooms/{roomId} | 대화방 이름 변경(본인 방만) | 필요 | `{ title }` (255자 이하, 비우면 첫 질문으로 되돌림) | `{ updated: true }` | FS-05 |
+| DELETE | /chat/rooms/{roomId} | 대화방 하나 삭제(본인 방만) | 필요 | - | `{ deleted: true }` | FS-05 |
 | GET | /chat/messages/{messageId}/sources | 답변 근거 문서 조회 | 필요 | - | `{ sources: [{ title, url, excerpt }] }` | FS-08 |
 
 ## calendar — 홈 화면 캘린더
@@ -78,6 +81,9 @@
 | PATCH | /expenses/{expenseId} | 지출항목 변경 후 재판정 | 필요 | `{ category }` (지원하지 않는 항목은 400) | `/deductibility`와 같음 | FS-16 |
 | DELETE | /expenses/{expenseId} | 지출 삭제 | 필요 | - | `{ deleted: true }` | FS-16 |
 | GET | /expenses/{expenseId}/analysis | 읽은 항목·판단 단계·관련 법령(LLM 호출 없이 즉시 응답) | 필요 | - | `{ fields, steps, laws, lawNote, tier, tierLabel, ocrSource, ocrConfidence }` | FS-15, FS-17 |
+| POST | /expenses/{expenseId}/items | OCR이 놓친 품목 직접 추가 | 필요 | `{ name, price? }` (`name` 1~200자, `price` 0 이상) | `/analysis`와 같음 | FS-15 |
+| DELETE | /expenses/{expenseId}/items/{itemIndex} | 품목 삭제(`itemIndex`는 화면 순서, 0부터) | 필요 | - | `/analysis`와 같음 | FS-15 |
+| PATCH | /expenses/{expenseId}/vendor | 상호 직접 수정 | 필요 | `{ vendor }` (1~200자) | `/analysis`와 같음 | FS-15 |
 | GET | /expenses/{expenseId}/deductibility | 경비처리 가능성·세법 근거 | 필요 | - | `{ deductible, confidence, basis, llmUsed, sources, tier, tierLabel, proofType, proofTypeLabel, proofValid, missingFields }` | FS-17 |
 
 `POST /expenses/receipts`의 업로드 한도는 **4 MiB**이며 초과 시 `413`이다(`Backend/api/expenses.py`의 `MAX_RECEIPT_BYTES`).
@@ -93,15 +99,18 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## bizplan — 사업계획서
 
-사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 부른다. 세 경로 모두 결과를 서버에 저장하지 않으며 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`).
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 부른다. 모든 경로가 결과를 서버에 저장하지 않으며 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | /bizplan/generate | 사업계획서 초안 생성 | 필요 | `{ businessName, tagline, targetCustomer, problem, solution, differentiator, team, targetProgram, extraNotes, templateText }` (전부 선택, `templateText` 6000자 이하) | `{ sections: [{ key, label, content }], summary, llmUsed }` | FS-29 |
-| POST | /bizplan/evaluate | AI 예비진단(자체 채점) | 필요 | `{ sections: [{ key, label, content }] }` (최대 20개) | `{ overallScore, overallComment, sections: [{ key, label, score, strengths, improvements }], llmUsed }` (점수 0~100) | FS-30 |
+| POST | /bizplan/generate | 사업계획서 초안 생성 | 필요 | `{ businessName, tagline, startupStatus, industry, businessRegion, businessType, targetCustomer, problem, solution, coreFeatures, differentiator, revenueModel, team, targetProgram, extraNotes, templateText, templateFields, reviewedSections, announcementId }` (전부 선택, `templateText` 12000자 이하, `templateFields`·`reviewedSections` 각 최대 40개) | `{ sections: [{ key, label, content }], summary, llmUsed }` | FS-29 |
+| POST | /bizplan/refine | 입력값 문장 정리(사실 추가·삭제 없음) | 필요 | `{ input: { businessName, tagline, startupStatus, industry, businessRegion, businessType, targetCustomer, problem, solution, coreFeatures, differentiator, revenueModel, team, extraNotes } }` | `{ refined: { …같은 필드 }, llmUsed }` | FS-29 |
+| POST | /bizplan/template-inspect | 제출 양식(PDF·HWPX) 입력 칸·출력 형식 검사 | 필요 | `{ fileName, contentBase64 }` (4 MiB 이하, PDF·HWPX 외 `422`, 초과 `413`) | `{ kind, fields, outputFormats }` (`kind`·`outputFormats`: `pdf` \| `hwpx`) | FS-29 |
+| POST | /bizplan/render | 사업계획서 파일 출력 | 필요 | `{ title, sections, format, template?, images? }` (`sections` 1~40개, `format`: `pdf` \| `hwpx`, `template`은 `template-inspect`와 같은 형태, `images[]`: `{ key, mimeType, contentBase64 }` 최대 20개·파일당 2 MiB·합계 4 MiB, 양식 없이 이미지만 보내면 `422`) | `{ fileName, mimeType, contentBase64 }` | FS-29 |
+| POST | /bizplan/evaluate | AI 예비진단(자체 채점) | 필요 | `{ sections: [{ key, label, content }], announcementId?, templateFields? }` (각 최대 40개) | `{ overallScore, overallComment, sections: [{ key, label, score, strengths, improvements }], llmUsed }` (점수 0~100) | FS-30 |
 | POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
 
-`templateText`를 비우면 `sections`는 PSST 4항목(`problem`·`solution`·`scaleUp`·`team`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다.
+`templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
 
 ## policies — 지원정책 탐색
 

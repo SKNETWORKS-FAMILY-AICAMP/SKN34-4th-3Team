@@ -371,6 +371,16 @@ def get_receipt_meta(receipt_id: int) -> dict | None:
     return db.fetchone("SELECT id, user_id, created_at FROM receipts WHERE id = ?", (receipt_id,))
 
 
+def get_receipt_metas(receipt_ids: list[int]) -> dict[int, dict]:
+    """get_extractions와 짝을 이루는 배치 조회. 목록 조회에서 영수증마다 따로 묻지 않는다."""
+    if not receipt_ids:
+        return {}
+    rows = db.fetchall(
+        "SELECT id, user_id, created_at FROM receipts WHERE id = ANY(?)", (list(receipt_ids),)
+    )
+    return {row["id"]: row for row in rows}
+
+
 def get_receipt_image(receipt_id: int) -> dict | None:
     return db.fetchone(
         "SELECT id, user_id, image_data, mime_type FROM receipts WHERE id = ?", (receipt_id,)
@@ -442,6 +452,41 @@ def get_extraction(receipt_id: int) -> dict | None:
     return db.fetchone("SELECT * FROM receipt_extractions WHERE receipt_id = ?", (receipt_id,))
 
 
+def get_extractions(receipt_ids: list[int]) -> dict[int, dict]:
+    """지출 목록처럼 여러 영수증을 한 번에 보여줄 때, receipt_id마다 따로 조회하지
+    않도록(N+1) 한 번의 쿼리로 묶어서 가져온다."""
+    if not receipt_ids:
+        return {}
+    rows = db.fetchall(
+        "SELECT * FROM receipt_extractions WHERE receipt_id = ANY(?)", (list(receipt_ids),)
+    )
+    return {row["receipt_id"]: row for row in rows}
+
+
+def update_extraction_items(receipt_id: int, items: list, read_meta: dict | None) -> None:
+    """OCR이 놓친 품목을 사용자가 직접 추가했을 때 품목 목록과 읽음 여부를 갱신한다."""
+    db.execute(
+        "UPDATE receipt_extractions SET items=?, read_meta=? WHERE receipt_id=?",
+        (
+            db.dumps(items),
+            json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
+            receipt_id,
+        ),
+    )
+
+
+def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | None) -> None:
+    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고쳤을 때 상호와 읽음 여부를 갱신한다."""
+    db.execute(
+        "UPDATE receipt_extractions SET vendor=?, read_meta=? WHERE receipt_id=?",
+        (
+            vendor,
+            json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
+            receipt_id,
+        ),
+    )
+
+
 def get_expense(expense_id: int) -> dict | None:
     return db.fetchone("SELECT * FROM expenses WHERE id = ?", (expense_id,))
 
@@ -494,6 +539,7 @@ def search_policies(
     keyword: str | None = None,
     region: str | None = None,
     industry: str | None = None,
+    only_announcements: bool = False,
 ) -> list[dict]:
     """필터에 맞는 정책 전체. 정렬이 점수 기반이라 여기서는 자르지 않는다.
 
@@ -502,9 +548,11 @@ def search_policies(
     """
     where: list[str] = []
     params: list = []
+    if only_announcements:
+        where.append("EXISTS (SELECT 1 FROM announcements a WHERE a.policy_id = policies.id)")
     if keyword:
-        where.append("(title LIKE ? OR benefit LIKE ?)")
-        params += [f"%{keyword}%", f"%{keyword}%"]
+        where.append("(title LIKE ? OR benefit LIKE ? OR source LIKE ? OR industry LIKE ? OR region LIKE ?)")
+        params += [f"%{keyword}%"] * 5
     if region:
         # 수집 단계에서 17개 시·도로 정규화하므로 부분 일치가 필요 없다.
         # '전국'은 지역 조건과 무관하게 모두에게 해당한다.

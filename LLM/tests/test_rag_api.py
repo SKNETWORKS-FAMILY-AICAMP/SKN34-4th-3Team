@@ -726,14 +726,23 @@ def test_backend_invalid_summary_uses_common_validation_error(
 
 
 def test_backend_receipt_ocr_accepts_multipart_image(tmp_path: Path) -> None:
+    # items는 문자열이 아니라 {name, price} 객체다(개별 금액을 같이 돌려주도록 바뀜).
     model = FakeStructuredChatModel(
         {
             ReceiptExtractionGeneration: {
                 "date": "2026-09-09",
                 "vendor": "예시상점",
                 "amount": 18000,
-                "items": ["노트", "펜"],
+                "items": [
+                    {"name": "노트", "price": 3000},
+                    {"name": "펜", "price": None},
+                ],
                 "category": "사무용품",
+                "proof_type": "card_receipt",
+                "date_text": "2026.09.09",
+                "vendor_text": "예시상점",
+                "amount_text": "합계 18,000원",
+                "proof_evidence": "신용카드 매출전표",
             }
         }
     )
@@ -748,12 +757,22 @@ def test_backend_receipt_ocr_accepts_multipart_image(tmp_path: Path) -> None:
     )
 
     assert response.status_code == 200
+    # fake-jpeg는 실제 이미지가 아니라 OCR이 디코딩하지 못해 Vision 경로로 대체된다.
     assert response.json() == {
         "date": "2026-09-09",
         "vendor": "예시상점",
         "amount": 18000,
-        "items": ["노트", "펜"],
+        "items": [
+            {"name": "노트", "price": 3000},
+            {"name": "펜", "price": None},
+        ],
         "category": "사무용품",
+        "proofType": "card_receipt",
+        "dateText": "2026.09.09",
+        "vendorText": "예시상점",
+        "amountText": "합계 18,000원",
+        "proofEvidence": "신용카드 매출전표",
+        "ocrConfidence": None,
         "source": "vision",
         "llmUsed": True,
     }

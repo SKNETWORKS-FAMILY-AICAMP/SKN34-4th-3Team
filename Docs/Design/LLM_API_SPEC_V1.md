@@ -3,12 +3,8 @@
 - 문서 버전: `1.0`
 - 확정일: `2026-09-09`
 - 상태: **Backend↔LLM API 정본(Single Source of Truth)**
-- 이전 초안: `Docs/Design/LLM_API_SPEC.md` (원본 보존)
 
 이 문서는 Backend가 LLM 서비스를 호출할 때 사용하는 내부 REST 계약의 정본이다.
-기존 `LLM_API_SPEC.md`와 내용이 충돌하면 이 문서를 우선한다. 미합의 세부사항은
-`BACKEND_LLM_INTEGRATION_HANDOFF.md`의 `PR 전 합의가 필요한 항목`에서 관리하고 합의 후
-이 문서의 다음 버전에 반영한다.
 Frontend↔Backend 계약은 `Docs/Design/API_SPEC.md`를 따른다.
 
 ## 1. 공통 규칙
@@ -267,7 +263,7 @@ Backend의 `POST /expenses/receipts`가 호출하며 지출관리 화면에서 �
 - 허용 형식: `image/jpeg`, `image/png`, `image/webp`
 - 최대 크기: 4 MiB
 - 처리 방식: Tesseract OCR(`kor+eng`, `LLM/src/features/receipt_ocr.py`)로 글자·위치·줄별 신뢰도를 읽고, LLM은 OCR이 읽은 글자만 받아 필드를 정리한다(`source=ocr_llm`). Tesseract가 없거나 실패했거나 읽은 글자가 8자 미만이면 이미지를 Vision LLM에 직접 넣어 대신 읽는다(`source=vision`)
-- 이미지 보정: EXIF 회전 적용, 흑백·대비 보정, 긴 변 2600px로 축소. 잘 읽히지 않으면 90/270/180도로 돌려 재시도하고 가장 잘 읽힌 결과를 쓴다. Tesseract 1회 실행 제한은 40초다
+- 이미지 보정: EXIF 회전 적용, 흑백·대비·노이즈(median·unsharp) 보정, 긴 변을 1200~2000px로 맞춤. 잘 읽히지 않으면 90/270/180도로 돌려 재시도하고 가장 잘 읽힌 결과를 쓴다. Tesseract 1회 실행 제한은 15초, 전처리·회전 재시도 전체 예산은 25초이며 예산을 넘기면 남은 회전을 건너뛴다(`OCR_TIMEOUT_SECONDS`·`OCR_TOTAL_BUDGET_SECONDS`)
 
 #### Response
 
@@ -276,7 +272,7 @@ Backend의 `POST /expenses/receipts`가 호출하며 지출관리 화면에서 �
   "date": "2026-09-09",
   "vendor": "예시상점",
   "amount": 18000,
-  "items": ["노트", "펜"],
+  "items": [{ "name": "노트", "price": 12000 }, { "name": "펜", "price": 6000 }],
   "category": "사무용품",
   "proofType": "card_receipt",
   "dateText": "2026-09-09 14:21",
@@ -290,7 +286,7 @@ Backend의 `POST /expenses/receipts`가 호출하며 지출관리 화면에서 �
 ```
 
 - 인식하지 못한 `date`, `vendor`, `amount`, `category`는 `null`로 반환한다.
-- `items`는 인식 결과가 없으면 빈 배열이다.
+- `items[]`는 `{ name, price }`이며 `price`는 그 줄의 개별 금액(없으면 `null`)이다. 인식 결과가 없으면 빈 배열이다.
 - `proofType`: `tax_invoice`, `card_receipt`, `cash_receipt`, `simple_receipt`, `unknown`(기본값)
 - `dateText`·`vendorText`·`amountText`·`proofEvidence`: 값을 읽은 자리의 영수증 원문 글자. 없으면 `null`
 - `ocrConfidence`: OCR 줄별 신뢰도를 글자 수로 가중한 평균(0~100). `source=vision`이면 `null`
@@ -336,7 +332,7 @@ legal-basis와 같은 규칙으로 검색 결과가 없으면 `no_result`(`llmUs
 
 ## 6-1. 사업계획서
 
-Backend의 `POST /bizplan/generate`·`/evaluate`·`/coach`가 호출하며 사업계획서 화면에서 쓴다. 세 Endpoint 모두 RAG 검색 그래프를 거치지 않는 단일 LLM 호출이고 RAG 인덱스 준비 여부와 무관하다. 모델 설정 오류는 `503`, 그 밖의 모델 호출 실패는 공통 오류 응답으로 돌려준다(`LLM/src/serving/rag_routes.py`).
+Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다. 모든 Endpoint가 RAG 검색 그래프를 거치지 않고 RAG 인덱스 준비 여부와 무관하다. `business-plan`·`-refine`·`-evaluate`·`-coach`는 단일 LLM 호출이며 모델 설정 오류는 `503`, 그 밖의 모델 호출 실패는 공통 오류 응답으로 돌려준다. `-template-inspect`·`-render`는 LLM을 부르지 않는 문서 처리(`LLM/src/features/business_plan_documents.py`)이고 양식·입력 오류는 `422`다(`LLM/src/serving/rag_routes.py`).
 
 ### `POST /rag/business-plan`
 
@@ -345,20 +341,32 @@ Backend의 `POST /bizplan/generate`·`/evaluate`·`/coach`가 호출하며 사�
 ```json
 {
   "businessName": "예시 서비스",
+  "applicantName": "홍길동",
   "tagline": "한 줄 소개",
+  "startupStatus": "예비창업",
+  "industry": "정보통신업",
+  "businessRegion": "서울",
+  "businessType": "개인사업자",
   "targetCustomer": "목표 고객",
   "problem": "핵심 문제",
   "solution": "해결 방안",
+  "coreFeatures": "핵심 기능",
   "differentiator": "차별점",
+  "revenueModel": "수익 방식",
   "team": "팀 구성",
   "targetProgram": "예비창업패키지",
   "extraNotes": "",
-  "templateText": ""
+  "templateText": "",
+  "templateFields": [],
+  "reviewedSections": [],
+  "announcementId": null,
+  "announcementCriteria": ""
 }
 ```
 
-- 모든 필드는 선택이며 기본값은 빈 문자열이다. `templateText`는 6000자 이하다.
-- `templateText`가 비어 있으면 PSST 4항목(`problem`·`solution`·`scaleUp`·`team`)으로, 있으면 그 공고 양식의 항목 제목·개수·순서를 따라 만든다.
+- 모든 필드는 선택이다. `templateText`는 12000자, `announcementCriteria`는 6000자 이하이고 `templateFields`·`reviewedSections`(`{ key, label, content }`)는 각 최대 40개다.
+- `applicantName`·`announcementCriteria`는 Backend가 채운다(사용자 이름, `announcementId` 공고의 기준).
+- `templateText`가 비어 있으면 기본 양식 13개 입력 칸(`BUSINESS_PLAN_DEFAULT_FIELDS`, `LLM/src/rag/backend_tasks.py`)으로, 있으면 그 공고 양식의 항목 제목·개수·순서를 따라 만든다.
 
 #### Response
 
@@ -372,7 +380,7 @@ Backend의 `POST /bizplan/generate`·`/evaluate`·`/coach`가 호출하며 사�
 
 ### `POST /rag/business-plan-evaluate`
 
-- Request: `{ "sections": [{ "key", "label", "content" }] }` (최대 20개)
+- Request: `{ "sections": [{ "key", "label", "content" }], "announcementCriteria", "templateCriteria" }` — `sections` 최대 40개, 두 기준 문자열은 각 6000자 이하이며 Backend가 공고·제출 양식 기준으로 채운다
 - Response: `{ "overallScore", "overallComment", "sections": [{ "key", "label", "score", "strengths", "improvements" }], "llmUsed" }` — 점수는 0~100 정수
 - 실제 심사 결과가 아닌 참고용 자체 채점이다.
 
@@ -381,6 +389,24 @@ Backend의 `POST /bizplan/generate`·`/evaluate`·`/coach`가 호출하며 사�
 - Request: `{ "question", "businessName", "tagline", "targetCustomer", "sections", "conversationHistory" }` — `sections`·`conversationHistory` 각 최대 20개, `conversationHistory`는 `/rag/chat`과 같은 `{ role, content }` 형식
 - Response: `{ "answer", "inScope", "redirect" }` — `redirect`는 `tax`, `policy`, `none`
 - 사업계획서 범위 밖 질문은 `inScope=false`와 고정 안내 문구로 답하고, 세금·지원사업 질문은 `redirect`로 AI 세무 Assistant·공고지원 AI를 가리킨다.
+
+### `POST /rag/business-plan-refine`
+
+- Request: `{ "input": { businessName, tagline, startupStatus, industry, businessRegion, businessType, targetCustomer, problem, solution, coreFeatures, differentiator, revenueModel, team, extraNotes } }`
+- Response: `{ "refined": { …같은 필드 }, "llmUsed" }`
+- 입력된 사실을 더하거나 빼지 않고 문장만 다듬는다.
+
+### `POST /rag/business-plan-template-inspect`
+
+- Request: `{ "fileName", "contentBase64" }` — PDF·HWPX, 디코딩 후 4 MiB 이하
+- Response: `{ "kind", "fields", "outputFormats" }` — `kind`는 `pdf`·`hwpx`, `fields`는 양식의 입력 항목 이름, `outputFormats`는 PDF 양식이면 `["pdf"]`, HWPX 양식이면 `["hwpx", "pdf"]`
+- 암호화된 PDF, 입력 위치를 알 수 없는 양식, 항목 수 초과 등은 `422`다.
+
+### `POST /rag/business-plan-render`
+
+- Request: `{ "title", "sections", "format", "template"?, "images"? }` — `sections` 1~40개, `format`은 `pdf`·`hwpx`, `template`은 `-template-inspect`와 같은 형태, `images[]`는 `{ key, mimeType, contentBase64 }`(PNG·JPEG, 파일당 2 MiB·합계 4 MiB, 최대 20개)
+- Response: `{ "fileName", "mimeType", "contentBase64" }` — `business-plan.pdf`(`application/pdf`) 또는 `business-plan.hwpx`(`application/hwp+zip`)
+- 양식이 없으면 기본 양식으로 출력한다. 양식이 있으면 `sections`의 `label`이 양식 입력 항목과 일치해야 하고, PDF 양식은 PDF로만 출력한다. HWPX→PDF 변환기가 없는 배포에서는 `503`, 그 밖의 양식·이미지 오류는 `422`다.
 
 ## 7. 공고문 구조화 요약
 
@@ -465,8 +491,8 @@ Backend의 `POST /bizplan/generate`·`/evaluate`·`/coach`가 호출하며 사�
 | `POST /rag/legal-basis` | 30 | `LLM_TIMEOUT_LEGAL_BASIS` |
 | `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |
 | `POST /rag/summarize-announcement` | 45 | `LLM_TIMEOUT_SUMMARIZE` |
-| `POST /rag/business-plan`, `/rag/business-plan-evaluate`, `/rag/business-plan-coach` | 60 | `LLM_TIMEOUT_BIZPLAN` |
-| `POST /ocr/receipt` | 60 | `LLM_TIMEOUT_OCR` |
+| `POST /rag/business-plan`, `-refine`, `-template-inspect`, `-render`, `-evaluate`, `-coach` | 60 | `LLM_TIMEOUT_BIZPLAN` |
+| `POST /ocr/receipt` | 40 | `LLM_TIMEOUT_OCR` (프론트 업로드 제한 45초보다 짧게 유지) |
 | `POST /rag/reindex` | 180 | `LLM_TIMEOUT_REINDEX` |
 
 `LLM_TIMEOUT_SECONDS`(기본 25)는 위 표에 없는 호출의 기본값으로만 남아 있다.
@@ -519,8 +545,5 @@ LLM은 위 계약의 공개 Endpoint 11개(사업계획서 3개 포함), 요청�
 ### 남은 검증
 
 - 실제 OpenAI·Cohere·PostgreSQL을 쓴 통합 테스트는 아직 승인·실시 전이다
-- Tesseract OCR은 실제 휴대폰 사진 한 장에서 이미지 보정 후 평균 신뢰도가 39%에서 60%로 오른 것만 확인했다. 흐린 사진·기울어진 사진·작은 글씨·손글씨의 정확도는 실제 영수증으로 더 검증해야 한다(`Docs/reports/FEATURE_ROADMAP_EXPENSE.md` 4절)
+- Tesseract OCR은 실제 휴대폰 사진 한 장에서 이미지 보정 후 평균 신뢰도가 39%에서 60%로 오른 것만 확인했다. 흐린 사진·기울어진 사진·작은 글씨·손글씨의 정확도는 실제 영수증으로 더 검증해야 한다(`Docs/FEATURE_ROADMAP_EXPENSE.md` 4절)
 - 원본 `policies`, `announcements`, `tax_documents`는 변경하지 않았다
-
-절차는 `Docs/Design/BACKEND_LLM_INTEGRATION_HANDOFF.md` 6절을 따른다.
-기존 `Docs/Design/LLM_API_SPEC.md`는 초기 설계 기록으로 보존한다.

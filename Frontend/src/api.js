@@ -91,7 +91,16 @@ export async function apiPost(path, body, { signal, timeout = 30000 } = {}) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
       body: JSON.stringify(body || {}),
     });
-    handleStatus(res, path);
+    if (!res.ok) {
+      if (res.status === 401) setToken(null);
+      const payload = await res.json().catch(() => null);
+      const rawDetail = payload && (payload.detail || payload.error?.message);
+      const detail = typeof rawDetail === 'string' ? rawDetail : '';
+      const err = new Error(detail || `HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.detail = detail;
+      throw err;
+    }
     return await res.json();
   } finally {
     clearTimeout(timer);
@@ -285,12 +294,18 @@ export const api = {
   receiptImage: (receiptId, opt) => apiGetBlob(`/expenses/receipts/${receiptId}/image`, opt),
   expenses: (params, opt) => apiGet('/expenses' + qs(params), opt),
   updateExpenseCategory: (expenseId, category, opt) => apiPatch(`/expenses/${expenseId}`, { category }, opt),
+  updateExpenseVendor: (expenseId, vendor, opt) => apiPatch(`/expenses/${expenseId}/vendor`, { vendor }, opt),
   deleteExpense: (expenseId, opt) => apiDelete(`/expenses/${expenseId}`, opt),
   expenseAnalysis: (expenseId, opt) => apiGet(`/expenses/${expenseId}/analysis`, opt),
+  addExpenseItem: (expenseId, name, price, opt) => apiPost(`/expenses/${expenseId}/items`, { name, price }, opt),
+  deleteExpenseItem: (expenseId, itemIndex, opt) => apiDelete(`/expenses/${expenseId}/items/${itemIndex}`, opt),
   // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
-  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
+  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 130000, ...opt }),
   evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
-  bizplanCoach: (body, opt) => apiPost('/bizplan/coach', body, { timeout: 45000, ...opt }),
+  // 사업계획서 입력 정리·양식 검사·문서 출력 계약.
+  refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
+  inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
+  renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

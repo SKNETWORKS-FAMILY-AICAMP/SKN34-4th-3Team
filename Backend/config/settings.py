@@ -23,7 +23,7 @@ APPEND_SLASH = False
 DATABASES = {}
 
 # 영수증 이미지(4MB 제한)는 api/expenses.py에서 검사한다. 그보다 커도 413을 돌려줄 수 있게 여유를 둔다.
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 USE_TZ = False
