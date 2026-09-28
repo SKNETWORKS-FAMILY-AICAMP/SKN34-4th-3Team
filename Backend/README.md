@@ -91,12 +91,20 @@ Content-Type: application/json
 | 상황 | 동작 |
 |------|------|
 | Postgres 없음 | 1.5초 간격 8회 재시도 후 RuntimeError로 기동 중단 |
-| Postgres 연결됨 | 기동 시 `DB/app_extras.sql`을 파일이 있으면 best-effort로 적용(실패 문장은 무시)하고 데모 데이터 시드 |
+| Postgres 연결됨 | 기동 시 `DB/app_extras.sql`이 있으면(로컬 실행) 파일 전체를 적용하고 데모 데이터 시드. 적용 실패 시 경고 로그만 남기고 기동은 계속한다. Docker에서는 파일이 컨테이너에 없어 compose의 `db-migrate` 서비스가 적용한다 |
 | LLM 꺼짐 / OpenAI 키 없음 | 챗봇은 **목업 문구**, 세액감면 근거는 고정 문구. 공고 요약은 캐시가 없으면 404, 붙여넣기 요약은 503. RAG 재색인은 **502** |
 | SMTP 없음 | 메일 실발송 없이 알림함 API만 동작 |
 
 `GET /health`의 `postgres`, `llm`, `ragReady`로 실제 연결 여부를 구분하면 됩니다.  
 폴백이어도 **API가 없는 것이 아닙니다.**
+
+### `db-migrate` 실패 시
+
+`db-migrate`가 실패하면 backend·llm이 뜨지 않는다(스키마 없이 뜨면 채팅이 SQL 오류로 실패하므로 의도된 동작).
+
+- 원인 확인: `docker compose logs db-migrate`
+- 재시도: `docker compose up db-migrate`
+- 수동 적용: `psql -h localhost -U $POSTGRES_USER -d $POSTGRES_DB -f DB/app_extras.sql`
 
 ---
 
@@ -108,6 +116,7 @@ Content-Type: application/json
 | 02 | 로그인/로그아웃 | `POST /auth/login`, `POST /auth/logout` |
 | 03 | 개인정보 | `GET/PUT /users/me` |
 | 04 | 사업자 정보 | `GET/PUT /users/me/business-profile` |
+| UX1 | 창업 로드맵 진행 상태 | `GET/PUT /users/me/roadmap-progress` |
 | 05~07 | AI 챗봇 (세금/경비/절세/정책) | `POST /chat/messages` |
 | 08 | 답변 근거 | `GET /chat/messages/{id}/sources` |
 | 09 | 사업자 유형 진단 | `POST /tax/business-type/diagnosis` |
@@ -151,6 +160,7 @@ Content-Type: application/json
 |--------|------|------|
 | GET, PUT | `/users/me` | Bearer |
 | GET, PUT | `/users/me/business-profile` | Bearer |
+| GET, PUT | `/users/me/roadmap-progress` | Bearer |
 
 ### 상담
 
@@ -245,7 +255,7 @@ Backend/
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
   core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  tests/           # 표준 unittest 6개 파일
+  tests/           # 표준 unittest 12개 파일
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```

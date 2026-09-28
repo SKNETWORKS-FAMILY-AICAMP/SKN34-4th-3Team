@@ -58,7 +58,7 @@ def user_detail(request, user_id: int):
     return {
         "user": _serialize_user(user),
         "usage": {
-            "chatMessages": len(repo.list_chats(user_id)),
+            "chatMessages": repo.count_chats(user_id),
             "expenses": len(repo.list_expenses(user_id)),
             "savedPolicies": len(repo.saved_policy_ids(user_id)),
         },

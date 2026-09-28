@@ -40,11 +40,13 @@ def search(
     industry: str | None = Query(default=None, description="업종"),
     page: int = Query(default=1, ge=1, description="페이지 번호"),
     size: int = Query(default=20, ge=1, le=100, description="페이지당 건수"),
+    only_announcements: bool = Query(default=False, description="원문 공고가 연결된 정책만 조회"),
 ):
     """키워드·지역·업종으로 정책을 검색합니다. 자격 충족·점수 순으로 정렬됩니다."""
     return {
         "policies": policy_service.search(
-            keyword, region, industry, request.auth["id"], offset=(page - 1) * size, limit=size
+            keyword, region, industry, request.auth["id"], offset=(page - 1) * size, limit=size,
+            only_announcements=only_announcements,
         )
     }
 

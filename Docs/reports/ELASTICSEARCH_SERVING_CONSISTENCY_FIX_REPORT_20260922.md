@@ -53,7 +53,7 @@ Backend가 없거나 ES 적재를 별도로 실행해야 할 때는 [`LLM/RUN_GU
 | [`LLM/src/rag/graph.py`](../../LLM/src/rag/graph.py) | 빈 검색 결과를 RRF 순위 목록에서 제외해 Dense 근거 점수 유지 |
 | [`LLM/src/serving/rag_routes.py`](../../LLM/src/serving/rag_routes.py) | ES 준비 상태 확인, `/rag/reindex`의 pgvector·ES 동기화, 실패 상태 관리 |
 | [`LLM/tests/test_nori_hybrid_live.py`](../../LLM/tests/test_nori_hybrid_live.py), [`LLM/tests/test_rag_api.py`](../../LLM/tests/test_rag_api.py) | ES 장애 시 Dense fallback, 준비 상태, 부분·전체 재색인 및 실패 경로 검증 |
-| [`LLM/RUN_GUIDE.md`](../../LLM/RUN_GUIDE.md), [`DJANGO_FRAMEWORK_MIGRATION_REPORT_20260922.md`](DJANGO_FRAMEWORK_MIGRATION_REPORT_20260922.md) | 통합 환경 명령과 변경된 운영 동작 안내 |
+| [`LLM/RUN_GUIDE.md`](../../LLM/RUN_GUIDE.md) | 통합 환경 명령과 변경된 운영 동작 안내 |
 
 LLM의 Nori 검색·RAG API·Django HTTP·정책/세금 그래프·계약·ES 색인 관련 테스트 **183개 통과**와 `python manage.py check` 통과를 확인했다. 마지막 추가 정책 그래프 fallback 테스트는 대상 파일 단독 실행 **10개 통과**로 확인했다. `git diff --check`도 통과했다. 이 수치는 외부 PostgreSQL·Elasticsearch를 띄운 통합 시험 결과가 아니다. 현재 환경에서는 Docker 데몬에 연결할 수 없어 실제 컨테이너에서의 초기 적재와 장애 전환을 재현하지 못했다.
 

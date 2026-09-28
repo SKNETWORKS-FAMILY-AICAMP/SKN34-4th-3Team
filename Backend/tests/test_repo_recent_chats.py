@@ -1,4 +1,4 @@
-"""repo.recent_chats: 사용자·카테고리 격리와 시간순 반환."""
+"""repo.recent_chats: 사용자·카테고리·대화방 격리와 시간순 반환."""
 
 import unittest
 from unittest.mock import patch
@@ -7,24 +7,24 @@ from core import repo
 
 
 class RecentChatsTest(unittest.TestCase):
-    def test_query_filters_user_and_category(self):
+    def test_query_filters_user_category_and_room(self):
         with patch.object(repo.db, "fetchall", return_value=[]) as fetchall:
-            repo.recent_chats(7, "tax", 10)
+            repo.recent_chats(7, "tax", 3, 10)
         sql, params = fetchall.call_args[0]
-        self.assertIn("WHERE user_id = ? AND category = ?", sql)
+        self.assertIn("WHERE user_id = ? AND category = ? AND room_id = ?", sql)
         self.assertIn("ORDER BY created_at DESC, id DESC LIMIT ?", sql)
-        self.assertEqual(params, (7, "tax", 10))
+        self.assertEqual(params, (7, "tax", 3, 10))
 
     def test_rows_are_returned_oldest_first(self):
         rows = [{"id": 3}, {"id": 2}, {"id": 1}]
         with patch.object(repo.db, "fetchall", return_value=rows):
-            result = repo.recent_chats(1, "tax")
+            result = repo.recent_chats(1, "tax", 1)
         self.assertEqual([row["id"] for row in result], [1, 2, 3])
 
     def test_default_limit_is_ten(self):
         with patch.object(repo.db, "fetchall", return_value=[]) as fetchall:
-            repo.recent_chats(1, "policy")
-        self.assertEqual(fetchall.call_args[0][1][2], 10)
+            repo.recent_chats(1, "policy", 1)
+        self.assertEqual(fetchall.call_args[0][1][3], 10)
 
 
 if __name__ == "__main__":

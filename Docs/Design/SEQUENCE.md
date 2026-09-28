@@ -176,7 +176,7 @@ sequenceDiagram
         SVC-->>API: HttpError 503
         API-->>FE: 503
     end
-    FE->>FE: localStorage에 입력값·초안 임시저장
+    FE->>API: PUT /bizplan/draft (임시저장 버튼, 입력값·초안 → bizplan_drafts)
 
     Note over FE,LLM: 예비진단·어시스턴트도 같은 구조
     FE->>API: POST /bizplan/evaluate { sections }

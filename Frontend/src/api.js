@@ -91,7 +91,16 @@ export async function apiPost(path, body, { signal, timeout = 30000 } = {}) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...authHeaders() },
       body: JSON.stringify(body || {}),
     });
-    handleStatus(res, path);
+    if (!res.ok) {
+      if (res.status === 401) setToken(null);
+      const payload = await res.json().catch(() => null);
+      const rawDetail = payload && (payload.detail || payload.error?.message);
+      const detail = typeof rawDetail === 'string' ? rawDetail : '';
+      const err = new Error(detail || `HTTP ${res.status} ${path}`);
+      err.status = res.status;
+      err.detail = detail;
+      throw err;
+    }
     return await res.json();
   } finally {
     clearTimeout(timer);
@@ -245,6 +254,8 @@ export const api = {
   updateMe: (body, opt) => apiPut('/users/me', body, opt),
   businessProfile: (opt) => apiGet('/users/me/business-profile', opt),
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
+  roadmapProgress: (opt) => apiGet('/users/me/roadmap-progress', opt),
+  setRoadmapTask: (taskKey, done, opt) => apiPut('/users/me/roadmap-progress', { taskKey, done }, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),
@@ -268,12 +279,10 @@ export const api = {
   }),
   chatHistory: (category, opt) => apiGet('/chat/messages' + qs({ category }), opt),
   clearChat: (category, opt) => apiDelete('/chat/messages' + qs({ category }), opt),
-  // 대화방 하나만 삭제 — 그 방에 속한 메시지 id들만 지운다(다른 방은 그대로).
-  // ids가 비면 qs()가 파라미터를 빼서 "전체 삭제" 요청이 되므로 보내지 않고 실패로 돌린다.
-  deleteMessages: (ids, opt) =>
-    ids && ids.length
-      ? apiDelete('/chat/messages' + qs({ ids: ids.join(',') }), opt)
-      : Promise.reject(new Error('deleteMessages: ids가 비어 있음')),
+  chatRooms: (category, opt) => apiGet('/chat/rooms' + qs({ category }), opt),
+  // title을 null로 보내면 첫 질문을 제목으로 되돌린다.
+  renameChatRoom: (roomId, title, opt) => apiPatch(`/chat/rooms/${roomId}`, { title }, opt),
+  deleteChatRoom: (roomId, opt) => apiDelete(`/chat/rooms/${roomId}`, opt),
   chatSources: (messageId, opt) => apiGet(`/chat/messages/${messageId}/sources`, opt),
   // 캐시가 없으면 LLM이 즉시 요약을 생성하므로 일반 GET보다 긴 제한 시간을 둔다.
   announcementSummary: (announcementId, opt) => apiGet(
@@ -287,12 +296,21 @@ export const api = {
   receiptImage: (receiptId, opt) => apiGetBlob(`/expenses/receipts/${receiptId}/image`, opt),
   expenses: (params, opt) => apiGet('/expenses' + qs(params), opt),
   updateExpenseCategory: (expenseId, category, opt) => apiPatch(`/expenses/${expenseId}`, { category }, opt),
+  updateExpenseVendor: (expenseId, vendor, opt) => apiPatch(`/expenses/${expenseId}/vendor`, { vendor }, opt),
   deleteExpense: (expenseId, opt) => apiDelete(`/expenses/${expenseId}`, opt),
   expenseAnalysis: (expenseId, opt) => apiGet(`/expenses/${expenseId}/analysis`, opt),
+  addExpenseItem: (expenseId, name, price, opt) => apiPost(`/expenses/${expenseId}/items`, { name, price }, opt),
+  deleteExpenseItem: (expenseId, itemIndex, opt) => apiDelete(`/expenses/${expenseId}/items/${itemIndex}`, opt),
   // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
-  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 70000, ...opt }),
+  generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 130000, ...opt }),
   evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
-  bizplanCoach: (body, opt) => apiPost('/bizplan/coach', body, { timeout: 45000, ...opt }),
+  // 사업계획서 입력 정리·양식 검사·문서 출력 계약.
+  refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
+  inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
+  renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
+  // 임시저장에는 양식·이미지 Base64가 들어가 최대 10MB대라 전송 시간을 넉넉히 둔다.
+  bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
+  saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

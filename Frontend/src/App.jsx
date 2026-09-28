@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './api.js';
-import { loadStoredUser, loadRoadmapDone, saveRoadmapDone } from './utils.js';
+import { loadStoredUser, loadRoadmapDone, clearLegacyRoadmapDone } from './utils.js';
 import { DEFAULT_BIZ, DEFAULT_REGION, USER_STORE_KEY } from './constants.js';
 import { ScrollProgress, FloatingThemeToggle } from './components/common.jsx';
 import { Nav } from './components/Nav.jsx';
@@ -16,7 +16,7 @@ export function App() {
   const [pageKey, setPageKey] = useState('tax');
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
-  // 창업 로드맵 체크 상태 — 로드맵 페이지와 마이페이지가 공유. 계정별로 localStorage 에 남긴다(아래 [userId] effect).
+  // 창업 로드맵 체크 상태 — 로드맵 페이지와 마이페이지가 공유. 서버(user_roadmap_progress)가 원본(아래 [userId] effect).
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
@@ -59,18 +59,47 @@ export function App() {
 
   const userId = user && user.id;
 
-  // 계정이 바뀌면 그 계정의 진행률로 교체한다. 로그아웃이면 비운다(비로그인 체크는 버림).
+  // 계정이 바뀌면 그 계정의 진행률을 서버에서 받는다. 로그아웃이면 비운다(비로그인 체크는 버림).
   useEffect(() => {
-    setRoadmapDone(userId ? loadRoadmapDone(userId) : {});
+    setRoadmapDone({});
+    if (!userId) return undefined;
+    let alive = true;
+    api
+      .roadmapProgress()
+      .then((r) => {
+        if (!alive) return;
+        const done = Object.fromEntries((r.done || []).map((key) => [key, true]));
+        const legacy = loadRoadmapDone(userId);
+        const legacyKeys = Object.keys(legacy).filter((key) => legacy[key] && /^[A-Z]:\d+$/.test(key));
+        // 서버가 비어 있고 이 브라우저에 예전 체크가 있으면 한 번 옮기고, 다 올라가면 지운다.
+        if (!Object.keys(done).length && legacyKeys.length) {
+          setRoadmapDone(Object.fromEntries(legacyKeys.map((key) => [key, true])));
+          Promise.all(legacyKeys.map((key) => api.setRoadmapTask(key, true)))
+            .then(() => clearLegacyRoadmapDone(userId))
+            .catch(() => { /* 다음 로그인 때 다시 시도 */ });
+          return;
+        }
+        setRoadmapDone(done);
+      })
+      .catch(() => { /* Backend 미실행·토큰 만료 — 빈 진행률 유지 */ });
+    return () => { alive = false; };
   }, [userId]);
 
-  // 저장 effect 대신 setter 에서 저장한다 — 계정 전환 직후 이전 상태가 새 계정 키에 덮어써지지 않게.
-  const updateRoadmapDone = (fn) =>
-    setRoadmapDone((d) => {
-      const next = typeof fn === 'function' ? fn(d) : fn;
-      if (userId) saveRoadmapDone(userId, next);
-      return next;
+  // 화면을 먼저 바꾸고 달라진 항목만 서버에 보낸다. 실패한 항목은 이전 값으로 되돌린다.
+  // 비로그인 체크는 화면에만 둔다.
+  const updateRoadmapDone = (fn) => {
+    const prev = roadmapDone;
+    const next = typeof fn === 'function' ? fn(prev) : fn;
+    setRoadmapDone(next);
+    if (!userId) return;
+    const changed = [...new Set([...Object.keys(prev), ...Object.keys(next)])]
+      .filter((key) => !!prev[key] !== !!next[key]);
+    changed.forEach((key) => {
+      api.setRoadmapTask(key, !!next[key]).catch(() => {
+        setRoadmapDone((cur) => ({ ...cur, [key]: !!prev[key] }));
+      });
     });
+  };
 
   useEffect(() => {
     if (!userId) {

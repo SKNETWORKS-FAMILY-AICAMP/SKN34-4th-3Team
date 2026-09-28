@@ -137,8 +137,8 @@ def _notice_results() -> list[dict]:
     return notices
 
 
-def _conversation_history(user_id: int, category: str) -> list[dict]:
-    """`RagChatRequest.conversationHistory`. 같은 사용자·카테고리의 지난 대화만 담는다.
+def _conversation_history(user_id: int, category: str, room_id: int | None) -> list[dict]:
+    """`RagChatRequest.conversationHistory`. 같은 대화방의 지난 대화만 담는다. 새 방이면 비어 있다.
 
     과거 답변은 후속 질문을 이해하기 위한 문맥일 뿐 법적 근거나 인용 출처가 아니다.
     """
@@ -152,8 +152,10 @@ def _conversation_history(user_id: int, category: str) -> list[dict]:
         if category == "roadmap"
         else HISTORY_TOTAL_LIMIT
     )
+    if room_id is None:
+        return []
     pairs: list[tuple[str, str]] = []
-    for row in repo.recent_chats(user_id, category, turn_limit):
+    for row in repo.recent_chats(user_id, category, room_id, turn_limit):
         question = str(row.get("question") or "").strip()[:HISTORY_QUESTION_LIMIT]
         answer = str(row.get("answer") or "").strip()[:HISTORY_ANSWER_LIMIT]
         # 한쪽이 비면 user→assistant 쌍을 유지할 수 없어 통째로 뺀다.
@@ -197,11 +199,17 @@ def send_message(
     question: str,
     *,
     roadmap_step: str | None = None,
+    room_id: int | None = None,
 ) -> dict:
     if category not in SUGGESTED:
         raise HttpError(400, "지원하지 않는 카테고리입니다.")
+    if room_id is not None:
+        room = repo.get_room(room_id, user_id)
+        # 남의 방·삭제한 방·다른 카테고리 방은 존재를 숨기려고 모두 404로 답한다.
+        if not room or room.get("category") != category:
+            raise HttpError(404, "대화방을 찾을 수 없습니다.")
     # 현재 질문은 question으로만 보낸다. 저장은 LLM 응답 이후라 여기서는 중복되지 않는다.
-    history = _conversation_history(user_id, category)
+    history = _conversation_history(user_id, category, room_id)
     rag = rag_answer(
         question,
         category=category,
@@ -257,9 +265,14 @@ def send_message(
             sources = []
             grounded = False
 
-    mid = repo.insert_chat(user_id, category, question, full_answer, sources)
+    # 방은 첫 메시지를 저장할 때 만든다. 질문 없이 나간 빈 방이 DB에 남지 않는다.
+    if room_id is None:
+        room_id = repo.create_room(user_id, category)
+    mid = repo.insert_chat(user_id, category, question, full_answer, sources, room_id)
+    repo.touch_room(room_id)
     return {
         "messageId": mid,
+        "roomId": room_id,
         "answer": full_answer,
         "grounded": grounded,
         "llmUsed": llm_used,
@@ -284,9 +297,38 @@ def list_messages(user_id: int, category: str | None = None) -> list[dict]:
 
 
 def clear_messages(user_id: int, category: str | None = None) -> int:
-    return repo.delete_chats(user_id, category)
+    """대화방을 삭제 표시한다. 메시지는 관리자 통계용으로 남는다."""
+    return repo.delete_rooms(user_id, category)
 
 
-def delete_messages(user_id: int, message_ids: list[int]) -> int:
-    """대화방 하나(메시지 묶음)만 지운다. 다른 사용자 소유의 id는 무시된다."""
-    return repo.delete_chats_by_ids(user_id, message_ids)
+def _room_item(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "category": row["category"],
+        "title": row.get("title"),
+        "firstQuestion": row.get("first_question"),
+        "createdAt": row.get("created_at"),
+        "updatedAt": row.get("updated_at"),
+    }
+
+
+def list_rooms(user_id: int, category: str) -> list[dict]:
+    return [_room_item(row) for row in repo.list_rooms(user_id, category)]
+
+
+def _own_room(room_id: int, user_id: int) -> dict:
+    room = repo.get_room(room_id, user_id)
+    if not room:
+        raise HttpError(404, "대화방을 찾을 수 없습니다.")
+    return room
+
+
+def rename_room(user_id: int, room_id: int, title: str | None) -> None:
+    _own_room(room_id, user_id)
+    # 비우면 NULL로 되돌려 첫 질문을 제목으로 보여준다.
+    repo.rename_room(room_id, user_id, (title or "").strip() or None)
+
+
+def delete_room(user_id: int, room_id: int) -> None:
+    _own_room(room_id, user_id)
+    repo.delete_room(room_id, user_id)

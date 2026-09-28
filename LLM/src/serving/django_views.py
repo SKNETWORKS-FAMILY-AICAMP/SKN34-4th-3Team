@@ -22,6 +22,9 @@ from src.serving.schemas import (
     BizplanCoachRequest,
     BusinessPlanEvaluateRequest,
     BusinessPlanRequest,
+    BusinessPlanRefineRequest,
+    BusinessPlanTemplateRequest,
+    BusinessPlanRenderRequest,
     ComponentConfiguration,
     DeductibilityRequest,
     HealthResponse,
@@ -241,6 +244,30 @@ async def public_business_plan(request: HttpRequest) -> HttpResponse:
     return await _dispatch(
         request, method="POST", handler=rag_routes.adapter_business_plan,
         schema=BusinessPlanRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan_refine(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_business_plan_refine,
+        schema=BusinessPlanRefineRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan_template_inspect(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_business_plan_template_inspect,
+        schema=BusinessPlanTemplateRequest,
+    )
+
+
+@csrf_exempt
+async def public_business_plan_render(request: HttpRequest) -> HttpResponse:
+    return await _dispatch(
+        request, method="POST", handler=rag_routes.adapter_business_plan_render,
+        schema=BusinessPlanRenderRequest,
     )
 
 

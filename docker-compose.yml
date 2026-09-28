@@ -22,6 +22,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       llm:
         condition: service_healthy
 
@@ -72,6 +74,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
       elasticsearch:
         condition: service_healthy
 
@@ -90,10 +94,26 @@ services:
       - ./DB/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./DB/app_extras.sql:/docker-entrypoint-initdb.d/02_app_extras.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      # initdb 중 임시 서버는 TCP를 열지 않는다. TCP로 확인해야 init이 끝난 뒤에만 healthy가 되고
+      # db-migrate(-h db 접속)가 연결 거부로 실패하지 않는다.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # 기동할 때마다 app_extras.sql 을 다시 적용한다. initdb 는 볼륨이 비어 있을 때만 돌아
+  # 기존 볼륨에는 스키마 변경이 반영되지 않기 때문이다. 전 문장이 재실행 안전하다.
+  db-migrate:
+    image: pgvector/pgvector:pg16
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./DB/app_extras.sql:/app_extras.sql:ro
+    command: ["psql", "-h", "db", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/app_extras.sql"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   elasticsearch:
     build: ./elasticsearch
