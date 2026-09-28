@@ -279,7 +279,7 @@
       padding: 0 28px 0 14px;
     }
     .nav__row {
-      height: calc(env(titlebar-area-height, 33px) + 6px);
+      height: calc(env(titlebar-area-height, 33px) + 3px);
       gap: 10px;
     }
     .brand {
