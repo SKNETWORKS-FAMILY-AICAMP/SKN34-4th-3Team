@@ -24,6 +24,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Backend tests
         working-directory: Backend
+        env:
+          TOKEN_SECRET: "ci-test-only-secret-1234567890abcdef"
         run: uv run python -m unittest discover tests
 
       - uses: actions/setup-node@v4
