@@ -85,6 +85,12 @@
     box-sizing: border-box;
   }
 
+  html {
+    /* 세로 스크롤바가 생겼다 없어졌다 할 때마다(예: 사업계획서 단계별 내용 길이 차이)
+       페이지 폭이 스크롤바만큼 미세하게 흔들리는 것을 막는다. */
+    scrollbar-gutter: stable;
+  }
+
   body {
     margin: 0;
     background: var(--ground);

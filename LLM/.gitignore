@@ -5,4 +5,5 @@ evaluation/results/*
 *.pdf
 /work_log
 .pytest_cache/
+.pytest_*_tmp/
 .*-tmp/

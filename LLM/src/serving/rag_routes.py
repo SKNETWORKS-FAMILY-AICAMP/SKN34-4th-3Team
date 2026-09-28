@@ -1,17 +1,18 @@
 import asyncio
 import base64
+import binascii
+import logging
+import re
 from collections.abc import Callable
 from functools import partial
 from threading import RLock
-from typing import Literal
+from typing import Literal, Protocol
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph.state import CompiledStateGraph
-from starlette.concurrency import run_in_threadpool
 
-from src.core.config import Settings, get_settings
+from src.core.config import Settings
 from src.core.database import DatabaseConfigurationError
 from src.core.langsmith import LangSmithConfigurationError
 from src.data import MockDataNotFoundError, get_document_catalog
@@ -21,18 +22,32 @@ from src.data.postgres_repository import (
     get_user_profile as get_database_user_profile,
 )
 from src.features.document_processing import PdfDocumentError
+from src.features.business_plan_documents import (
+    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, convert_hwpx_to_pdf, decode_template,
+    inspect_template, render_default_hwpx, render_default_pdf,
+    render_hwpx_form, render_pdf_form,
+)
+from src.features.elasticsearch_indexing import reindex_postgres_to_elasticsearch
 from src.features.indexing import (
     load_or_build_document_index,
     load_or_build_postgres_index,
 )
 from src.models import ModelConfigurationError, get_embedding_model, get_llm
 from src.rag.contracts import EligibilityDecision, SourceCitation
+from src.rag.bizplan_coach import generate_bizplan_coach_response
 from src.rag.backend_tasks import (
+    BUSINESS_PLAN_ANALYSIS_MARKER,
+    analyze_business_plan_fields,
+    evaluate_business_plan,
     extract_receipt,
+    extract_receipt_from_ocr,
+    generate_business_plan,
+    refine_business_plan_input,
     generate_deductibility,
     generate_legal_basis,
     summarize_announcement,
 )
+from src.features.receipt_ocr import MIN_TEXT_CHARACTERS, OcrResult, OcrUnavailableError, run_ocr
 from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
@@ -43,6 +58,20 @@ from src.rag.tax_cache import TaxRagCache
 from src.serving.schemas import (
     AnnouncementSummaryRequest,
     AnnouncementSummaryResponse,
+    BizplanCoachRequest,
+    BizplanCoachResponse,
+    BusinessPlanEvaluateRequest,
+    BusinessPlanEvaluateResponse,
+    BusinessPlanRequest,
+    BusinessPlanResponse,
+    BusinessPlanRefineRequest,
+    BusinessPlanRefineResponse,
+    BusinessPlanTemplateRequest,
+    BusinessPlanTemplateResponse,
+    BusinessPlanRenderRequest,
+    BusinessPlanRenderResponse,
+    BusinessPlanSectionResponse,
+    BusinessPlanSectionScoreResponse,
     BackendUserContext,
     DeductibilityRequest,
     DeductibilityResponse,
@@ -62,12 +91,18 @@ from src.serving.schemas import (
     RagReindexRequest,
     ReadyResponse,
     ReceiptExtractionResponse,
+    ReceiptItemResponse,
     SourceResponse,
 )
-from src.serving.errors import upstream_http_exception
+from src.serving.errors import ApiError, upstream_http_exception
 from src.vectorstores.base import VectorSearch
 from src.vectorstores.hybrid import HybridSearch
+from src.vectorstores.elasticsearch import ElasticsearchBM25Search
+from src.vectorstores.nori_hybrid import NoriHybridSearch, merge_unique_sources
 from src.vectorstores.postgres import PostgresVectorSearch, RagDocumentNotFoundError
+
+
+logger = logging.getLogger(__name__)
 
 
 class RagIndexNotReadyError(RuntimeError):
@@ -75,7 +110,7 @@ class RagIndexNotReadyError(RuntimeError):
 
 
 class RagRuntime:
-    """FastAPI 프로세스의 RAG 인덱스와 모델 생성 함수를 관리한다."""
+    """LLM 프로세스의 RAG 인덱스와 모델 생성 함수를 관리한다."""
 
     def __init__(
         self,
@@ -97,7 +132,7 @@ class RagRuntime:
         self.index_lock = asyncio.Lock()
         self._cache_lock = RLock()
         self._vector_search: VectorSearch | None = None
-        self._hybrid_search: HybridSearch | None = None
+        self._hybrid_search: HybridSearch | NoriHybridSearch | None = None
         self._hybrid_settings: Settings | None = None
         self._graph: CompiledStateGraph | None = None
         self._graph_settings: Settings | None = None
@@ -105,6 +140,7 @@ class RagRuntime:
         self.document_count = 0
         self.chunk_count = 0
         self.index_source: Literal["cache", "embedding"] | None = None
+        self.elasticsearch_synced = True
 
     @property
     def ready(self) -> bool:
@@ -145,7 +181,7 @@ class RagRuntime:
         """준비된 Vector Search를 반환하고 없으면 명확한 예외를 발생시킨다.
 
         Returns:
-            현재 FastAPI 프로세스에 적재된 VectorSearch 구현체.
+            현재 LLM 프로세스에 적재된 VectorSearch 구현체.
 
         Raises:
             RagIndexNotReadyError: 인덱스를 아직 준비하지 않았을 때.
@@ -156,20 +192,40 @@ class RagRuntime:
             )
         return self._vector_search
 
-    def require_hybrid_index(self, settings: Settings) -> HybridSearch:
+    def require_hybrid_index(self, settings: Settings) -> HybridSearch | NoriHybridSearch:
         """준비된 Dense 인덱스를 기존 BM25·RRF 검색과 결합해 반환한다."""
         with self._cache_lock:
             if self._hybrid_search is None or self._hybrid_settings is not settings:
                 vector_search = self.require_index()
-                self._hybrid_search = (
-                    vector_search if isinstance(vector_search, HybridSearch) else HybridSearch(
-                        dense_search=vector_search,
-                        chunks=vector_search.get_chunks(),
-                        dense_candidate_k=settings.hybrid_dense_candidate_k,
-                        bm25_candidate_k=settings.hybrid_bm25_candidate_k,
-                        rrf_k=settings.hybrid_rrf_k,
-                    )
+                dense_search = (
+                    vector_search.dense_search
+                    if isinstance(vector_search, HybridSearch)
+                    and hasattr(vector_search, "_dense_search")
+                    else vector_search
                 )
+                if isinstance(dense_search, PostgresVectorSearch):
+                    self._hybrid_search = NoriHybridSearch(
+                        dense_search=dense_search,
+                        bm25_search=ElasticsearchBM25Search(settings),
+                        retrieval_pool_k=settings.nori_retrieval_pool_k,
+                        rerank_candidate_k=settings.cohere_rerank_candidate_k,
+                        rrf_k=settings.hybrid_rrf_k,
+                        exact_legal_search=(
+                            vector_search.search_legal_reference
+                            if isinstance(vector_search, HybridSearch) else None
+                        ),
+                        bm25_enabled=lambda: self.elasticsearch_synced,
+                    )
+                else:
+                    self._hybrid_search = (
+                        vector_search if isinstance(vector_search, HybridSearch) else HybridSearch(
+                            dense_search=vector_search,
+                            chunks=vector_search.get_chunks(),
+                            dense_candidate_k=settings.hybrid_dense_candidate_k,
+                            bm25_candidate_k=settings.hybrid_bm25_candidate_k,
+                            rrf_k=settings.hybrid_rrf_k,
+                        )
+                    )
                 self._hybrid_settings = settings
             return self._hybrid_search
 
@@ -210,32 +266,21 @@ class RagRuntime:
             return self._graph
 
 
-router = APIRouter(prefix="/internal/rag", tags=["internal-rag"])
-adapter_router = APIRouter(prefix="/rag", tags=["backend-adapter"])
-ocr_router = APIRouter(prefix="/ocr", tags=["backend-adapter"])
-
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
 SUPPORTED_RECEIPT_MEDIA_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
-def get_runtime(request: Request) -> RagRuntime:
-    """현재 FastAPI 애플리케이션의 RAG runtime을 반환한다.
+class AsyncUploadedFile(Protocol):
+    content_type: str | None
 
-    Args:
-        request: 애플리케이션 상태에 접근할 FastAPI 요청 객체.
-
-    Returns:
-        프로세스 내부 Vector 인덱스를 관리하는 RagRuntime.
-    """
-    return request.app.state.rag_runtime
+    async def read(self, size: int = -1) -> bytes: ...
 
 
-@router.get("/ready", response_model=ReadyResponse)
 async def ready(
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> ReadyResponse:
-    """외부 API 호출 없이 RAG 인덱스와 모델 설정 상태를 반환한다.
+    """pgvector와 Elasticsearch 검색 준비 상태 및 모델 설정을 반환한다.
 
     Args:
         rag_runtime: 현재 프로세스의 인덱스 상태를 보관하는 runtime.
@@ -244,9 +289,20 @@ async def ready(
     Returns:
         인덱스 준비 여부, 모델 설정 상태와 문서·Chunk 수.
     """
+    index_ready = rag_runtime.ready
+    if index_ready and settings_config.vector_store_backend == "postgres":
+        index_ready = rag_runtime.elasticsearch_synced
+        if index_ready:
+            try:
+                index_ready = await asyncio.to_thread(
+                    ElasticsearchBM25Search(settings_config).ready
+                )
+            except Exception:
+                logger.exception("Elasticsearch readiness check failed")
+                index_ready = False
     return ReadyResponse(
-        status="ready" if rag_runtime.ready else "not_ready",
-        index_ready=rag_runtime.ready,
+        status="ready" if index_ready else "not_ready",
+        index_ready=index_ready,
         llm_configured=settings_config.llm_configured,
         embedding_configured=settings_config.embedding_configured,
         langsmith_tracing=settings_config.langsmith_configured,
@@ -256,11 +312,10 @@ async def ready(
     )
 
 
-@router.post("/index", response_model=IndexResponse)
 async def create_index(
-    request_body: IndexRequest | None = None,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    request_body: IndexRequest | None,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> IndexResponse:
     """로컬 캐시를 우선 사용해 현재 프로세스의 RAG 인덱스를 준비한다.
 
@@ -273,7 +328,7 @@ async def create_index(
         인덱스 상태, 생성 출처와 문서·Chunk 수.
 
     Raises:
-        HTTPException: 설정 누락, PDF 처리 또는 Embedding 요청에 실패했을 때.
+        ApiError: 설정 누락, PDF 처리 또는 Embedding 요청에 실패했을 때.
     """
     return await _prepare_index(
         force=request_body.force if request_body is not None else False,
@@ -284,11 +339,10 @@ async def create_index(
     )
 
 
-@router.post("/answer", response_model=RagAnswerResponse)
 async def answer(
     request_body: RagAnswerRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> RagAnswerResponse:
     """사용자 질문을 LangGraph의 Policy·Notice·Tax 흐름으로 처리한다.
 
@@ -301,7 +355,7 @@ async def answer(
         근거 기반 답변, 출처, 판정 보존값과 Guardrail 사유.
 
     Raises:
-        HTTPException: 인덱스 미준비, 입력 오류 또는 외부 모델 호출 실패 시.
+        ApiError: 인덱스 미준비, 입력 오류 또는 외부 모델 호출 실패 시.
     """
     try:
         graph_result = await _execute_graph(
@@ -336,23 +390,23 @@ async def answer(
             ),
         )
     except RagIndexNotReadyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ApiError(
+            status_code=409,
             detail=str(exc),
         ) from exc
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except (MockDataNotFoundError, DatabaseDataNotFoundError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise ApiError(
+            status_code=404,
             detail=str(exc),
         ) from exc
     except RagInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -362,20 +416,18 @@ async def answer(
         ) from exc
 
 
-@adapter_router.get("/ready", response_model=ReadyResponse)
 async def adapter_ready(
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> ReadyResponse:
     """Backend 명세 경로에서 기존 인덱스 준비 상태를 반환한다."""
     return await ready(rag_runtime, settings_config)
 
 
-@adapter_router.post("/reindex", response_model=IndexResponse)
 async def adapter_reindex(
-    request_body: RagReindexRequest | None = None,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    request_body: RagReindexRequest | None,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> IndexResponse:
     """Backend의 명시적 전체 또는 PostgreSQL 부분 재색인 요청을 수행한다."""
     return await _prepare_index(
@@ -398,13 +450,13 @@ async def _prepare_index(
     """인덱스 초기 준비와 Backend의 명시적 재색인을 동일 lock에서 처리한다."""
     requested_ids = list(dict.fromkeys(document_ids))
     if any(document_id < 1 for document_id in requested_ids):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail="documentIds must contain only positive integers",
         )
     if requested_ids and settings.vector_store_backend != "postgres":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail="documentIds partial reindex requires the postgres backend",
         )
     if allow_ready_shortcut and rag_runtime.ready and not force:
@@ -416,28 +468,37 @@ async def _prepare_index(
         try:
             embedding_model = rag_runtime.embedding_factory()
             if requested_ids:
+                rag_runtime.elasticsearch_synced = False
                 postgres_search = PostgresVectorSearch(
                     embedding=embedding_model,
                     settings=settings,
                 )
-                processed_ids = await run_in_threadpool(
+                processed_ids = await asyncio.to_thread(
                     partial(
                         postgres_search.reindex_document_ids,
                         requested_ids,
                         force=force,
                     )
                 )
-                total_document_count, total_chunk_count = await run_in_threadpool(
-                    postgres_search.counts
+                source_index = await asyncio.to_thread(
+                    partial(
+                        load_or_build_postgres_index,
+                        embedding=embedding_model,
+                        settings=settings,
+                    )
                 )
-                runtime_search = _runtime_search(postgres_search, settings)
+                await asyncio.to_thread(reindex_postgres_to_elasticsearch, settings)
+                rag_runtime.elasticsearch_synced = True
+                runtime_search = _runtime_search(source_index.vector_search, settings)
                 index_source: Literal["cache", "embedding"] = (
-                    "embedding" if postgres_search.last_embedded_count else "cache"
+                    "embedding"
+                    if postgres_search.last_embedded_count or not source_index.loaded_from_cache
+                    else "cache"
                 )
                 rag_runtime.set_index(
                     runtime_search,
-                    document_count=total_document_count,
-                    chunk_count=total_chunk_count,
+                    document_count=source_index.document_count,
+                    chunk_count=source_index.chunk_count,
                     index_source=index_source,
                 )
                 return IndexResponse(
@@ -453,7 +514,9 @@ async def _prepare_index(
                 )
 
             if settings.vector_store_backend == "postgres":
-                cached_vector_index = await run_in_threadpool(
+                if not allow_ready_shortcut:
+                    rag_runtime.elasticsearch_synced = False
+                cached_vector_index = await asyncio.to_thread(
                     partial(
                         load_or_build_postgres_index,
                         embedding=embedding_model,
@@ -461,9 +524,12 @@ async def _prepare_index(
                         force=force,
                     )
                 )
+                if not allow_ready_shortcut:
+                    await asyncio.to_thread(reindex_postgres_to_elasticsearch, settings)
+                    rag_runtime.elasticsearch_synced = True
             else:
                 document_catalog = get_document_catalog()
-                cached_vector_index = await run_in_threadpool(
+                cached_vector_index = await asyncio.to_thread(
                     partial(
                         load_or_build_document_index,
                         embedding=embedding_model,
@@ -490,18 +556,18 @@ async def _prepare_index(
                 "already_ready" if cached_vector_index.loaded_from_cache else "ready",
             )
         except RagDocumentNotFoundError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+            raise ApiError(
+                status_code=404,
                 detail=str(exc),
             ) from exc
         except (ModelConfigurationError, DatabaseConfigurationError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            raise ApiError(
+                status_code=503,
                 detail=str(exc),
             ) from exc
         except (FileNotFoundError, PdfDocumentError, ValueError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            raise ApiError(
+                status_code=422,
                 detail=str(exc),
             ) from exc
         except Exception as exc:
@@ -524,11 +590,10 @@ def _runtime_search(vector_search: VectorSearch, settings: Settings) -> VectorSe
     )
 
 
-@adapter_router.post("/chat", response_model=RagChatResponse)
 async def adapter_chat(
     request_body: RagChatRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> RagChatResponse:
     """Backend 사용자 Context와 공고 결과를 LangGraph 입력에 연결한다."""
     try:
@@ -575,13 +640,13 @@ async def adapter_chat(
             ),
         )
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except RagInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -591,17 +656,16 @@ async def adapter_chat(
         ) from exc
 
 
-@adapter_router.post("/legal-basis", response_model=LegalBasisResponse)
 async def adapter_legal_basis(
     request_body: LegalBasisRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> LegalBasisResponse:
     """Backend가 확정한 세액감면 판정을 보존하며 법령 근거를 설명한다."""
     reasons = [reason.strip() for reason in request_body.reasons if reason.strip()]
     if not reasons:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail="reasons must contain at least one non-blank item",
         )
     conditions = request_body.conditions.model_dump(exclude_none=True)
@@ -638,13 +702,13 @@ async def adapter_legal_basis(
             llmUsed=True,
         )
     except RagIndexNotReadyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ApiError(
+            status_code=409,
             detail=str(exc),
         ) from exc
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -654,18 +718,17 @@ async def adapter_legal_basis(
         ) from exc
 
 
-@adapter_router.post("/deductibility", response_model=DeductibilityResponse)
 async def adapter_deductibility(
     request_body: DeductibilityRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> DeductibilityResponse:
     """지출 정보와 Tax RAG 근거로 경비 인정 가능성을 분석한다."""
     category = request_body.category.strip()
     vendor = request_body.vendor.strip()
     if not category or not vendor:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail="category and vendor must not be blank",
         )
     expense = {
@@ -710,13 +773,13 @@ async def adapter_deductibility(
             llmUsed=True,
         )
     except RagIndexNotReadyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ApiError(
+            status_code=409,
             detail=str(exc),
         ) from exc
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -726,14 +789,282 @@ async def adapter_deductibility(
         ) from exc
 
 
-@adapter_router.post(
-    "/summarize-announcement",
-    response_model=AnnouncementSummaryResponse,
-)
+async def adapter_business_plan(
+    request_body: BusinessPlanRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanResponse:
+    """사용자가 입력한 사업 정보만으로 PSST 사업계획서 초안을 생성한다. 법령 근거는 쓰지 않는다."""
+    _ = settings_config
+    try:
+        if request_body.templateText == BUSINESS_PLAN_ANALYSIS_MARKER:
+            # TODO(Backend API): expose a typed /bizplan/template-analyze response with
+            # field_id, type, required_information, status and missing_fields. Until then
+            # JSON in section.content preserves the existing Backend pass-through contract.
+            if not request_body.templateFields:
+                raise ApiError(status_code=422, detail="분석할 양식 입력 항목이 없습니다.")
+            analysis = await analyze_business_plan_fields(
+                rag_runtime.llm_factory(),
+                template_fields=request_body.templateFields,
+                user_information={
+                    "사업명": request_body.businessName,
+                    "신청자 성명": request_body.applicantName,
+                    "창업 상태": request_body.startupStatus,
+                    "업종": request_body.industry,
+                    "사업 지역": request_body.businessRegion,
+                    "사업 형태": request_body.businessType,
+                    "팀 구성": request_body.team,
+                    "목표 고객": request_body.targetCustomer,
+                    "핵심 문제": request_body.problem,
+                    "해결 방안": request_body.solution,
+                    "핵심 기능": request_body.coreFeatures,
+                    "차별점": request_body.differentiator,
+                    "수익 방식": request_body.revenueModel,
+                    "추가 설명": request_body.extraNotes,
+                },
+            )
+            return BusinessPlanResponse(
+                sections=[BusinessPlanSectionResponse(
+                    key=field.field_id, label=label,
+                    content=field.model_dump_json(ensure_ascii=False),
+                ) for label, field in zip(request_body.templateFields, analysis.fields)],
+                summary="양식 입력 영역 분석 결과", llmUsed=True,
+            )
+        generated = await generate_business_plan(
+            rag_runtime.llm_factory(),
+            business_name=request_body.businessName,
+            applicant_name=request_body.applicantName,
+            tagline=request_body.tagline,
+            startup_status=request_body.startupStatus,
+            industry=request_body.industry,
+            business_region=request_body.businessRegion,
+            business_type=request_body.businessType,
+            target_customer=request_body.targetCustomer,
+            problem_input=request_body.problem,
+            solution_input=request_body.solution,
+            core_features=request_body.coreFeatures,
+            differentiator=request_body.differentiator,
+            revenue_model=request_body.revenueModel,
+            team_input=request_body.team,
+            target_program=request_body.targetProgram,
+            extra_notes=request_body.extraNotes,
+            template_text=request_body.templateText,
+            template_fields=request_body.templateFields,
+            reviewed_sections=[section.model_dump() for section in request_body.reviewedSections],
+            announcement_criteria=request_body.announcementCriteria,
+        )
+        return BusinessPlanResponse(
+            sections=[
+                BusinessPlanSectionResponse(
+                    key=section.key, label=section.label, content=section.content
+                )
+                for section in generated.sections
+            ],
+            summary=generated.summary,
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan generation failed.",
+        ) from exc
+
+
+async def adapter_bizplan_coach(
+    request_body: BizplanCoachRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BizplanCoachResponse:
+    """사업계획서 아이디어 어시스턴트. 검색 그래프를 타지 않는 단일 모델 호출이다."""
+    _ = settings_config
+    try:
+        result = await generate_bizplan_coach_response(
+            rag_runtime.llm_factory(),
+            query=request_body.question,
+            plan_fields={
+                "businessName": request_body.businessName,
+                "tagline": request_body.tagline,
+                "targetCustomer": request_body.targetCustomer,
+            },
+            plan_sections=[
+                {"label": section.label, "content": section.content}
+                for section in request_body.sections
+            ],
+            conversation_history=[
+                message.model_dump() for message in request_body.conversationHistory
+            ],
+        )
+        if not result.in_scope:
+            fallback = {
+                "tax": "이 질문은 AI 세무 Assistant에서 확인해 주세요.",
+                "policy": "이 질문은 공고지원 AI에서 확인해 주세요.",
+                "none": "사업계획서 아이디어 구체화에 관한 질문만 답변할 수 있어요.",
+            }
+            return BizplanCoachResponse(
+                answer=fallback.get(result.redirect, fallback["none"]),
+                inScope=False,
+                redirect=result.redirect,
+            )
+        return BizplanCoachResponse(answer=result.answer, inScope=True, redirect="none")
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Bizplan coach failed.",
+        ) from exc
+
+
+async def adapter_business_plan_evaluate(
+    request_body: BusinessPlanEvaluateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanEvaluateResponse:
+    """작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다. 실제 심사 결과가 아니다."""
+    _ = settings_config
+    try:
+        generated = await evaluate_business_plan(
+            rag_runtime.llm_factory(),
+            sections=[section.model_dump() for section in request_body.sections],
+            announcement_criteria=request_body.announcementCriteria,
+            template_criteria=request_body.templateCriteria,
+        )
+        return BusinessPlanEvaluateResponse(
+            overallScore=generated.overall_score,
+            overallComment=generated.overall_comment,
+            sections=[
+                BusinessPlanSectionScoreResponse(
+                    key=section.key,
+                    label=section.label,
+                    score=section.score,
+                    strengths=section.strengths,
+                    improvements=section.improvements,
+                )
+                for section in generated.sections
+            ],
+            llmUsed=True,
+        )
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise upstream_http_exception(
+            exc,
+            fallback_message="Business plan evaluation failed.",
+        ) from exc
+
+
+async def adapter_business_plan_refine(
+    request_body: BusinessPlanRefineRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRefineResponse:
+    _ = settings_config
+    try:
+        refined = await refine_business_plan_input(
+            rag_runtime.llm_factory(), request_body.input.model_dump()
+        )
+        return BusinessPlanRefineResponse(refined=refined.model_dump(), llmUsed=True)
+    except (ModelConfigurationError, LangSmithConfigurationError) as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise upstream_http_exception(exc, fallback_message="Business plan refinement failed.") from exc
+
+
+async def adapter_business_plan_template_inspect(
+    request_body: BusinessPlanTemplateRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanTemplateResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        kind, data = decode_template(request_body.fileName, request_body.contentBase64)
+        fields = await asyncio.to_thread(inspect_template, kind, data)
+        return BusinessPlanTemplateResponse(
+            kind=kind, fields=fields,
+            outputFormats=["pdf"] if kind == "pdf" else ["hwpx", "pdf"],
+        )
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
+
+
+async def adapter_business_plan_render(
+    request_body: BusinessPlanRenderRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> BusinessPlanRenderResponse:
+    _ = (rag_runtime, settings_config)
+    try:
+        sections = [section.model_dump() for section in request_body.sections]
+        if request_body.template:
+            kind, data = decode_template(
+                request_body.template.fileName, request_body.template.contentBase64
+            )
+            fields = await asyncio.to_thread(inspect_template, kind, data)
+            values = {section["label"]: section["content"] for section in sections}
+            if set(fields) != set(values) or len(fields) != len(sections):
+                # Previously saved drafts predate the optional printed-bullet hint.
+                without_bullets = lambda label: re.sub(r"\s*\[글머리표:[^\]]+\]", "", label)
+                old_values = {without_bullets(label): content for label, content in values.items()}
+                if len(old_values) != len(fields) or set(old_values) != {without_bullets(label) for label in fields}:
+                    raise BusinessPlanDocumentError("초안 항목이 양식의 입력 항목과 일치하지 않습니다.")
+                values = {label: old_values[without_bullets(label)] for label in fields}
+            sections_by_key = {section["key"]: section for section in sections}
+            images = {}
+            total_image_bytes = 0
+            for image in request_body.images:
+                section = sections_by_key.get(image.key)
+                if not section or not re.search(r"이미지|사진|도면|로고|image|photo|logo", section["label"], re.I):
+                    raise BusinessPlanDocumentError("이미지 첨부 항목이 양식의 이미지 영역과 일치하지 않습니다.")
+                try:
+                    raw = base64.b64decode(image.contentBase64, validate=True)
+                except (binascii.Error, ValueError) as exc:
+                    raise BusinessPlanDocumentError("이미지 파일 데이터가 올바르지 않습니다.") from exc
+                if not raw or len(raw) > 2 * 1024 * 1024 or section["label"] in images:
+                    raise BusinessPlanDocumentError("이미지는 항목당 2 MiB 이하의 파일 하나만 첨부할 수 있습니다.")
+                total_image_bytes += len(raw)
+                if total_image_bytes > 4 * 1024 * 1024:
+                    raise BusinessPlanDocumentError("첨부 이미지의 합계는 4 MiB 이하여야 합니다.")
+                images[section["label"]] = (image.mimeType, raw)
+            if kind == "pdf":
+                if request_body.format != "pdf":
+                    raise BusinessPlanDocumentError("PDF 양식은 PDF로만 출력할 수 있습니다.")
+                result = await asyncio.to_thread(render_pdf_form, data, values, request_body.title, images)
+            else:
+                hwpx = await asyncio.to_thread(render_hwpx_form, data, values, images)
+                result = hwpx if request_body.format == "hwpx" else await asyncio.to_thread(convert_hwpx_to_pdf, hwpx)
+        elif request_body.images:
+            raise BusinessPlanDocumentError("이미지를 배치할 PDF/HWPX 양식이 필요합니다.")
+        elif request_body.format == "hwpx":
+            result = await asyncio.to_thread(render_default_hwpx, request_body.title, sections)
+        else:
+            result = await asyncio.to_thread(render_default_pdf, request_body.title, sections)
+        name = "business-plan." + request_body.format
+        mime = "application/pdf" if request_body.format == "pdf" else "application/hwp+zip"
+        return BusinessPlanRenderResponse(
+            fileName=name, mimeType=mime,
+            contentBase64=base64.b64encode(result).decode("ascii"),
+        )
+    except BusinessPlanRendererUnavailable as exc:
+        raise ApiError(status_code=503, detail=str(exc)) from exc
+    except BusinessPlanDocumentError as exc:
+        raise ApiError(status_code=422, detail=str(exc)) from exc
+
+
 async def adapter_summarize_announcement(
     request_body: AnnouncementSummaryRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> AnnouncementSummaryResponse:
     """Backend가 전달한 공고 원문만 사용해 구조화 요약을 생성한다."""
     try:
@@ -755,13 +1086,13 @@ async def adapter_summarize_announcement(
             llmUsed=True,
         )
     except RagInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail=str(exc),
         ) from exc
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -771,49 +1102,78 @@ async def adapter_summarize_announcement(
         ) from exc
 
 
-@ocr_router.post("/receipt", response_model=ReceiptExtractionResponse)
 async def adapter_receipt_ocr(
-    image: UploadFile = File(...),
-    rag_runtime: RagRuntime = Depends(get_runtime),
+    image: AsyncUploadedFile,
+    rag_runtime: RagRuntime,
 ) -> ReceiptExtractionResponse:
-    """4 MiB 이하 영수증 이미지를 Vision 구조화 출력으로 추출한다."""
+    """4 MiB 이하 영수증 이미지를 OCR로 읽고 LLM으로 정리한다.
+
+    OCR을 쓸 수 없거나 글자를 거의 못 읽었을 때, 또는 OCR 글자로 날짜·상호·금액을 하나도
+    정리하지 못했을 때 Vision 입력으로 대신한다.
+    """
     media_type = (image.content_type or "").casefold()
     if media_type not in SUPPORTED_RECEIPT_MEDIA_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        raise ApiError(
+            status_code=415,
             detail="receipt image must be JPEG, PNG, or WebP",
         )
     raw_image = await image.read(MAX_RECEIPT_BYTES + 1)
     if not raw_image:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail="receipt image must not be empty",
         )
     if len(raw_image) > MAX_RECEIPT_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+        raise ApiError(
+            status_code=413,
             detail="receipt image must not exceed 4 MiB",
         )
-    image_data_url = (
-        f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
-    )
+
+    ocr: OcrResult | None = None
     try:
-        generated = await extract_receipt(
-            rag_runtime.llm_factory(),
-            image_data_url=image_data_url,
-        )
+        candidate = await asyncio.to_thread(run_ocr, raw_image)
+        if candidate.text_length >= MIN_TEXT_CHARACTERS:
+            ocr = candidate
+    except OcrUnavailableError:
+        ocr = None
+
+    try:
+        llm = rag_runtime.llm_factory()
+        generated = None
+        if ocr is not None:
+            generated = await extract_receipt_from_ocr(llm, ocr_text=ocr.as_prompt_text())
+            source, confidence = "ocr_llm", round(ocr.mean_confidence, 1)
+        # OCR 글자가 충분해 보여도 뜻 없는 글자뿐이면 LLM이 아무 값도 못 채운다.
+        # 날짜·상호·금액이 하나도 없으면 사진을 직접 보여 주는 Vision으로 한 번 더 읽는다.
+        if generated is None or not (generated.date or generated.vendor or generated.amount):
+            image_data_url = (
+                f"data:{media_type};base64,{base64.b64encode(raw_image).decode('ascii')}"
+            )
+            generated = await extract_receipt(llm, image_data_url=image_data_url)
+            source, confidence = "vision", None
         return ReceiptExtractionResponse(
             date=generated.date,
             vendor=generated.vendor.strip() if generated.vendor else None,
             amount=generated.amount,
-            items=[item.strip() for item in generated.items if item.strip()],
+            items=[
+                ReceiptItemResponse(name=item.name.strip(), price=item.price)
+                for item in generated.items
+                if item.name.strip()
+            ],
             category=(
                 generated.category.strip() if generated.category else None
             ),
+            proofType=generated.proof_type,
+            dateText=(generated.date_text or "").strip() or None,
+            vendorText=(generated.vendor_text or "").strip() or None,
+            amountText=(generated.amount_text or "").strip() or None,
+            proofEvidence=(generated.proof_evidence or "").strip() or None,
+            ocrConfidence=confidence,
+            source=source,
         )
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -850,9 +1210,14 @@ async def _retrieve_tax_evidence(
         if exact_reference is not None
         else []
     )
+    merged_documents = (
+        merge_unique_sources(exact_documents, rrf_documents, unit="tax")
+        if isinstance(hybrid_search, NoriHybridSearch)
+        else merge_evidence(exact_documents, rrf_documents)
+    )
     tax_documents = [
         document
-        for document in merge_evidence(exact_documents, rrf_documents)
+        for document in merged_documents
         if document["policy_id"] is None
         and document["score"] >= settings.min_relevance_score
     ]
@@ -1024,11 +1389,10 @@ def _index_response(
     )
 
 
-@router.post("/recommendations", response_model=PolicyRecommendationResponse)
 async def recommend_policies(
     request_body: PolicyRecommendationRequest,
-    rag_runtime: RagRuntime = Depends(get_runtime),
-    settings_config: Settings = Depends(get_settings),
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
 ) -> PolicyRecommendationResponse:
     """Mock 사용자 프로필과 질문을 이용해 전체 정책을 검색·요약한다.
 
@@ -1041,7 +1405,7 @@ async def recommend_policies(
         사용자 ID, 관련 정책별 출처, 요약과 Guardrail 사유.
 
     Raises:
-        HTTPException: 사용자·인덱스가 없거나 입력 또는 외부 모델 호출 실패 시.
+        ApiError: 사용자·인덱스가 없거나 입력 또는 외부 모델 호출 실패 시.
     """
     try:
         vector_search = rag_runtime.require_index()
@@ -1078,23 +1442,23 @@ async def recommend_policies(
             guardrail_reason=discovery_answer.guardrail_reason,
         )
     except RagIndexNotReadyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ApiError(
+            status_code=409,
             detail=str(exc),
         ) from exc
     except (MockDataNotFoundError, DatabaseDataNotFoundError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise ApiError(
+            status_code=404,
             detail=str(exc),
         ) from exc
     except (ModelConfigurationError, LangSmithConfigurationError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        raise ApiError(
+            status_code=503,
             detail=str(exc),
         ) from exc
     except RagInputError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        raise ApiError(
+            status_code=422,
             detail=str(exc),
         ) from exc
     except Exception as exc:
@@ -1105,7 +1469,7 @@ async def recommend_policies(
 
 
 def _to_source_response(source: SourceCitation) -> SourceResponse:
-    """내부 출처 객체를 FastAPI 응답 schema로 변환한다.
+    """내부 출처 객체를 API 응답 schema로 변환한다.
 
     Args:
         source: RAG 서비스가 생성한 Chunk 출처 객체.

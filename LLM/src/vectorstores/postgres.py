@@ -180,6 +180,8 @@ class PostgresVectorSearch:
         policy_id: int | None = None,
         source_types: tuple[str, ...] | None = None,
         require_policy_id: bool = False,
+        unique_policy_ids: bool = False,
+        unique_source_ids: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query Embedding과 cosine distance로 관련 Chunk를 검색한다.
@@ -187,6 +189,7 @@ class PostgresVectorSearch:
         Args:
             query: Embedding할 사용자 질문 또는 개인화 Query.
             policy_id: 검색 범위를 제한할 정책 ID. None이면 전체 정책 검색.
+            unique_policy_ids: True이면 정책별 최상위 Chunk만 반환한다.
             top_k: 유사도 순서로 반환할 최대 Chunk 수.
 
         Returns:
@@ -199,13 +202,107 @@ class PostgresVectorSearch:
             raise ValueError("query must not be blank")
         if top_k < 1:
             raise ValueError("top_k must be at least 1")
+        if unique_policy_ids and not require_policy_id:
+            raise ValueError("unique_policy_ids requires require_policy_id=True")
+        if unique_policy_ids and unique_source_ids:
+            raise ValueError("choose one unique result unit")
 
         query_embedding = Vector(self._embedding.embed_query(query))
         with connect_database(self._settings) as connection:
             register_vector(connection)
             with connection.cursor(row_factory=dict_row) as cursor:
-                cursor.execute(
-                    """
+                if unique_source_ids:
+                    cursor.execute(
+                        """
+                        WITH scored AS (
+                            SELECT rd.id, rd.chunk_id, rd.policy_id,
+                                   COALESCE(p.title, td.title, 'document ' || rd.source_id) AS title,
+                                   COALESCE(a.source_url, td.source,
+                                       'db://' || rd.source_type || '/' || rd.source_id) AS source,
+                                   1 AS page, rd.content, rd.source_type, rd.source_id,
+                                   1 - (rd.embedding <=> %s) AS score
+                            FROM rag_documents AS rd
+                            LEFT JOIN policies AS p ON rd.policy_id = p.id
+                            LEFT JOIN announcements AS a
+                              ON rd.source_type = 'announcement' AND rd.source_id = a.id
+                            LEFT JOIN tax_documents AS td
+                              ON rd.source_type = 'tax_document' AND rd.source_id = td.id
+                            WHERE rd.embedding_status = 'ready'
+                              AND rd.embedding IS NOT NULL
+                              AND rd.chunk_id IS NOT NULL
+                              AND (%s::integer IS NULL OR rd.policy_id = %s)
+                              AND (%s::text[] IS NULL OR rd.source_type = ANY(%s::text[]))
+                              AND (NOT %s OR rd.policy_id IS NOT NULL)
+                        ), source_ranked AS (
+                            SELECT *, ROW_NUMBER() OVER (
+                                PARTITION BY source_type, source_id ORDER BY score DESC, id
+                            ) AS source_rank FROM scored
+                        )
+                        SELECT id, chunk_id, policy_id, title, source, page,
+                               content, source_type, source_id, score
+                        FROM source_ranked WHERE source_rank = 1
+                        ORDER BY score DESC, id LIMIT %s
+                        """,
+                        (
+                            query_embedding, policy_id, policy_id,
+                            list(source_types) if source_types is not None else None,
+                            list(source_types) if source_types is not None else None,
+                            require_policy_id, top_k,
+                        ),
+                    )
+                elif unique_policy_ids:
+                    cursor.execute(
+                        """
+                        WITH scored AS (
+                            SELECT
+                                rd.id, rd.chunk_id, rd.policy_id,
+                                COALESCE(p.title, td.title,
+                                    '문서 ' || rd.source_id) AS title,
+                                COALESCE(a.source_url, td.source,
+                                    'db://' || rd.source_type || '/' || rd.source_id
+                                ) AS source,
+                                1 AS page, rd.content, rd.source_type, rd.source_id,
+                                1 - (rd.embedding <=> %s) AS score
+                            FROM rag_documents AS rd
+                            LEFT JOIN policies AS p ON rd.policy_id = p.id
+                            LEFT JOIN announcements AS a
+                              ON rd.source_type = 'announcement'
+                             AND rd.source_id = a.id
+                            LEFT JOIN tax_documents AS td
+                              ON rd.source_type = 'tax_document'
+                             AND rd.source_id = td.id
+                            WHERE rd.embedding_status = 'ready'
+                              AND rd.embedding IS NOT NULL
+                              AND rd.chunk_id IS NOT NULL
+                              AND (%s::integer IS NULL OR rd.policy_id = %s)
+                              AND (%s::text[] IS NULL
+                                   OR rd.source_type = ANY(%s::text[]))
+                              AND rd.policy_id IS NOT NULL
+                        ), policy_ranked AS (
+                            SELECT *, ROW_NUMBER() OVER (
+                                PARTITION BY policy_id ORDER BY score DESC
+                            ) AS policy_rank
+                            FROM scored
+                        )
+                        SELECT id, chunk_id, policy_id, title, source, page,
+                               content, source_type, source_id, score
+                        FROM policy_ranked
+                        WHERE policy_rank = 1
+                        ORDER BY score DESC
+                        LIMIT %s
+                        """,
+                        (
+                            query_embedding,
+                            policy_id,
+                            policy_id,
+                            list(source_types) if source_types is not None else None,
+                            list(source_types) if source_types is not None else None,
+                            top_k,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
                     SELECT
                         rd.id, rd.chunk_id, rd.policy_id,
                         COALESCE(p.title, td.title, '문서 ' || rd.source_id) AS title,
@@ -228,17 +325,17 @@ class PostgresVectorSearch:
                     ORDER BY rd.embedding <=> %s
                     LIMIT %s
                     """,
-                    (
-                        query_embedding,
-                        policy_id,
-                        policy_id,
-                        list(source_types) if source_types is not None else None,
-                        list(source_types) if source_types is not None else None,
-                        require_policy_id,
-                        query_embedding,
-                        top_k,
-                    ),
-                )
+                        (
+                            query_embedding,
+                            policy_id,
+                            policy_id,
+                            list(source_types) if source_types is not None else None,
+                            list(source_types) if source_types is not None else None,
+                            require_policy_id,
+                            query_embedding,
+                            top_k,
+                        ),
+                    )
                 rows = cursor.fetchall()
         return [_row_to_search_result(row) for row in rows]
 

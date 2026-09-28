@@ -305,7 +305,7 @@ layout: cover
     <h3><span class="card__k" style="margin:0; width:30px; height:30px; font-size:12px">BE</span>Backend</h3>
     <ul>
       <li>Python<span>Language</span></li>
-      <li>FastAPI<span>REST API</span></li>
+      <li>Django Ninja<span>REST API</span></li>
       <li>psycopg<span>DB Driver</span></li>
     </ul>
   </div>

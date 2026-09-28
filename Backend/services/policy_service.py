@@ -1,6 +1,6 @@
 from datetime import date
 
-from fastapi import HTTPException
+from ninja.errors import HttpError
 
 from core import repo
 from core.llm_client import summarize_announcement
@@ -29,6 +29,7 @@ def _to_item(
         "benefit": policy["benefit"],
         "source": policy["source"],
         "sourceUrl": announcement.get("source_url") if announcement else None,
+        "announcementId": announcement["id"] if announcement else None,
         "applyEndDate": announcement["apply_end_date"] if announcement else None,
         "matchScore": match_score,
         "eligible": eligible,
@@ -62,13 +63,14 @@ def search(
     user_id: int | None = None,
     offset: int = 0,
     limit: int = 20,
+    only_announcements: bool = False,
 ) -> list[dict]:
     """SQL로 거르고, 점수화·정렬은 파이썬에서 한 뒤 페이지를 자른다.
 
     정렬이 전역이어야 해서 후보 전체를 점수화한 다음 자른다. 필터가 걸리면 DB가
     읽는 행이 줄고, 필터가 없어도 응답 본문은 한 페이지로 작아진다.
     """
-    rows = repo.search_policies(keyword, region, industry)
+    rows = repo.search_policies(keyword, region, industry, only_announcements=only_announcements)
     announcements = repo.announcement_map()
     user = repo.get_user(user_id) if user_id else None
     profile = repo.get_profile(user_id) if user_id else None
@@ -210,7 +212,7 @@ def _apply_period(announcement: dict) -> str:
 def detail(policy_id: int) -> dict:
     policy = repo.get_policy(policy_id)
     if not policy:
-        raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
+        raise HttpError(404, "정책을 찾을 수 없습니다.")
     announcement = _announcement_of(policy_id)
     period = ""
     method = None
@@ -229,7 +231,7 @@ def detail(policy_id: int) -> dict:
 def eligibility(policy_id: int, user_id: int) -> dict:
     policy = repo.get_policy(policy_id)
     if not policy:
-        raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
+        raise HttpError(404, "정책을 찾을 수 없습니다.")
     user = repo.get_user(user_id) or {}
     profile = repo.get_profile(user_id) or {}
     ok, reasons = _match_rule(policy.get("eligibility_rule") or "", user, profile)
@@ -238,7 +240,7 @@ def eligibility(policy_id: int, user_id: int) -> dict:
 
 def save_policy(user_id: int, policy_id: int) -> None:
     if not repo.get_policy(policy_id):
-        raise HTTPException(status_code=404, detail="정책을 찾을 수 없습니다.")
+        raise HttpError(404, "정책을 찾을 수 없습니다.")
     repo.save_policy(user_id, policy_id)
 
 
@@ -268,10 +270,10 @@ def summarize_text(raw_content: str, source: str | None = None) -> dict:
     """
     body = (raw_content or "").strip()
     if not body:
-        raise HTTPException(status_code=422, detail="공고문 원문이 비어 있습니다.")
+        raise HttpError(422, "공고문 원문이 비어 있습니다.")
     llm = summarize_announcement(body, source)
     if not llm or not llm.get("benefit"):
-        raise HTTPException(status_code=503, detail="AI 요약 서비스를 사용할 수 없습니다.")
+        raise HttpError(503, "AI 요약 서비스를 사용할 수 없습니다.")
     return {
         "target": llm.get("target") or "",
         "benefit": llm.get("benefit") or "",
@@ -286,7 +288,7 @@ def summarize_text(raw_content: str, source: str | None = None) -> dict:
 def announcement_summary(announcement_id: int) -> dict:
     announcement = repo.get_announcement(announcement_id)
     if not announcement:
-        raise HTTPException(status_code=404, detail="공고를 찾을 수 없습니다.")
+        raise HttpError(404, "공고를 찾을 수 없습니다.")
     cached = repo.get_summary(announcement_id)
     if cached:
         return {
@@ -300,10 +302,7 @@ def announcement_summary(announcement_id: int) -> dict:
         }
     raw_content = str(announcement.get("raw_content") or "").strip()
     if not raw_content:
-        raise HTTPException(
-            status_code=422,
-            detail="공고문 원문이 없어 AI 요약을 생성할 수 없습니다.",
-        )
+        raise HttpError(422, "공고문 원문이 없어 AI 요약을 생성할 수 없습니다.")
     llm = summarize_announcement(raw_content, announcement.get("source_url"))
     if llm and llm.get("benefit"):
         summary = {
@@ -318,7 +317,7 @@ def announcement_summary(announcement_id: int) -> dict:
         repo.upsert_summary(announcement_id, summary)
         cached = {**summary, "llm_used": summary["llm_used"]}
     if not cached:
-        raise HTTPException(status_code=404, detail="공고 요약을 찾을 수 없습니다.")
+        raise HttpError(404, "공고 요약을 찾을 수 없습니다.")
     return {
         "target": cached["target"],
         "benefit": cached["benefit"],

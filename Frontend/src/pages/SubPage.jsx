@@ -3,6 +3,8 @@ import { MenuDrawer } from '../components/MenuDrawer.jsx';
 import { Nav } from '../components/Nav.jsx';
 import { RoadmapGuide } from './RoadmapGuide.jsx';
 import { TaxAssistantPage } from './TaxAssistantPage.jsx';
+import { ExpenseTracker } from './ExpenseTracker.jsx';
+import { BusinessPlanPage } from './BusinessPlanPage.jsx';
 import { AnnouncementAnalyzer } from './AnnouncementAnalyzer.jsx';
 
 export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadmapDone, setRoadmapDone, savedPolicies = [], onToggleSavedPolicy }) {
@@ -10,20 +12,24 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
     {
       roadmap: { title: '창업 로드맵' },
       tax: { title: 'AI 세무 Assistant' },
+      expenses: { title: '지출관리' },
+      bizplan: { title: '사업계획서' },
       gov: { title: '공고지원 AI' },
     }[pageKey] || { title: '창업ON' };
 
-  const slim = pageKey === 'roadmap' || pageKey === 'tax' || pageKey === 'gov';
+  const slim = pageKey === 'roadmap' || pageKey === 'tax' || pageKey === 'gov' || pageKey === 'expenses' || pageKey === 'bizplan';
   const [menuOpen, setMenuOpen] = useState(false);
 
   const body = (
     <React.Fragment>
       <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' ? ' fp--wideplus' : '')}>
-        <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
-          <div className="fp__head-in">
-            <h1 className="fp__title">{meta.title}</h1>
+        {pageKey !== 'bizplan' && (
+          <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
+            <div className="fp__head-in">
+              <h1 className="fp__title">{meta.title}</h1>
+            </div>
           </div>
-        </div>
+        )}
         <div className="fp__body">
           {pageKey === 'roadmap' && (
             <RoadmapGuide
@@ -42,6 +48,17 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
             />
           )}
           {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
+          {pageKey === 'expenses' && (
+            <div className="exp-page">
+              <ExpenseTracker user={user} onRequireLogin={onLoginClick} />
+            </div>
+          )}
+          {pageKey === 'bizplan' && (
+            <div className="exp-page">
+              <BusinessPlanPage user={user} onRequireLogin={onLoginClick}
+                savedPolicies={savedPolicies} onToggleSavedPolicy={onToggleSavedPolicy} />
+            </div>
+          )}
         </div>
       </div>
       {!slim && (

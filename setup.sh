@@ -64,9 +64,6 @@ wait_http http://127.0.0.1:8000/health backend
 
 HEALTH="$(curl -fsS http://127.0.0.1:8000/health)"
 echo "  $HEALTH"
-case "$HEALTH" in *'"storage":"postgres"'*) ;;
-  *) echo "  *  Postgres 대신 SQLite 로 폴백했습니다. DATABASE_URL 을 확인하세요." ;;
-esac
 case "$HEALTH" in *'"ragReady":true'*) ;;
   *) echo "  *  RAG 인덱스가 비어 AI 답변은 목업입니다. 실답변은 POST :8001/rag/reindex (OpenAI 비용 발생)" ;;
 esac

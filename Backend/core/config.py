@@ -25,7 +25,7 @@ APP_VERSION = "0.2.0"
 APP_DESCRIPTION = """
 청년·1인 창업자 맞춤형 행정·재정 지원 플랫폼의 REST API입니다.
 
-- **DB**: Postgres(`DATABASE_URL`)를 직접 SELECT/INSERT/UPDATE 합니다. 연결이 안 되면 SQLite로 폴백합니다. `policies`/`rag_documents`를 TRUNCATE하지 않습니다.
+- **DB**: Postgres(`DATABASE_URL`)를 직접 SELECT/INSERT/UPDATE 합니다. `policies`/`rag_documents`를 TRUNCATE하지 않습니다.
 - **LLM**: `LLM_API_URL`(기본 `http://127.0.0.1:8001`)이 살아 있으면 RAG/OCR/요약을 호출하고, 실패 시 목업으로 내려갑니다.
 - Rule 판정(세액감면·정책 자격)은 Backend에 두고, LLM은 근거 설명만 붙입니다.
 
@@ -40,6 +40,7 @@ OPENAPI_TAGS = [
     {"name": "캘린더", "description": "세금·지원금 통합 일정"},
     {"name": "세무", "description": "세금 정보, 리마인더, 세액감면 Rule + LLM 근거"},
     {"name": "지출", "description": "영수증 OCR(LLM)과 경비 안내"},
+    {"name": "사업계획서", "description": "입력한 사업 정보로 PSST 구조 초안 생성(LLM)"},
     {"name": "지원정책", "description": "정책 검색, 추천, 자격 확인, 공고 요약, 관심 저장"},
     {"name": "관리자", "description": "관리자 로그인 및 데이터 관리"},
     {"name": "알림", "description": "앱 알림함, 메일 대기열, 브라우저 푸시"},
@@ -58,8 +59,6 @@ DEMO_PASSWORD = "demo123"
 ADMIN_EMAIL = "admin@demo.com"
 ADMIN_PASSWORD = "admin123"
 
-DATA_DIR = BACKEND_ROOT / "data"
-SQLITE_PATH = Path(os.getenv("SQLITE_PATH", str(DATA_DIR / "app.db")))
 LLM_API_URL = os.getenv("LLM_API_URL", "http://127.0.0.1:8001").rstrip("/")
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))
 
@@ -74,7 +73,12 @@ LLM_TIMEOUT_CHAT_TAX = float(os.getenv("LLM_TIMEOUT_CHAT_TAX", "120"))
 LLM_TIMEOUT_LEGAL_BASIS = float(os.getenv("LLM_TIMEOUT_LEGAL_BASIS", "30"))
 LLM_TIMEOUT_DEDUCTIBILITY = float(os.getenv("LLM_TIMEOUT_DEDUCTIBILITY", "30"))
 LLM_TIMEOUT_SUMMARIZE = float(os.getenv("LLM_TIMEOUT_SUMMARIZE", "45"))
-LLM_TIMEOUT_OCR = float(os.getenv("LLM_TIMEOUT_OCR", "60"))
+LLM_TIMEOUT_BIZPLAN = float(os.getenv("LLM_TIMEOUT_BIZPLAN", "120"))
+# 프런트엔드 업로드 요청(Frontend/src/api.js의 uploadReceipt) 자체가 45초에 끊긴다.
+# 이 값이 그보다 길면 Backend가 응답을 다 만들어도 프런트는 이미 포기한 뒤라, 사용자는
+# 아무것도 못 본 채 지출만(성공 또는 목 값으로) 조용히 저장돼 버린다(2026-09-24). 항상
+# 프런트보다 먼저(또는 같이) 끝나도록 여유를 두고 짧게 잡는다.
+LLM_TIMEOUT_OCR = float(os.getenv("LLM_TIMEOUT_OCR", "40"))
 LLM_TIMEOUT_REINDEX = float(os.getenv("LLM_TIMEOUT_REINDEX", "180"))
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:admin1234@127.0.0.1:5432/startup_platform")
 SMTP_HOST = os.getenv("SMTP_HOST", "")

@@ -41,7 +41,7 @@ class HttpLangGraphClient:
         """평가용 비동기 HTTP Client를 초기화한다.
 
         Args:
-            base_url: 실행 중인 LLM FastAPI 서버의 기본 URL.
+            base_url: 실행 중인 LLM Django 서버의 기본 URL.
             timeout_seconds: 평가 요청 한 건의 최대 대기 시간.
         """
         self._client = AsyncClient(

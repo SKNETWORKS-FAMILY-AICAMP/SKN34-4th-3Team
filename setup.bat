@@ -66,7 +66,6 @@ echo [4/4] Health check
 curl -fsS -o nul %RETRY% http://127.0.0.1:8001/health || goto :fail_llm
 curl -fsS %RETRY% http://127.0.0.1:8000/health || goto :fail_backend
 echo.
-curl -fsS http://127.0.0.1:8000/health | findstr /c:"\"storage\":\"postgres\"" >nul || echo   *  Backend fell back to SQLite. Check DATABASE_URL.
 curl -fsS http://127.0.0.1:8000/health | findstr /c:"\"ragReady\":true" >nul || echo   *  RAG index is empty, so AI answers are mock. POST :8001/rag/reindex to build it.
 
 echo.

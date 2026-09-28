@@ -15,6 +15,7 @@ import urllib.request
 
 from core.config import (
     LLM_API_URL,
+    LLM_TIMEOUT_BIZPLAN,
     LLM_TIMEOUT_CHAT_POLICY,
     LLM_TIMEOUT_CHAT_TAX,
     LLM_TIMEOUT_DEDUCTIBILITY,
@@ -28,6 +29,16 @@ from core.config import (
 
 
 logger = logging.getLogger(__name__)
+
+
+class LLMRequestError(Exception):
+    """LLM 응답의 HTTP 상태와 사용자에게 전달할 메시지를 보존한다."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
 
 # LLM은 tax·expense를 tax 멀티홉 route로 강제하므로 policy보다 오래 걸린다.
 _CHAT_TIMEOUTS = {
@@ -143,12 +154,18 @@ def explain_expense(
     category: str,
     vendor: str,
     amount: int,
-    items: list[str] | None = None,
+    items: list | None = None,
 ) -> dict | None:
     """`POST /rag/deductibility`. 인덱스 미준비 시 409가 오고 None으로 떨어진다."""
     normalized_category = (category or "").strip() or "미분류"
     normalized_vendor = (vendor or "").strip() or "상호 미상"
-    normalized_items = [item.strip() for item in items or [] if item.strip()]
+    # items는 {name, price} 딕셔너리(신규)와 문자열(마이그레이션 전 데이터)이 섞여 올 수 있다.
+    normalized_items = [
+        name
+        for item in (items or [])
+        for name in [(item.get("name") if isinstance(item, dict) else str(item or "")).strip()]
+        if name
+    ]
     spec = _post(
         "/rag/deductibility",
         {
@@ -170,6 +187,39 @@ def explain_expense(
         "status": spec.get("status"),
         "llmUsed": bool(spec.get("llmUsed")),
     }
+
+
+def generate_business_plan(fields: dict) -> dict | None:
+    """`POST /rag/business-plan`. 사용자가 입력한 사업 정보로 PSST 초안을 만든다."""
+    return _post("/rag/business-plan", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def evaluate_business_plan(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-evaluate`. 작성된 PSST 초안에 AI 예비진단(자체 채점)을 매긴다."""
+    return _post("/rag/business-plan-evaluate", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def bizplan_coach(fields: dict) -> dict | None:
+    """`POST /rag/business-plan-coach`. 사업계획서 아이디어 어시스턴트에게 질문한다."""
+    return _post("/rag/business-plan-coach", fields, timeout=LLM_TIMEOUT_BIZPLAN)
+
+
+def refine_business_plan(fields: dict) -> dict:
+    return _post_strict(
+        "/rag/business-plan-refine", fields, timeout=LLM_TIMEOUT_BIZPLAN
+    )
+
+
+def inspect_business_plan_template(fields: dict) -> dict:
+    return _post_strict(
+        "/rag/business-plan-template-inspect", fields, timeout=LLM_TIMEOUT_BIZPLAN
+    )
+
+
+def render_business_plan(fields: dict) -> dict:
+    return _post_strict(
+        "/rag/business-plan-render", fields, timeout=LLM_TIMEOUT_BIZPLAN
+    )
 
 
 def summarize_announcement(raw_content: str, source: str | None = None) -> dict | None:
@@ -203,6 +253,51 @@ def _get(path: str, *, timeout: float | None = None) -> dict | None:
 
 def _post(path: str, body: dict, *, timeout: float | None = None) -> dict | None:
     return _request("POST", path, body, timeout=timeout)
+
+
+def _post_strict(path: str, body: dict, *, timeout: float | None = None) -> dict:
+    """문서 API가 반환한 4xx 사유를 잃지 않는 JSON POST."""
+    url = f"{LLM_API_URL}{path}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout or LLM_TIMEOUT_SECONDS) as res:
+            raw = res.read().decode("utf-8")
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        message = "LLM 요청을 처리하지 못했습니다."
+        error_code = "HTTP_ERROR"
+        try:
+            raw = exc.read().decode("utf-8")
+            payload = json.loads(raw) if raw else {}
+            error = payload.get("error") if isinstance(payload, dict) else None
+            if isinstance(error, dict):
+                message = str(error.get("message") or message)
+                error_code = str(error.get("code") or error_code)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        logger.warning(
+            "LLM HTTP error: method=POST path=%s status=%s code=%s",
+            path,
+            exc.code,
+            error_code,
+        )
+        raise LLMRequestError(exc.code, message) from exc
+    except TimeoutError as exc:
+        _log_transport_error("POST", path, exc)
+        raise LLMRequestError(504, "LLM 요청 시간이 초과되었습니다.") from exc
+    except urllib.error.URLError as exc:
+        _log_transport_error("POST", path, exc)
+        if isinstance(exc.reason, TimeoutError):
+            raise LLMRequestError(504, "LLM 요청 시간이 초과되었습니다.") from exc
+        raise LLMRequestError(503, "LLM 서비스에 연결할 수 없습니다.") from exc
+    except (json.JSONDecodeError, OSError) as exc:
+        _log_transport_error("POST", path, exc)
+        raise LLMRequestError(503, "LLM 서비스에 연결할 수 없습니다.") from exc
 
 
 def _post_multipart(

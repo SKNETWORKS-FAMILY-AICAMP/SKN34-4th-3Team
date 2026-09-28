@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     db_host: str = "localhost"
     db_port: int = 5432
 
+    elasticsearch_url: str = "http://localhost:9200"
+    elasticsearch_index_alias: str = "rag-documents"
+    elasticsearch_request_timeout: int = 30
+    elasticsearch_bulk_chunk_size: int = 500
+
     chunk_size: int = 1000
     chunk_overlap: int = 150
     default_top_k: int = 5
@@ -65,6 +70,7 @@ class Settings(BaseSettings):
     retrieval_mode: Literal["dense", "hybrid"] = "hybrid"
     hybrid_dense_candidate_k: int = 20
     hybrid_bm25_candidate_k: int = 20
+    nori_retrieval_pool_k: int = 40
     hybrid_rrf_k: int = 60
     max_question_length: int = 1000
     max_context_characters: int = 12000
@@ -194,6 +200,14 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_CONNECT_TIMEOUT must be at least 1")
         if not 1 <= self.db_port <= 65535:
             raise ValueError("DB_PORT must be between 1 and 65535")
+        if not self.elasticsearch_url.strip():
+            raise ValueError("ELASTICSEARCH_URL must not be blank")
+        if not self.elasticsearch_index_alias.strip():
+            raise ValueError("ELASTICSEARCH_INDEX_ALIAS must not be blank")
+        if self.elasticsearch_request_timeout < 1:
+            raise ValueError("ELASTICSEARCH_REQUEST_TIMEOUT must be at least 1")
+        if self.elasticsearch_bulk_chunk_size < 1:
+            raise ValueError("ELASTICSEARCH_BULK_CHUNK_SIZE must be at least 1")
         if self.chunk_overlap < 0:
             raise ValueError("CHUNK_OVERLAP must not be negative")
         if self.chunk_overlap >= self.chunk_size:
@@ -206,6 +220,8 @@ class Settings(BaseSettings):
             raise ValueError("HYBRID_DENSE_CANDIDATE_K must be at least 1")
         if self.hybrid_bm25_candidate_k < 1:
             raise ValueError("HYBRID_BM25_CANDIDATE_K must be at least 1")
+        if self.nori_retrieval_pool_k < self.cohere_rerank_candidate_k:
+            raise ValueError("NORI_RETRIEVAL_POOL_K must be >= COHERE_RERANK_CANDIDATE_K")
         if self.hybrid_rrf_k < 1:
             raise ValueError("HYBRID_RRF_K must be at least 1")
         if self.cohere_rerank_candidate_k < 1:

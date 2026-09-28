@@ -1,12 +1,14 @@
 """Backend↔LLM V1 공개 계약을 고정하는 회귀 테스트."""
 
+import json
+import re
+
 import pytest
-from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from src.serving.app import create_app
 from src.serving.rag_routes import MAX_RECEIPT_BYTES, RagRuntime
 from src.serving.schemas import RagChatRequest
+from tests.django_client import DjangoTestClient
 
 
 CANONICAL_OPERATIONS = {
@@ -21,13 +23,13 @@ CANONICAL_OPERATIONS = {
 }
 
 
-def build_contract_client() -> TestClient:
+def build_contract_client() -> DjangoTestClient:
     """외부 모델을 생성하지 않는 V1 계약 검증용 client를 만든다."""
-    return TestClient(create_app(runtime=RagRuntime()))
+    return DjangoTestClient(runtime=RagRuntime())
 
 
 def test_openapi_exposes_every_v1_backend_operation() -> None:
-    schema = create_app(runtime=RagRuntime()).openapi()
+    schema = build_contract_client().get("/openapi.json").json()
 
     exposed_operations = {
         (path, method)
@@ -37,6 +39,8 @@ def test_openapi_exposes_every_v1_backend_operation() -> None:
     }
 
     assert CANONICAL_OPERATIONS <= exposed_operations
+    references = set(re.findall(r"#/components/schemas/([A-Za-z0-9_]+)", json.dumps(schema)))
+    assert references <= set(schema["components"]["schemas"])
 
 
 def test_chat_contract_serializes_typed_context_and_notice_dates() -> None:

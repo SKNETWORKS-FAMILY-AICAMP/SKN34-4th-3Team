@@ -107,6 +107,8 @@ erDiagram
         string image_url
         string status "DEFAULT 'pending'"
         datetime created_at
+        bytea image_data "원본 이미지"
+        string mime_type
     }
 
     receipt_extractions {
@@ -116,6 +118,8 @@ erDiagram
         string vendor
         int amount
         string items
+        string proof_type "증빙 종류"
+        string read_meta "JSON: 읽음 여부·원문 근거·OCR 신뢰도"
     }
 
     expenses {
@@ -128,6 +132,9 @@ erDiagram
         boolean deductible
         float deductible_confidence
         string deductible_basis
+        string deductible_tier "high/ambiguous/low"
+        boolean proof_valid "NULL=판단 불가"
+        string missing_fields "JSON 배열"
     }
 
     policies {
@@ -236,7 +243,8 @@ erDiagram
     - 공용 마스터 데이터와 사용자 소유 행이 한 테이블에 공존한다. 조회 시 `USER` 행은 `user_id`로 걸러야 하며(`Backend/services/calendar_service.py:42`), 삭제는 소유자만 가능하다
     - `Reminder`는 사용자가 특정 일정(세금·지원금·개인 무관)에 건 알림이다. `dispatched`로 발송 여부를 추적한다
 - **Policy – CalendarEvent**: 정책의 신청 마감일(`Announcement.apply_end_date`)을 기준으로 생성되는 POLICY 타입 `CalendarEvent`를 위한 관계다. `Announcement`에 `apply_start_date`/`apply_end_date` 구조화 필드를 추가한 이유는, `AnnouncementSummary.period`가 AI 요약 문자열이라 캘린더 렌더링에 쓸 신뢰 가능한 날짜 값이 아니기 때문이다.
-- **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다. 지출 분석은 추가 기능(추후 개발)이지만 세 테이블은 스키마에 그대로 유지한다(`Docs/README.md` 8절).
+- **Receipt – ReceiptExtraction – Expense**: 영수증 등록(FS-14) → OCR 추출 결과(FS-15, 1:1) → 지출 항목(FS-16, FS-17 포함, 1:N) 순서로 이어진다. 영수증 한 장에 여러 지출 항목이 나올 수 있어 `Expense`는 `Receipt`의 자식으로 둔다(현재 구현은 한 장에 하나를 만든다). `receipts.image_data`는 업로드 원본을 다시 보여주기 위한 것이고, `receipt_extractions.read_meta`는 OCR이 실제로 읽은 항목과 기본값으로 채운 항목을 구분하는 JSON이다. `expenses.deductible_tier`·`proof_valid`·`missing_fields`는 경비 인정 3단계 판정·적격증빙 여부·빠진 정보다(FS-17).
+- **사업계획서(FS-29~31)**: 입력값·초안·예비진단 결과는 "임시저장" 버튼으로 `bizplan_drafts.data`에 유저당 1건 저장한다. 창업 로드맵 체크리스트는 `user_roadmap_progress`, 상담 대화방은 `chat_rooms`에 둔다. 자세한 내용은 아래 "유저 개인화 저장 이관" 절 참고.
 - **Policy – Announcement – AnnouncementSummary**: 정책(마스터 데이터) 하나에 여러 시점의 공고문이 달릴 수 있고(1:N), 공고문 하나는 AI 요약 결과 하나를 가진다(1:1).
 - **User – Policy (SavedPolicy)**: 관심 정책 저장(FS-23)을 위한 다대다 조인 테이블.
 - **AdminUser – Policy / TaxDocument**: 관리자가 등록한 데이터의 출처를 추적하기 위한 FK.
@@ -259,19 +267,75 @@ erDiagram
 
 ### 의도적으로 스키마에 두지 않은 항목
 
-Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채웠다(`notifications` 테이블, `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, `announcements.apply_method`, `announcement_summaries.llm_used`, `users.region`의 `chk_users_region` CHECK 제약(`NOT VALID`)). LLM 세금 캐시 테이블 `tax_rag_cache`도 이 파일에 있다. 위 다이어그램은 이를 반영한 상태다.
+Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채웠다(`notifications` 테이블, `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, 영수증 경비 판정용 `receipts.image_data`·`mime_type`, `receipt_extractions.proof_type`·`read_meta`, `expenses.deductible_tier`·`proof_valid`·`missing_fields`, `announcements.apply_method`, `announcement_summaries.llm_used`, `users.region`의 `chk_users_region` CHECK 제약(`NOT VALID`)). LLM 세금 캐시 테이블 `tax_rag_cache`도 이 파일에 있다. 위 다이어그램은 이를 반영한 상태다.
 
 `meta_ids`만 추가하지 않았다. 인메모리 id 카운터를 저장하려던 덤프 산출물이라, `SERIAL`을 쓰면 개념 자체가 사라진다. Backend의 Postgres 덤프 경로도 제거됐다(`Docs/STATUS.md` P0-3).
 
 `expenses.user_id`는 `receipt_id → receipts.user_id`로 유도할 수 있는 비정규화다. 조회 필터 편의를 위해 남겨 두었다.
 
-`app_extras.sql`은 `docker-compose.yml`의 initdb 마운트로 `01_schema.sql` 다음에 적용된다. 이미 데이터가 있는 DB에는 initdb가 다시 돌지 않으므로 `psql`로 한 번 직접 실행해야 한다. 모든 구문이 `IF NOT EXISTS`(제약은 `pg_constraint` 확인)라 재실행에 안전하다.
+`app_extras.sql`은 빈 볼륨에서는 initdb로 `01_schema.sql` 다음에 적용되고, 이후에는 `docker compose up`마다 `db-migrate` 서비스가 다시 적용한다. 모든 구문이 재실행에 안전하다(`IF NOT EXISTS`, 제약·`NOT NULL`은 `DO $$` 블록에서 확인 후 적용).
 
 ### 스키마 적용 경로
 
-`docker-compose.yml`의 initdb 마운트가 유일한 자동 적용 경로다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다.
+`docker-compose.yml`에 자동 적용 경로가 두 개 있다.
 
-- initdb는 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 이미 데이터가 있는 DB에는 `psql`로 직접 적용해야 한다. `app_extras.sql`은 전부 `IF NOT EXISTS`라 재실행에 안전하다
+- **initdb**: 데이터 볼륨이 비어 있는 최초 기동에만 돈다. 파일명 순서로 `01_schema.sql` 다음 `02_app_extras.sql`이 실행된다
+- **`db-migrate`**: `db`가 healthy가 되면 `psql -v ON_ERROR_STOP=1`로 `app_extras.sql`을 적용하고 종료하는 one-shot 서비스다. `backend`·`llm`은 이 서비스가 성공해야 기동한다. 기존 볼륨에도 스키마 변경이 `docker compose up`만으로 반영된다. 수동 재적용은 `docker compose up -d db-migrate`
+- `db` healthcheck는 `pg_isready -h 127.0.0.1`(TCP)로 확인한다. initdb 중 임시 서버는 TCP를 열지 않아, 소켓으로 확인하면 init 도중 healthy가 되어 `db-migrate`가 연결 거부로 실패할 수 있다
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
-- 로컬에서 띄운 Backend는 Postgres 연결 시 `Backend/core/db.py`의 `_apply_extras`로 `DB/app_extras.sql`을 best-effort 적용한다. 파일이 없으면 건너뛰고 실패한 문장은 무시하므로 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
-- `setup.sh`·`setup.bat`은 기동 때마다 `psql`로 `app_extras.sql`을 다시 적용한다
+- `Backend/core/db.py`의 `_apply_extras`는 파일을 `;` 단위로 잘라 한 트랜잭션에서 실행한다. `DO $$` 블록이 쪼개져 실패하면 이후 문장이 모두 실패하고 롤백되므로 사실상 적용되지 않는다. compose 컨테이너에서는 파일 경로(`/DB`)도 없다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
+- `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
+- compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
+
+## 유저 개인화 저장 이관 (대화방·로드맵·사업계획서 적용)
+
+브라우저 localStorage에만 있던 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 둔다. 스키마는 `DB/app_extras.sql`에 있고, 코드는 세 기능 모두 전환했다(로드맵·사업계획서는 `feature/personalize`, 기존 localStorage 값은 로그인 때 한 번 서버로 옮긴다). 로드맵·사업계획서 연결 내용은 `Docs/reports/USER_PERSONALIZATION_PLAN.md`에 있다. 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+
+```mermaid
+erDiagram
+    users ||--o{ chat_rooms : opens
+    chat_rooms ||--o{ chat_messages : contains
+    users ||--o{ chat_messages : sends
+    users ||--o{ user_roadmap_progress : checks
+    users ||--o| bizplan_drafts : drafts
+
+    chat_rooms {
+        int id PK
+        int user_id FK
+        string category "tax / policy / roadmap"
+        string title "NULL이면 첫 질문을 제목으로"
+        datetime created_at
+        datetime updated_at "마지막 메시지 시각"
+        datetime deleted_at "NULL이면 활성, 삭제는 표시만"
+    }
+
+    chat_messages {
+        int id PK
+        int user_id FK
+        int room_id FK "NOT NULL, ON DELETE CASCADE"
+        string category
+        string question
+        string answer
+        datetime created_at
+    }
+
+    user_roadmap_progress {
+        int user_id PK "FK"
+        int version PK "DEFAULT 2"
+        string task_key PK "단계:인덱스 (예: A:0)"
+        datetime done_at
+    }
+
+    bizplan_drafts {
+        int user_id PK "FK"
+        jsonb data "작성 화면 상태 전체"
+        jsonb form "미사용"
+        jsonb plan "미사용"
+        jsonb eval_result "미사용"
+        datetime updated_at
+    }
+```
+
+- **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
+- **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
+- **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 저장 필드가 자주 늘어나 작성 화면 상태 전체(양식·이미지 Base64 포함)를 `data` JSONB 하나에 둔다. `form`·`plan`·`eval_result`는 쓰지 않으며 삭제는 팀 합의 뒤 진행한다.

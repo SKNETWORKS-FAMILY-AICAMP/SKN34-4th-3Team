@@ -14,6 +14,7 @@ class PolicyItem(BaseModel):
     benefit: str | None = Field(default=None, description="지원 내용")
     source: str | None = Field(default=None, description="출처")
     sourceUrl: str | None = Field(default=None, description="공고 원문 URL")
+    announcementId: int | None = Field(default=None, description="연결된 공고 ID")
     applyEndDate: date | None = Field(default=None, description="신청 마감일")
     matchScore: int | None = Field(default=None, description="맞춤 추천 점수(0~100)")
     eligible: bool | None = Field(

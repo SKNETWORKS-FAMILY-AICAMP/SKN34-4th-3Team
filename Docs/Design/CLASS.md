@@ -101,6 +101,8 @@ classDiagram
         +string imageUrl
         +string status
         +datetime createdAt
+        +bytes imageData
+        +string mimeType
     }
 
     class ReceiptExtraction {
@@ -110,6 +112,8 @@ classDiagram
         +string vendor
         +int amount
         +string items
+        +string proofType
+        +string readMeta
     }
 
     class Expense {
@@ -122,6 +126,9 @@ classDiagram
         +boolean deductible
         +float deductibleConfidence
         +string deductibleBasis
+        +string deductibleTier
+        +boolean proofValid
+        +string missingFields
     }
 
     class Policy {
@@ -224,7 +231,7 @@ classDiagram
 
 ## 2. Service 클래스
 
-`Docs/Design/API_SPEC.md`의 라우트 그룹 11개(auth/users/chat/calendar/tax/expenses/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 `Backend/services/*.py` 모듈 단위로 옮긴 클래스다. 실제 코드는 클래스가 아니라 모듈 함수이며, 메서드명과 인자는 `Backend/services/*.py`의 함수 선언을 camelCase로 그대로 옮긴 것이다(밑줄 없는 공개 함수만 싣고 `_`로 시작하는 내부 헬퍼는 뺐다). 따라서 여기 없는 이름은 코드에도 없다. `stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없다. `AdminService`도 대응 모듈이 없는 **논리 묶음**이다. 관리자 라우트(`Backend/api/admin.py`)가 `core.repo`와 `llm_client`를 직접 부르고, 관리자 로그인만 `auth_service.admin_login`에 있다. `/tax/calendar`·`/tax/reminders` 라우트는 `CalendarService`를 부른다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다.
+`Docs/Design/API_SPEC.md`의 라우트 그룹 12개(auth/users/chat/calendar/tax/expenses/bizplan/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 `Backend/services/*.py` 모듈 단위로 옮긴 클래스다. 실제 코드는 클래스가 아니라 모듈 함수이며, 메서드명과 인자는 `Backend/services/*.py`의 함수 선언을 camelCase로 그대로 옮긴 것이다(밑줄 없는 공개 함수만 싣고 `_`로 시작하는 내부 헬퍼는 뺐다). 따라서 여기 없는 이름은 코드에도 없다. `stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없다. `AdminService`도 대응 모듈이 없는 **논리 묶음**이다. 관리자 라우트(`Backend/api/admin.py`)가 `core.repo`와 `llm_client`를 직접 부르고, 관리자 로그인만 `auth_service.admin_login`에 있다. `/tax/calendar`·`/tax/reminders` 라우트는 `CalendarService`를 부른다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다.
 
 ```mermaid
 classDiagram
@@ -269,12 +276,20 @@ classDiagram
     }
 
     class ExpenseService {
-        +createReceipt(userId, filename, imageBase64, mimeType) Receipt
+        +createReceipt(userId, filename, imageBase64, mimeType, imageBytes) Receipt
         +getExtraction(receiptId, userId) ReceiptExtraction
         +listExpenses(userId, category, fromDate, toDate) Expense[]
         +updateCategory(expenseId, userId, category) DeductibilityResult
-        +deleteExpense(expenseId, userId)
         +deductibility(expenseId, userId) DeductibilityResult
+        +analysis(expenseId, userId) AnalysisResult
+        +getReceiptImage(receiptId, userId) bytes
+        +deleteExpense(expenseId, userId)
+    }
+
+    class BizplanService {
+        +generate(body) BusinessPlan
+        +evaluate(body) BusinessPlanEvaluation
+        +coach(body) CoachAnswer
     }
 
     class PolicyService {
@@ -318,6 +333,9 @@ classDiagram
         +explainTaxReduction(eligible, reasons, conditions) Explanation
         +extractReceipt(filename, imageBase64, mimeType) ReceiptFields
         +explainExpense(category, vendor, amount, items) DeductibilityResult
+        +generateBusinessPlan(fields) BusinessPlan
+        +evaluateBusinessPlan(fields) BusinessPlanEvaluation
+        +bizplanCoach(fields) CoachAnswer
         +summarizeAnnouncement(rawContent, source) Summary
         +reindex()
     }
@@ -339,6 +357,7 @@ classDiagram
     ExpenseService ..> ReceiptExtraction
     ExpenseService ..> Expense
     ExpenseService ..> LLMServiceClient
+    BizplanService ..> LLMServiceClient
     PolicyService ..> Policy
     PolicyService ..> Announcement
     PolicyService ..> AnnouncementSummary
@@ -354,13 +373,13 @@ classDiagram
     CalendarService ..> Notification
 ```
 
-`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다. **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `generate_business_plan`, `evaluate_business_plan`, `bizplan_coach`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다. **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 사업계획서 초안·예비진단·어시스턴트와 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
 
-`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 추가 기능(추후 개발)인 지출 분석용이다. 코드는 남아 있으나 이를 부르는 화면이 없다(`Docs/README.md` 8절).
+`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 지출 분석(FS-14~17)용이며 지출관리 화면이 부른다. `BizplanService`는 사업계획서(FS-29~31)용으로 DB를 쓰지 않고 LLM 호출 결과만 돌려주므로 대응하는 Model 클래스가 없다.
 
-`User.phone`·`User.status`, `CalendarEvent.userId`, `Reminder.dispatched`, `Expense.userId`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`와 `Notification` 테이블은 `DB/app_extras.sql`이 공급한다(`Docs/Design/ERD.md` 구현 노트 참고).
+`User.phone`·`User.status`, `CalendarEvent.userId`, `Reminder.dispatched`, `Expense.userId`·`deductibleTier`·`proofValid`·`missingFields`, `Receipt.imageData`·`mimeType`, `ReceiptExtraction.proofType`·`readMeta`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`와 `Notification` 테이블은 `DB/app_extras.sql`이 공급한다(`Docs/Design/ERD.md` 구현 노트 참고).
 
-> `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).
+> `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `AnalysisResult`, `BusinessPlan`, `BusinessPlanEvaluation`, `CoachAnswer`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).
 
 ## 관련 문서
 

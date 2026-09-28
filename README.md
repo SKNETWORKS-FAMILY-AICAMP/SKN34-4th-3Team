@@ -155,7 +155,7 @@
 
 | 구분 | 기술 |
 | --- | --- |
-| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
+| **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat-square&logo=django&logoColor=white) ![Django Ninja](https://img.shields.io/badge/Django_Ninja-092E20?style=flat-square) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
 | **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) |
 | **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) |
 | **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) |
@@ -225,7 +225,7 @@
 
 ```
 .
-├── Backend/         # API 서버 (FastAPI, :8000)
+├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
 ├── DB/              # DB 스키마와 수집 스크립트
@@ -1133,11 +1133,11 @@ Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필),
 
 ```mermaid
 sequenceDiagram
-    participant BE as Backend(lifespan)
+    participant BE as Backend(startup)
     participant WU as llm-warmup 스레드
     participant LLM as LLM 서비스
 
-    BE->>BE: init_db() — Postgres 연결, 실패 시 SQLite 폴백
+    BE->>BE: init_db() — Postgres 연결, 실패 시 기동 중단
     BE->>WU: 데몬 스레드 시작
     BE-->>BE: 기동 완료 (요청 수신 시작)
     WU->>LLM: GET /rag/ready (3초)
@@ -1309,11 +1309,14 @@ sequenceDiagram
 | [03_TAX_FINAL_RESULT.md](Docs/reports/03_TAX_FINAL_RESULT.md) | 세금 단독 최종 실평가 (정확도 우선 설정의 기준값) |
 | [04_FINAL_REPORT.md](Docs/reports/04_FINAL_REPORT.md) | 성능 개선 종합 보고서 |
 | [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
-| [LLM_TAX_HALF_20260914_204413.md](Docs/reports/LLM_TAX_HALF_20260914_204413.md) / [LLM_TAX_HALF_20260914_210435.md](Docs/reports/LLM_TAX_HALF_20260914_210435.md) | 캐시 적용 전후 비교용 세금 평가 |
+| [LLM_TAX_HALF.md](Docs/reports/LLM_TAX_HALF.md) | 캐시 적용 전후 비교용 세금 평가 |
 | [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
 | [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/) | 통합·시연 결함 목록 |
 | [LLM_INTEGRATION_AUDIT_0909.md](Docs/reports/LLM_INTEGRATION_AUDIT_0909.md) | Backend↔LLM 연동 검수 보고서 |
 | [LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md](Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md) | 향후 개선안 비교·우선순위 |
+| [ELASTICSEARCH_COMPARISON_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md) / [ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md](Docs/reports/ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md) | Elasticsearch 검색기 비교, 서빙·재색인 일관성 수정 |
+| [USER_PERSONALIZATION_DB.md](Docs/reports/USER_PERSONALIZATION_DB.md) / [USER_PERSONALIZATION_PLAN.md](Docs/reports/USER_PERSONALIZATION_PLAN.md) | 유저 개인화 데이터 DB 이관안·연결 계획 |
+| [BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md](Docs/reports/BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md) | 사업계획서 작업 흐름 정리 |
 
 
 ---

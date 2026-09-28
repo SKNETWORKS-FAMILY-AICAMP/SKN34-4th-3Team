@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApi, api } from '../api.js';
 import {
-  MP_MENU, MP_RECENT_MAX, EXP_CATS, CHATLOG_TABS,
+  MP_MENU, MP_RECENT_MAX, CHATLOG_TABS,
   INDUSTRIES, REGIONS, WEEKDAYS, ROADMAP, ROADMAP_TASKS, NO_EVENTS,
 } from '../constants.js';
 import {
@@ -455,60 +455,6 @@ export function SavedPolicies({ savedPolicies, onToggleSave, onExplore }) {
           onClose={() => setOpenGov(null)}
         />
       )}
-    </div>
-  );
-}
-
-/* ===== 지출관리 ===== */
-
-export function ExpenseTracker() {
-  const [items, setItems] = useState([
-    { id: 1, date: '2025-10-04', name: '노트북 주변기기', amount: 89000, cat: '사무용품' },
-    { id: 2, date: '2025-10-07', name: '거래처 미팅 식대', amount: 44000, cat: '식대' },
-  ]);
-  const [f, setF] = useState({ date: '', name: '', amount: '', cat: '사무용품' });
-  const add = (e) => {
-    e.preventDefault();
-    if (!f.name.trim() || !f.amount) return;
-    setItems((p) => [...p, {
-      id: Date.now(),
-      date: f.date || new Date().toISOString().slice(0, 10),
-      name: f.name.trim(), amount: Number(f.amount), cat: f.cat,
-    }]);
-    setF({ date: '', name: '', amount: '', cat: '사무용품' });
-  };
-  const del = (id) => setItems((p) => p.filter((x) => x.id !== id));
-  const total = items.reduce((s, x) => s + x.amount, 0);
-
-  return (
-    <div className="tool">
-      <div className="tool__panel">
-        <h2>지출관리 <span className="mp-tag" style={{ verticalAlign: 'middle' }}>BETA</span></h2>
-        <form className="exp-form" onSubmit={add}>
-          <input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} aria-label="날짜" />
-          <input type="text" placeholder="지출 항목" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} aria-label="항목" />
-          <input type="number" min="0" placeholder="금액" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} aria-label="금액" />
-          <select value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })} aria-label="분류">
-            {EXP_CATS.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <button type="submit">추가</button>
-        </form>
-        <ul className="exp-list">
-          {items.map((x) => (
-            <li key={x.id}>
-              <span className="u-num" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>{x.date.slice(5)}</span>
-              <span>{x.name}</span>
-              <span className="exp-cat">{x.cat}</span>
-              <span className="u-num">{x.amount.toLocaleString()}원</span>
-              <button className="cal__ev-del" type="button" onClick={() => del(x.id)} aria-label="삭제">✕</button>
-            </li>
-          ))}
-        </ul>
-        <div className="exp-total"><span>합계</span><span className="u-num">{total.toLocaleString()}원</span></div>
-        <p className="result__cite" style={{ marginTop: 10 }}>
-          영수증 OCR·경비 인정 판정은 준비 중입니다. 지금은 직접 입력한 지출을 분류·합산합니다.
-        </p>
-      </div>
     </div>
   );
 }

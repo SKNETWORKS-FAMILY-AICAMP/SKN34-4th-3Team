@@ -30,6 +30,24 @@ export function OriginalButton({ item, className }) {
   );
 }
 
+export function PolicySummaryCard({ item, children }) {
+  const sourceLabel = item.source && !safeOriginalUrl({ source: item.source })
+    ? item.source
+    : [item.region, item.industry].filter(Boolean).join(' · ') || '지원사업 공고';
+  return (
+    <li>
+      <div className="az2__recinfo">
+        <span className="az2__recmain">
+          <span className="az2__rectitle" title={item.title}>{item.title}</span>
+          <span className="az2__recmeta">{sourceLabel}</span>
+        </span>
+        <b className="az2__recscore u-num">{policyDdayLabel(policyDday(item.applyEndDate))}</b>
+      </div>
+      <div className="az2__recactions">{children}</div>
+    </li>
+  );
+}
+
 export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
   const [detail, setDetail] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -229,21 +247,9 @@ export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [],
           ) : (
             <ul className="az2__reclist">
               {recommended.map((p) => {
-                const dday = policyDday(p.applyEndDate);
                 const saved = savedIds.has(p.policyId);
-                const sourceLabel = p.source && !safeOriginalUrl({ source: p.source })
-                  ? p.source
-                  : [p.region, p.industry].filter(Boolean).join(' · ') || '지원사업 공고';
                 return (
-                  <li key={p.policyId}>
-                    <div className="az2__recinfo">
-                      <span className="az2__recmain">
-                        <span className="az2__rectitle">{p.title}</span>
-                        <span className="az2__recmeta">{sourceLabel}</span>
-                      </span>
-                      <b className="az2__recscore u-num">{policyDdayLabel(dday)}</b>
-                    </div>
-                    <div className="az2__recactions">
+                  <PolicySummaryCard key={p.policyId} item={p}>
                       <button
                         type="button"
                         className="az2__action"
@@ -262,8 +268,7 @@ export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [],
                       >
                         {saved ? '★ 저장됨' : '☆ 저장'}
                       </button>
-                    </div>
-                  </li>
+                  </PolicySummaryCard>
                 );
               })}
             </ul>
