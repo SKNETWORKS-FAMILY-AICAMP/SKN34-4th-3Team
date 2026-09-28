@@ -1,0 +1,61 @@
+# main 병합 시 테스트 후 AWS App EC2 에 배포한다.
+# 필요한 Secrets: EC2_HOST(App EC2 Elastic IP), EC2_USER, EC2_SSH_KEY
+# 서버 준비 절차: Docs/AWS_DEPLOY_GUIDE.md
+name: deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 배포가 겹치지 않게 한다. 이후 수집 workflow 도 같은 그룹을 쓴다.
+concurrency:
+  group: ec2-app
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+      - name: Backend tests
+        working-directory: Backend
+        env:
+          TOKEN_SECRET: "ci-test-only-secret-1234567890abcdef"
+        run: uv run python -m unittest discover tests
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+      - name: Frontend tests & build
+        working-directory: Frontend
+        run: |
+          npm ci
+          node --test "tests/*.test.mjs"
+          npm run build
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 35m
+          script: |
+            set -e
+            cd ~/SKN34-4th-3Team
+            git pull --ff-only origin main
+            docker compose -f docker-compose.app.yml run --rm db-migrate
+            docker compose -f docker-compose.app.yml up -d --build
+            docker image prune -f
