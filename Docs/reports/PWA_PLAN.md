@@ -170,3 +170,16 @@ AWS (HTTPS)
 - [ ] 화면 문구 변경 커밋을 main에 병합 → deploy workflow 성공 → 설치된 앱 재실행 시 변경 반영
 - [ ] `/ppt/` 접근 시 발표자료 정상 표시 (SW가 `index.html`로 가로채지 않음)
 - [ ] `http://` 접속 시 `https://` 리다이렉트 후 SW 정상 등록
+
+## 12. 후속 작업: 앱 디자인 수정
+
+1차 구현은 기존 웹 화면을 그대로 PWA로 감싼 형태. 설치 앱으로 쓰기에 부족한 부분이 있어 추후 디자인 수정 필요. 실기기 검증(10절 ③) 시 함께 점검.
+
+| 항목 | 현황 | 수정 방향 |
+|---|---|---|
+| 앱 아이콘 | `favicon.svg`(32px 기준 도안)를 확대 생성. maskable 아이콘은 흰 여백 위에 둥근 사각형이 올라간 형태 | 앱 아이콘 전용 도안 제작 후 `public/` 아이콘 재생성 (5절 명령 재사용) |
+| 모바일 레이아웃 | CSS에 `@media` 규칙은 있으나 실기기 기준 점검 이력 없음 | 주요 화면(정책 검색, AI 상담, 경비 관리, 사업계획서, 마이페이지)을 휴대폰 폭에서 점검·보완 |
+| 뒤로 가기 | 화면 전환이 URL이 아닌 상태값(`Frontend/src/App.jsx`의 `view`, `pageKey`)으로 처리됨. `standalone`에는 브라우저 뒤로 가기 버튼이 없어 Android 뒤로 가기 시 앱이 바로 종료됨 | 화면 전환 시 `history.pushState`·`popstate` 연동 또는 화면 내 뒤로 가기 버튼 제공 |
+| 노치·홈 인디케이터 영역 | `viewport-fit=cover`, `env(safe-area-inset-*)` 미적용 | iOS 설치 앱에서 상·하단 가림 여부 확인 후 여백 적용 |
+| 스플래시·테마 색 | `theme_color: #3182F6`, `background_color: #f7f8fe` 임시 지정. 다크모드(`color-scheme: light dark`) 미반영 | 디자인 확정 후 manifest·`theme-color` 값 조정, 필요 시 다크모드용 `theme-color` 추가 |
+| 터치 조작 | 터치 기준 점검 이력 없음 | 버튼·입력 요소 터치 영역 크기, 모바일 키보드 표시 시 입력창 가림 점검 |
