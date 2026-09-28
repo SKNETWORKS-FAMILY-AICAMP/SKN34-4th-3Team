@@ -31,7 +31,7 @@ KEEP_KEYWORDS_IN_TAG = ["벤처", "중소기업", "대출", "자금", "보증"]
 EXCLUDE_KEYWORDS = ["축제", "페스타", "페스티벌", "콘서트", "공연", "체험행사", "챌린지", "장학금", "학자금"]
 
 
-def fetch_page(page_num=1, page_size=100):
+def fetch_page(page_num=1, page_size=100, max_retries=3):
     params = {
         "apiKeyNm": API_KEY,
         "pageNum": page_num,
@@ -39,14 +39,31 @@ def fetch_page(page_num=1, page_size=100):
         "rtnType": "json",
         "lclsfNm": "일자리",
     }
-    try:
-        response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
+    retry_statuses = {403, 429, 500, 502, 503, 504}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(BASE_URL, params=params, timeout=30)
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries:
+                raise
+            wait = 5 * attempt
+            print(f"  page={page_num} 요청 오류({type(e).__name__}), {wait}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait)
+            continue
+
+        if response.status_code == 200:
+            return response.json()
+
+        if response.status_code in retry_statuses and attempt < max_retries:
+            wait = 5 * attempt
+            print(f"  page={page_num} status={response.status_code}, {wait}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait)
+            continue
+
         raise requests.exceptions.HTTPError(
-            f"온통청년 API 요청 실패 (page={page_num}, status={response.status_code}) "
-        ) from None
-    return response.json()
+            f"온통청년 API 요청 실패 (page={page_num}, status={response.status_code})"
+        )
 
 
 def fetch_all_pages():
