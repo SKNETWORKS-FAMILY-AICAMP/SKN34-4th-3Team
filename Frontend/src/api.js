@@ -246,11 +246,27 @@ export async function me() {
   }
 }
 
+/** 인증된 사용자의 개인정보와 사업자 정보를 DB에서 다시 읽는다. */
+export async function currentUser() {
+  const user = await me();
+  if (!user) return null;
+  const business = await apiGet('/users/me/business-profile');
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    age: user.age,
+    region: user.region || '',
+    biz: business.industry || '',
+  };
+}
+
 export const api = {
   login,
   signup,
   logout,
   me,
+  currentUser,
   updateMe: (body, opt) => apiPut('/users/me', body, opt),
   businessProfile: (opt) => apiGet('/users/me/business-profile', opt),
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),

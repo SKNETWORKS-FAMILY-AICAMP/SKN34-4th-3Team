@@ -1,5 +1,5 @@
 // 순수 로직 헬퍼(날짜, localStorage 저장, 판정 등). JSX 없음.
-import { GOV_LISTINGS, USER_STORE_KEY } from './constants.js';
+import { GOV_LISTINGS } from './constants.js';
 
 export const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -161,14 +161,6 @@ export function upcomingCalendarEvents(byDate, savedPolicies = [], now = new Dat
     )
     .sort((a, b) => a.daysLeft - b.daysLeft || a.title.localeCompare(b.title, 'ko'));
 }
-
-export const loadStoredUser = () => {
-  try {
-    return JSON.parse(localStorage.getItem(USER_STORE_KEY) || 'null');
-  } catch (e) {
-    return null;
-  }
-};
 
 // 창업 로드맵 체크리스트 — 서버(user_roadmap_progress)가 원본이다.
 // 예전에 이 브라우저에 남긴 체크는 로그인 때 한 번 서버로 옮기고 지운다(App.jsx). 그 이관에만 쓴다.

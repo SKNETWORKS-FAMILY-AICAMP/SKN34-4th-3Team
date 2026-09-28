@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
-import { DEMO_EMAIL, DEMO_PASSWORD, INDUSTRIES, REGIONS, DEFAULT_BIZ, DEFAULT_REGION } from '../constants.js';
+import { DEMO_EMAIL, DEMO_PASSWORD, INDUSTRIES, REGIONS, DEFAULT_BIZ } from '../constants.js';
 import { inputStyle, linkBtn, fieldLabel, socialBtn } from '../utils.js';
 
 export function LoginModal({ onClose, onSuccess }) {
@@ -23,15 +23,12 @@ export function LoginModal({ onClose, onSuccess }) {
   }, [onClose]);
 
   // 실제로 Backend에 로그인해 토큰을 받아야 세무·AI 상담 등 인증이 필요한 API가 동작한다.
-  // profile이 있으면(회원가입) 서버에 저장하고, 없으면(로그인) 서버에서 읽어와 화면에 쓴다.
-  const authenticate = async (doLogin, displayName, profile) => {
+  // 회원가입 정보는 서버에 저장하고, 화면에는 DB에서 다시 읽은 값을 사용한다.
+  const authenticate = async (doLogin, profile) => {
     setErr('');
     setBusy(true);
     try {
-      const r = await doLogin();
-      let biz2 = (profile && profile.biz) || DEFAULT_BIZ;
-      let region2 = (profile && profile.region) || DEFAULT_REGION;
-      let age2 = profile ? profile.age : null;
+      await doLogin();
 
       if (profile) {
         // 가입 직후: 입력한 프로필을 서버에 저장 (개인정보 / 사업자 정보 따로)
@@ -41,26 +38,10 @@ export function LoginModal({ onClose, onSuccess }) {
         } catch (e3) {
           /* 프로필 저장에 실패해도 로그인 자체는 성공 — 마이페이지에서 다시 저장할 수 있다 */
         }
-      } else {
-        // 로그인: 저장된 프로필을 불러와 반영 (없으면 기본값)
-        try {
-          const [meRes, bizRes] = await Promise.all([api.me(), api.businessProfile()]);
-          if (meRes && meRes.region) region2 = meRes.region;
-          if (meRes && meRes.age) age2 = meRes.age;
-          if (bizRes && bizRes.industry) biz2 = bizRes.industry;
-        } catch (e3) {
-          /* 조회 실패 시 기본값으로 진행 */
-        }
       }
-
-      onSuccess({
-        id: r.userId,
-        name: displayName || r.name || name || '정석',
-        email: r.email || email,
-        biz: biz2,
-        region: region2,
-        age: age2,
-      });
+      const user = await api.currentUser();
+      if (!user) throw new Error('사용자 정보를 조회하지 못했습니다.');
+      onSuccess(user);
     } catch (e2) {
       setErr(
         e2 && e2.status === 401
@@ -80,14 +61,14 @@ export function LoginModal({ onClose, onSuccess }) {
       if (pw !== pw2) { setErr('비밀번호가 일치하지 않습니다.'); return; }
       const n = Number(age);
       if (!Number.isFinite(n) || n < 15 || n > 120) { setErr('대표자 연령을 만 나이로 입력해 주세요.'); return; }
-      authenticate(() => api.signup(email, pw, name), name, { biz: biz.trim(), region, age: n });
+      authenticate(() => api.signup(email, pw, name), { biz: biz.trim(), region, age: n });
       return;
     }
     authenticate(() => api.login(email, pw));
   };
 
   // 소셜 로그인은 백엔드에 대응이 없어 데모 계정으로 실제 로그인해 토큰만 받는다.
-  const socialDemo = (displayName) => authenticate(() => api.login(DEMO_EMAIL, DEMO_PASSWORD), displayName);
+  const socialDemo = () => authenticate(() => api.login(DEMO_EMAIL, DEMO_PASSWORD));
 
   const isLogin = mode === 'login';
 
@@ -175,13 +156,13 @@ export function LoginModal({ onClose, onSuccess }) {
           <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />또는<span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
-          <button type="button" disabled={busy} onClick={() => socialDemo('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
+          <button type="button" disabled={busy} onClick={socialDemo} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="#191919">
               <path d="M12 3C6.48 3 2 6.54 2 10.8c0 2.76 1.86 5.18 4.66 6.55-.15.53-.7 2.5-.8 2.9-.12.48.18.47.37.35.15-.1 2.4-1.63 3.37-2.28.66.1 1.34.15 2 .15 5.52 0 10-3.54 10-7.9S17.52 3 12 3z" />
             </svg>
             카카오로 계속하기
           </button>
-          <button type="button" disabled={busy} onClick={() => socialDemo('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
+          <button type="button" disabled={busy} onClick={socialDemo} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
             <span style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 900, fontSize: 14 }}>N</span>
             네이버로 계속하기
           </button>
