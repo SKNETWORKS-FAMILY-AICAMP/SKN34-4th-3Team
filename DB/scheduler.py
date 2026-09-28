@@ -1,7 +1,7 @@
 # =========================================================
 # 언제 수집을 실행할지 결정하는 스케줄링 로직만 담당한다.
 #
-#   이 파일은 Docker 컨테이너에서 계속 실행되며, COLLECTION_INTERVAL_DAYS 주기마다 run_all_collection()을 호출한다.
+# COLLECTION_INTERVAL_DAYS 주기마다 run_all_collection()을 호출한다.
 # =========================================================
 
 import os
@@ -20,7 +20,11 @@ CHECK_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_CHECK_INTERVAL_SECONDS", "3600
 
 def scheduled_job():
     print(f"[스케줄러] 정기 수집 시작 (주기: {INTERVAL_DAYS}일)")
-    result = run_all_collection()
+    try:
+        result = run_all_collection()
+    except Exception as e:
+        print(f"[스케줄러] 수집 중 예외 발생, 다음 주기에 다시 시도합니다: {type(e).__name__}: {e}")
+        return
     print(
         f"[스케줄러] 수집 완료: 성공 {len(result['succeeded'])}건, "
         f"실패 {len(result['failed'])}건"
