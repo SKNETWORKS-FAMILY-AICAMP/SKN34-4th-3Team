@@ -2,6 +2,8 @@
 
 > 작성일 2026-09-28, develop `d35f0c4` 기준. 프론트엔드(React + Vite)를 설치 가능한 PWA로 전환하는 계획. 코드 변경 전 설계 단계 문서.
 >
+> 2026-09-28 로컬 구현(10절 ① 단계) 완료: `Frontend/vite.config.js`, `index.html`, `nginx.conf`, `public/` 아이콘. 병합·실기기 검증은 AWS 이후.
+>
 > 선행 작업은 AWS 마이그레이션(`feature/aws`, `Docs/reports/AWS_MIGRATION_PLAN.md`). AWS 이전·HTTPS 적용 후 병합하며, 병합 이후에는 `main` 기준 AWS 자동 배포에 PWA 산출물이 함께 포함되어 별도 배포 작업 없이 갱신되는 구조.
 
 ## 1. 배경과 목표
@@ -53,12 +55,13 @@ PWA 코드는 프론트 한정 변경이라 AWS 작업과 병행해 localhost에
 |---|---|---|
 | `registerType` | `'autoUpdate'` | 새 배포 감지 시 사용자 조작 없이 SW 교체 → 배포 자동 반영 요구사항 충족 |
 | `injectRegister` | `'auto'` | 등록 스크립트 자동 주입. `main.jsx` 수정 불필요 |
-| `workbox.globPatterns` | `**/*.{js,css,html,svg,png,ico,webmanifest}` | 빌드 산출물만 precache |
+| `workbox.globPatterns` | `**/*.{js,css,html,svg,png,ico}` | 빌드 산출물만 precache. manifest는 플러그인이 별도 등록 |
+| `includeManifestIcons` | `false` | `public/` 아이콘이 globPatterns로 이미 precache되어 중복 등록 방지 |
 | `workbox.navigateFallback` | `/index.html` | SPA 라우팅 유지 |
 | `workbox.navigateFallbackDenylist` | `[/^\/api\//, /^\/ppt/]` | API·발표자료(Slidev) 요청에 SW가 `index.html`을 대신 응답하지 않도록 제외 |
 | `/api/*` 런타임 캐시 | 설정하지 않음 (네트워크 직행) | 사용자별 데이터, 로그인 응답, 사업계획서 파일 다운로드가 캐시에 남지 않도록 보호 |
-| Google Fonts 런타임 캐시 | `StaleWhileRevalidate`(CSS), `CacheFirst` + 만료(폰트 파일) | 선택 사항. 재방문 시 폰트 로딩 지연 감소 |
-| `manifest` | `name: 창업ON`, `short_name: 창업ON`, `start_url: /`, `scope: /`, `display: standalone`, `lang: ko`, `theme_color`·`background_color`(`#f7f8fe` 기준) | 도메인 루트 배포 전제 |
+| Google Fonts 런타임 캐시 | `StaleWhileRevalidate`(CSS), `CacheFirst` + 만료(폰트 파일) | 선택 사항. 1차 구현에서는 생략 (오프라인 시 시스템 폰트로 대체) |
+| `manifest` | `name: 창업ON`, `short_name: 창업ON`, `start_url: /`, `scope: /`, `display: standalone`, `lang: ko`, `theme_color: #3182F6`(파비콘 색), `background_color: #f7f8fe`(`index.html` body 배경) | 도메인 루트 배포 전제 |
 
 ## 5. 변경 파일
 
@@ -67,7 +70,7 @@ PWA 코드는 프론트 한정 변경이라 AWS 작업과 병행해 localhost에
 | `Frontend/package.json`, `package-lock.json` | `vite-plugin-pwa` devDependency 추가 |
 | `Frontend/vite.config.js` | `VitePWA({...})` 플러그인 추가, 4절 설정·manifest 정의 |
 | `Frontend/index.html` | `<meta name="theme-color">`, `<link rel="apple-touch-icon">` 추가 (manifest 링크는 플러그인이 주입) |
-| `Frontend/public/` | `pwa-192x192.png`, `pwa-512x512.png`, `maskable-512x512.png`, `apple-touch-icon-180x180.png` 추가. `favicon.svg`에서 1회 생성 후 커밋 (생성 도구는 일회성 실행, 의존성 미추가) |
+| `Frontend/public/` | `pwa-192x192.png`, `pwa-512x512.png`, `maskable-icon-512x512.png`, `apple-touch-icon-180x180.png` 추가. `npx @vite-pwa/assets-generator --preset minimal-2023 public/favicon.svg`로 1회 생성 후 커밋 (의존성 미추가, 부산물 `pwa-64x64.png`·`favicon.ico`는 삭제) |
 | `Frontend/nginx.conf` | SW·manifest 캐시 헤더 추가 (6절) |
 | `Frontend/src/main.jsx` | 변경 없음 (`injectRegister: 'auto'`) |
 | `.github/workflows/deploy.yml`, `docker-compose.app.yml`, `Frontend/Dockerfile` | 변경 없음 (7절) |
@@ -83,12 +86,15 @@ SW 파일이 브라우저·중간 캐시에 오래 남으면 새 배포가 반�
 | 그 외 `/` | 기존 `try_files` 유지 | - |
 
 ```nginx
-# 기존 location / 위에 추가
-location = /sw.js               { root /usr/share/nginx/html; add_header Cache-Control "no-cache"; }
-location = /registerSW.js       { root /usr/share/nginx/html; add_header Cache-Control "no-cache"; }
-location = /manifest.webmanifest { root /usr/share/nginx/html; add_header Cache-Control "no-cache"; }
-location = /index.html          { root /usr/share/nginx/html; add_header Cache-Control "no-cache"; }
-location /assets/               { root /usr/share/nginx/html; add_header Cache-Control "public, max-age=31536000, immutable"; }
+# 기존 location / 위에 추가. SPA 경로도 try_files 로 /index.html 에 들어오므로 no-cache 적용됨
+location ~ ^/(sw\.js|registerSW\.js|manifest\.webmanifest|index\.html)$ {
+    root /usr/share/nginx/html;
+    add_header Cache-Control "no-cache";
+}
+location /assets/ {
+    root /usr/share/nginx/html;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+}
 ```
 
 AWS HTTPS 단계(`AWS_DEPLOY_GUIDE.md` 12절)에서 `nginx.conf`에 443 server 블록이 추가되고 80 블록은 리다이렉트 전용이 됨. 위 location은 **443 블록에 위치해야 함**. 두 작업이 같은 파일을 수정하므로 PWA 병합은 HTTPS 변경 이후 rebase해 충돌을 정리하는 순서로 진행(2절). HTTPS 적용 전 병합하는 경우 80 블록에 두고, HTTPS 작업 시 443 블록으로 함께 이동.
