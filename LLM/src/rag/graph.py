@@ -572,6 +572,7 @@ def build_graph(
 
     async def configured_roadmap_coach(
         state: GraphState,
+        on_answer_update: Callable[[str], Awaitable[None]] | None = None,
     ) -> RoadmapCoachResult:
         return await generate_roadmap_coach_response(
             router_llm,
@@ -579,6 +580,7 @@ def build_graph(
             roadmap_step=state.get("roadmap_step"),
             user_context=state.get("user_context"),
             conversation_history=state.get("conversation_history", []),
+            on_answer_update=on_answer_update,
         )
 
     async def configured_intent_classifier(
@@ -635,9 +637,7 @@ def build_graph(
     question_contextualizer_function = (
         question_contextualizer or configured_question_contextualizer
     )
-    roadmap_coach_function = roadmap_coach or configured_roadmap_coach
-
-    async def roadmap_coach_node(state: GraphState) -> dict[str, object]:
+    async def roadmap_coach_node(state: GraphState, config: RunnableConfig) -> dict[str, object]:
         """검색·Router·재작성 없이 한 번의 모델 호출로 로드맵 질문을 처리한다."""
         if is_roadmap_deterministically_blocked(
             state["query"],
@@ -654,7 +654,11 @@ def build_graph(
                 "cited_source_numbers": [],
             }
         try:
-            result = await roadmap_coach_function(state)
+            if roadmap_coach is None:
+                answer_update = config.get("configurable", {}).get("on_answer_update")
+                result = await configured_roadmap_coach(state, answer_update)
+            else:
+                result = await roadmap_coach(state)
         except Exception as exc:
             # 토큰 상한에 걸린 구조화 출력 파싱 실패와 그 밖의 원인을 로그에서
             # 구분할 수 있도록 예외 타입을 함께 남긴다.

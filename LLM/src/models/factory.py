@@ -52,6 +52,8 @@ def configure_chat_model(
 
     if isinstance(llm, ChatOpenAI):
         updates = dict(options)
+        if reasoning_effort is not None:
+            updates["temperature"] = None
         if max_completion_tokens is not None:
             updates.pop("max_completion_tokens")
             updates["max_tokens"] = max_completion_tokens

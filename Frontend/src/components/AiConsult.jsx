@@ -23,6 +23,8 @@ const roomKey = (id) => (id == null ? NEW_ROOM : id);
 // 페이지 이동으로 컴포넌트가 사라져도 진행 중인 요청은 브라우저 탭에서 유지한다.
 const pendingChats = new Map();
 const pendingChatKey = (userId, category) => `${userId}:${category}`;
+const ANSWER_REVEAL_MS = 12;
+const ANSWER_REVEAL_CHARS = 1;
 
 export function AiConsult({
   user,
@@ -233,6 +235,38 @@ export function AiConsult({
 
     // 1) Backend RAG — DB(세법 4,459조문 / 정책)에서 근거 문서 검색
     let rag = null;
+    let targetAnswer = '';
+    let visibleAnswer = '';
+    let revealTask = null;
+    let revealStopped = false;
+    const revealAnswer = (answer) => {
+      targetAnswer = answer || '';
+      if (!isViewingAsked() || revealStopped) return Promise.resolve();
+      if (!revealTask) {
+        revealTask = Promise.resolve().then(async () => {
+          while (!revealStopped && isViewingAsked() && visibleAnswer !== targetAnswer) {
+            if (document.visibilityState !== 'visible') {
+              visibleAnswer = targetAnswer;
+            } else if (!targetAnswer.startsWith(visibleAnswer)) {
+              let shared = 0;
+              while (visibleAnswer[shared] && visibleAnswer[shared] === targetAnswer[shared]) shared += 1;
+              visibleAnswer = visibleAnswer.slice(0, shared);
+            } else {
+              let end = visibleAnswer.length;
+              for (let i = 0; i < ANSWER_REVEAL_CHARS && end < targetAnswer.length; i += 1) {
+                end += targetAnswer.codePointAt(end) > 0xffff ? 2 : 1;
+              }
+              visibleAnswer = targetAnswer.slice(0, end);
+            }
+            setStream(visibleAnswer);
+            if (document.visibilityState === 'visible') {
+              await new Promise((resolve) => setTimeout(resolve, ANSWER_REVEAL_MS));
+            }
+          }
+        }).finally(() => { revealTask = null; });
+      }
+      return revealTask;
+    };
     let needLogin = false;
     try {
       const chatBody = { question: q, category: category || 'tax' };
@@ -240,9 +274,7 @@ export function AiConsult({
       if (askedRoomId != null) chatBody.roomId = askedRoomId;
       rag = await api.chatStream(chatBody, {
         signal: ctl.signal,
-        onDraft: (answer) => {
-          if (isViewingAsked()) setStream(answer);
-        },
+        onDraft: (answer) => { revealAnswer(answer); },
       });
     } catch (e) {
       // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
@@ -276,11 +308,13 @@ export function AiConsult({
       });
       if (askedRoomId == null) {
         // 새 대화가 방금 서버 방이 됐다. 계속 보고 있었다면 그 방으로 전환한다.
-        if (isViewingAsked()) {
-          roomKeyRef.current = roomKey(rag.roomId);
+        const stillViewing = isViewingAsked();
+        askedKey = roomKey(rag.roomId);
+        setPendingKey(askedKey);
+        if (stillViewing) {
+          roomKeyRef.current = askedKey;
           setRoomId(rag.roomId);
         }
-        askedKey = roomKey(rag.roomId);
       }
     }
 
@@ -291,9 +325,11 @@ export function AiConsult({
     try {
       if (ragUsable) {
         // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
+        await revealAnswer(rag.answer);
         appendTurn({
           role: 'assistant',
           content: rag.answer,
+          streamed: true,
           sources,
           needsConfirmation: rag.needsConfirmation,
           status: rag.status,
@@ -321,9 +357,11 @@ export function AiConsult({
         appendTurn({ role: 'assistant', content: res.text, sources });
       } else if (rag) {
         // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
+        await revealAnswer(rag.answer);
         appendTurn({
           role: 'assistant',
           content: rag.answer,
+          streamed: true,
           sources,
           needsConfirmation: rag.needsConfirmation,
           status: rag.status,
@@ -359,6 +397,7 @@ export function AiConsult({
         }
       }
     } finally {
+      revealStopped = true;
       clearInterval(progressTimer);
       setBusy(false);
       setStream('');
@@ -529,16 +568,16 @@ export function AiConsult({
         )}
         {turns.map((m, i) => (
           <React.Fragment key={i}>
-            <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
+            <div className={`msg ${m.streamed ? '' : 'msg-in'} msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
               {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
             </div>
             {m.needsConfirmation && (
-              <div className="msg-src">
+              <div className={`msg-src${m.streamed ? ' msg-src--enter' : ''}`}>
                 <b>{getConfirmationNotice(m)}</b>
               </div>
             )}
             {m.sources && m.sources.length > 0 && (
-              <div className="msg-src">
+              <div className={`msg-src${m.streamed ? ' msg-src--enter' : ''}`}>
                 <b>확인한 자료 {m.sources.length}건</b>
                 {m.sources.map((s, si) => (
                   <a key={si} href={s.url || '#'} target="_blank" rel="noreferrer">

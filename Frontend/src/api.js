@@ -127,10 +127,10 @@ export async function apiPostStream(path, body, { signal, timeout = 30000, onDra
     const decoder = new TextDecoder();
     let buffer = '';
     let result = null;
-    const consume = (line) => {
+    const consume = async (line) => {
       if (!line.trim()) return;
       const event = JSON.parse(line);
-      if (event.type === 'draft') onDraft?.(event.answer);
+      if (event.type === 'draft') await onDraft?.(event.answer);
       if (event.type === 'done') result = event.result;
       if (event.type === 'error') throw new Error('답변 생성 중 오류가 발생했습니다.');
     };
@@ -139,12 +139,12 @@ export async function apiPostStream(path, body, { signal, timeout = 30000, onDra
       buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
       let end;
       while ((end = buffer.indexOf('\n')) !== -1) {
-        consume(buffer.slice(0, end));
+        await consume(buffer.slice(0, end));
         buffer = buffer.slice(end + 1);
       }
       if (done) break;
     }
-    if (buffer) consume(buffer);
+    if (buffer) await consume(buffer);
     if (!result) throw new Error('답변 전송이 완료되지 않았습니다.');
     return result;
   } finally {
