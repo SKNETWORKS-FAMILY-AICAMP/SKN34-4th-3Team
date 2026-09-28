@@ -116,3 +116,7 @@ BEGIN
         ALTER TABLE chat_messages ALTER COLUMN room_id SET NOT NULL;
     END IF;
 END $$;
+
+-- 사업계획서 임시저장 본문: 필드가 자주 늘어나 화면 상태 전체를 JSONB 한 덩어리로 둔다.
+-- 위 form/plan/eval_result 컬럼은 쓰지 않는다(삭제는 팀 합의 뒤).
+ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;

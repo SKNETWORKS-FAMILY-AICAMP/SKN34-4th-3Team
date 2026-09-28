@@ -30,6 +30,8 @@
 | PUT | /users/me | 개인정보 수정 | 필요 | `{ age, region, ... }` | `{ updated: true }` | FS-03 |
 | GET | /users/me/business-profile | 사업자 정보 조회 | 필요 | - | `{ businessType, industry, foundedAt, ... }` | FS-04 |
 | PUT | /users/me/business-profile | 사업자 정보 등록/수정 | 필요 | `{ businessType, industry, foundedAt, ... }` | `{ updated: true }` | FS-04 |
+| GET | /users/me/roadmap-progress | 창업 로드맵 진행 상태 조회 | 필요 | - | `{ version, done: ["A:0", ...] }` | UX1 |
+| PUT | /users/me/roadmap-progress | 창업 로드맵 항목 체크/해제 | 필요 | `{ taskKey, done }` (`taskKey` 형식 `A:0`, 아니면 `422`) | `{ updated: true }` | UX1 |
 
 ## chat — AI 상담(챗봇)
 
@@ -109,6 +111,8 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /bizplan/render | 사업계획서 파일 출력 | 필요 | `{ title, sections, format, template?, images? }` (`sections` 1~40개, `format`: `pdf` \| `hwpx`, `template`은 `template-inspect`와 같은 형태, `images[]`: `{ key, mimeType, contentBase64 }` 최대 20개·파일당 2 MiB·합계 4 MiB, 양식 없이 이미지만 보내면 `422`) | `{ fileName, mimeType, contentBase64 }` | FS-29 |
 | POST | /bizplan/evaluate | AI 예비진단(자체 채점) | 필요 | `{ sections: [{ key, label, content }], announcementId?, templateFields? }` (각 최대 40개) | `{ overallScore, overallComment, sections: [{ key, label, score, strengths, improvements }], llmUsed }` (점수 0~100) | FS-30 |
 | POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
+| GET | /bizplan/draft | 사업계획서 임시저장 조회 | 필요 | - | `{ data, updatedAt }` (없으면 둘 다 `null`) | FS-29 |
+| PUT | /bizplan/draft | 사업계획서 임시저장(유저당 1건 덮어쓰기) | 필요 | `{ data }` (작성 화면 상태 객체, 양식·이미지 Base64 포함 12 MiB 이하, 초과 `413`) | `{ updated: true }` | FS-29 |
 
 `templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
 

@@ -116,6 +116,7 @@ Content-Type: application/json
 | 02 | 로그인/로그아웃 | `POST /auth/login`, `POST /auth/logout` |
 | 03 | 개인정보 | `GET/PUT /users/me` |
 | 04 | 사업자 정보 | `GET/PUT /users/me/business-profile` |
+| UX1 | 창업 로드맵 진행 상태 | `GET/PUT /users/me/roadmap-progress` |
 | 05~07 | AI 챗봇 (세금/경비/절세/정책) | `POST /chat/messages` |
 | 08 | 답변 근거 | `GET /chat/messages/{id}/sources` |
 | 09 | 사업자 유형 진단 | `POST /tax/business-type/diagnosis` |
@@ -159,6 +160,7 @@ Content-Type: application/json
 |--------|------|------|
 | GET, PUT | `/users/me` | Bearer |
 | GET, PUT | `/users/me/business-profile` | Bearer |
+| GET, PUT | `/users/me/roadmap-progress` | Bearer |
 
 ### 상담
 
@@ -253,7 +255,7 @@ Backend/
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
   core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  tests/           # 표준 unittest 6개 파일
+  tests/           # 표준 unittest 12개 파일
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```

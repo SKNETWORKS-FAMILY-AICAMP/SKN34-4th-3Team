@@ -1,6 +1,6 @@
 # 유저 개인화 데이터 DB 이관 수정안
 
-> 상태: **대화방 적용, 로드맵·사업계획서 미적용**. 스키마는 `DB/app_extras.sql`에 모두 반영했고, 코드는 대화방(Backend 3·4절 chat 부분, Frontend `AiConsult.jsx`)만 전환했다. develop `1f6405e` 기준으로 조사했다.
+> 상태: **대화방 적용, 로드맵·사업계획서는 `USER_PERSONALIZATION_PLAN.md`로 적용(2026-09-25)**. 사업계획서 초안은 이 문서의 `form/plan/evalResult` 대신 `bizplan_drafts.data` JSONB 하나로 저장하도록 바뀌었다(4절 API 형태도 그 문서를 따른다). 스키마는 `DB/app_extras.sql`에 모두 반영했고, 코드는 대화방(Backend 3·4절 chat 부분, Frontend `AiConsult.jsx`)만 전환했다. develop `1f6405e` 기준으로 조사했다.
 
 ## 1. 배경
 

@@ -182,9 +182,11 @@ function FieldControl({ field, value, onChange }) {
   );
 }
 
+// 임시저장은 서버(bizplan_drafts)가 원본이다. 예전에 이 브라우저에 남긴 초안은
+// 서버가 비어 있을 때 한 번 옮기고 지운다. 아래 두 함수는 그 이관에만 쓴다.
 const DRAFT_KEY = (userId) => `changeup:bizplan-draft:${userId}`;
 
-function loadDraft(userId) {
+function loadLegacyDraft(userId) {
   try {
     const raw = JSON.parse(localStorage.getItem(DRAFT_KEY(userId)) || 'null');
     return raw && typeof raw === 'object' ? raw : null;
@@ -192,12 +194,11 @@ function loadDraft(userId) {
     return null;
   }
 }
-function saveDraft(userId, draft) {
+function clearLegacyDraft(userId) {
   try {
-    localStorage.setItem(DRAFT_KEY(userId), JSON.stringify(draft));
-    return true;
+    localStorage.removeItem(DRAFT_KEY(userId));
   } catch (e) {
-    return false;
+    /* 저장 불가 환경은 무시 */
   }
 }
 
@@ -362,57 +363,72 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
 
+  // 서버에서 받은 초안을 화면 상태로 되돌린다. 불러오는 동안 사용자가 고친 기초 정보는 유지한다.
+  const applyDraft = (draft) => {
+    setForm((previous) => {
+      const next = { ...EMPTY_FORM, ...(draft.form || {}) };
+      editedFieldsRef.current.forEach((key) => { next[key] = previous[key]; });
+      return next;
+    });
+    if (draft.plan && Array.isArray(draft.plan.sections) && !isLegacyDefaultPlan(draft.plan)) {
+      setPlan(draft.plan);
+      if (draft.evalResult) setEvalResult(draft.evalResult);
+      setRevisionSections(draft.revisionSections || draft.plan.sections);
+      if (draft.finalPlan) setFinalPlan(draft.finalPlan);
+      if (draft.finalEvalResult) setFinalEvalResult(draft.finalEvalResult);
+    }
+    if (draft.selectedAnnouncementId) setSelectedAnnouncementId(String(draft.selectedAnnouncementId));
+    if (draft.selectedAnnouncementInfo) setSelectedAnnouncementInfo(draft.selectedAnnouncementInfo);
+    if (draft.refinedDone) setRefinedDone(true);
+    if (Array.isArray(draft.fieldAnalysis)) setFieldAnalysis(draft.fieldAnalysis);
+    if (draft.supplementAnswers) setSupplementAnswers(draft.supplementAnswers);
+    if (draft.supplementImages) setSupplementImages(draft.supplementImages);
+    if (draft.templateInfo) {
+      setTemplateInfo(draft.templateInfo);
+      setTemplateFile({ name: draft.templateInfo.fileName });
+    }
+    if (draft.supplementChoices) setSupplementChoices(draft.supplementChoices);
+    if (Number.isInteger(draft.supplementPage)) setSupplementPage(draft.supplementPage);
+    if (Array.isArray(draft.editedSectionKeys)) setEditedSectionKeys(draft.editedSectionKeys);
+  };
+
   // 임시저장한 값은 복원하고, 비어 있는 기초 정보만 가입 프로필로 채운다.
   useEffect(() => {
     if (!userId) return;
     editedFieldsRef.current = new Set();
     setProfileIndustry('');
-    const draft = loadDraft(userId);
-    if (draft) {
-      setForm({ ...EMPTY_FORM, ...(draft.form || {}) });
-      if (draft.plan && Array.isArray(draft.plan.sections) && !isLegacyDefaultPlan(draft.plan)) {
-        setPlan(draft.plan);
-        if (draft.evalResult) setEvalResult(draft.evalResult);
-        setRevisionSections(draft.revisionSections || draft.plan.sections);
-        if (draft.finalPlan) setFinalPlan(draft.finalPlan);
-        if (draft.finalEvalResult) setFinalEvalResult(draft.finalEvalResult);
-      }
-      if (draft.selectedAnnouncementId) setSelectedAnnouncementId(String(draft.selectedAnnouncementId));
-      if (draft.selectedAnnouncementInfo) setSelectedAnnouncementInfo(draft.selectedAnnouncementInfo);
-      if (draft.refinedDone) setRefinedDone(true);
-      if (Array.isArray(draft.fieldAnalysis)) setFieldAnalysis(draft.fieldAnalysis);
-      if (draft.supplementAnswers) setSupplementAnswers(draft.supplementAnswers);
-      if (draft.supplementImages) setSupplementImages(draft.supplementImages);
-      if (draft.templateInfo) {
-        setTemplateInfo(draft.templateInfo);
-        setTemplateFile({ name: draft.templateInfo.fileName });
-      }
-      if (draft.supplementChoices) setSupplementChoices(draft.supplementChoices);
-      if (Number.isInteger(draft.supplementPage)) setSupplementPage(draft.supplementPage);
-      if (Array.isArray(draft.editedSectionKeys)) setEditedSectionKeys(draft.editedSectionKeys);
-    } else {
-      setForm({ ...EMPTY_FORM });
-    }
+    setForm({ ...EMPTY_FORM });
     let current = true;
-    Promise.allSettled([api.me(), api.businessProfile()]).then(([meResult, profileResult]) => {
-      if (!current) return;
-      const me = meResult.status === 'fulfilled' ? meResult.value : null;
-      const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
-      const industry = profile?.industry?.trim() || '';
-      setProfileIndustry(industry);
-      const initialValues = {
-        businessRegion: REGIONS.includes(me?.region) ? me.region : '',
-        industry,
-        startupStatus: STARTUP_STATUS_BY_PROFILE_TYPE[profile?.businessType] || '',
-      };
-      setForm((previous) => {
-        const next = { ...previous };
-        Object.entries(initialValues).forEach(([key, value]) => {
-          if (value && !next[key] && !editedFieldsRef.current.has(key)) next[key] = value;
+    Promise.allSettled([api.bizplanDraft(), api.me(), api.businessProfile()])
+      .then(([draftResult, meResult, profileResult]) => {
+        if (!current) return;
+        const serverDraft = draftResult.status === 'fulfilled' ? draftResult.value?.data : null;
+        // 서버에 초안이 없을 때만 이 브라우저의 예전 초안을 옮긴다. 조회 실패 시에는 덮어쓰지 않게 건너뛴다.
+        const legacyDraft = draftResult.status === 'fulfilled' && !serverDraft ? loadLegacyDraft(userId) : null;
+        const draft = serverDraft || legacyDraft;
+        if (draft) applyDraft(draft);
+        if (legacyDraft) {
+          api.saveBizplanDraft(legacyDraft)
+            .then(() => clearLegacyDraft(userId))
+            .catch(() => { /* 다음 방문 때 다시 시도 */ });
+        }
+        const me = meResult.status === 'fulfilled' ? meResult.value : null;
+        const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+        const industry = profile?.industry?.trim() || '';
+        setProfileIndustry(industry);
+        const initialValues = {
+          businessRegion: REGIONS.includes(me?.region) ? me.region : '',
+          industry,
+          startupStatus: STARTUP_STATUS_BY_PROFILE_TYPE[profile?.businessType] || '',
+        };
+        setForm((previous) => {
+          const next = { ...previous };
+          Object.entries(initialValues).forEach(([key, value]) => {
+            if (value && !next[key] && !editedFieldsRef.current.has(key)) next[key] = value;
+          });
+          return next;
         });
-        return next;
       });
-    });
     return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -958,17 +974,28 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     setActive(key);
   };
 
-  const saveNow = () => {
+  const saveNow = async () => {
     if (!userId) {
       onRequireLogin && onRequireLogin();
       return;
     }
-    const saved = saveDraft(userId, {
-      form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
-      selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
-      fieldAnalysis, supplementAnswers, supplementImages, supplementChoices, supplementPage, editedSectionKeys,
-    });
-    setSavedNote(saved ? '임시저장했어요' : '저장 공간이 부족해 임시저장하지 못했습니다.');
+    let note = '임시저장했어요';
+    try {
+      await api.saveBizplanDraft({
+        form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
+        selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
+        fieldAnalysis, supplementAnswers, supplementImages, supplementChoices, supplementPage, editedSectionKeys,
+      });
+    } catch (e2) {
+      if (e2 && e2.status === 401) {
+        onRequireLogin && onRequireLogin();
+        return;
+      }
+      note = e2 && e2.status === 413
+        ? '첨부 파일이 너무 커서 임시저장하지 못했습니다.'
+        : '임시저장하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    }
+    setSavedNote(note);
     setTimeout(() => setSavedNote(''), 2000);
   };
 

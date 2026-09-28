@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -162,3 +163,14 @@ class BusinessPlanEvaluateResponse(BaseModel):
     overallComment: str = Field(description="한 줄 총평")
     sections: list[BusinessPlanSectionScore] = Field(description="항목별 점수·강점·보완점")
     llmUsed: bool = Field(description="AI가 실제로 채점했는지 여부")
+
+
+class BizplanDraftSave(BaseModel):
+    model_config = ConfigDict(title="사업계획서 임시저장 요청")
+    data: dict = Field(description="작성 화면 상태 전체(양식·이미지 Base64 포함, 12 MiB 이하)")
+
+
+class BizplanDraftResponse(BaseModel):
+    model_config = ConfigDict(title="사업계획서 임시저장 조회")
+    data: dict | None = Field(default=None, description="저장된 작성 화면 상태. 없으면 null")
+    updatedAt: datetime | None = Field(default=None, description="마지막 저장 시각")
