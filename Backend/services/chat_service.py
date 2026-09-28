@@ -1,10 +1,11 @@
 import logging
 from datetime import date
 
+from asgiref.sync import sync_to_async
 from ninja.errors import HttpError
 
 from core import repo
-from core.llm_client import rag_answer
+from core.llm_client import async_rag_answer, rag_answer
 
 logger = logging.getLogger(__name__)
 
@@ -193,10 +194,9 @@ def _sources_from_rag(rag: dict) -> list[dict]:
     return sources
 
 
-def send_message(
+def _prepare_message(
     user_id: int,
     category: str,
-    question: str,
     *,
     roadmap_step: str | None = None,
     room_id: int | None = None,
@@ -210,17 +210,53 @@ def send_message(
             raise HttpError(404, "대화방을 찾을 수 없습니다.")
     # 현재 질문은 question으로만 보낸다. 저장은 LLM 응답 이후라 여기서는 중복되지 않는다.
     history = _conversation_history(user_id, category, room_id)
-    rag = rag_answer(
-        question,
-        category=category,
-        conversation_history=history or None,
-        roadmap_step=roadmap_step,
+    return {
+        "category": category,
+        "conversation_history": history or None,
+        "roadmap_step": roadmap_step,
         # 프로필은 질문 문자열이 아니라 계약 필드로 보낸다.
-        user_context=_user_context(user_id),
+        "user_context": _user_context(user_id),
         # 라우터가 policy와 notice 중 무엇을 고를지 미리 알 수 없으므로 policy에는 항상 보낸다.
         # 보내지 않으면 notice route가 integration_unavailable로 끝난다.
-        notice_results=_notice_results() if category == "policy" else None,
+        "notice_results": _notice_results() if category == "policy" else None,
+    }
+
+
+def send_message(
+    user_id: int,
+    category: str,
+    question: str,
+    *,
+    roadmap_step: str | None = None,
+    room_id: int | None = None,
+) -> dict:
+    options = _prepare_message(user_id, category, roadmap_step=roadmap_step, room_id=room_id)
+    rag = rag_answer(question, **options)
+    return _complete_message(user_id, category, question, room_id, rag)
+
+
+async def send_message_async(
+    user_id: int,
+    category: str,
+    question: str,
+    *,
+    roadmap_step: str | None = None,
+    room_id: int | None = None,
+) -> dict:
+    options = await sync_to_async(_prepare_message)(
+        user_id, category, roadmap_step=roadmap_step, room_id=room_id
     )
+    rag = await async_rag_answer(question, **options)
+    return await sync_to_async(_complete_message)(user_id, category, question, room_id, rag)
+
+
+def _complete_message(
+    user_id: int,
+    category: str,
+    question: str,
+    room_id: int | None,
+    rag: dict | None,
+) -> dict:
     status = rag.get("status") if rag else None
     guardrail = rag.get("guardrail_reason") if rag else None
     # LLM이 200으로 답했으면 status가 무엇이든 그 문장을 그대로 보존한다.

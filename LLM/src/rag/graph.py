@@ -130,6 +130,7 @@ class GraphState(TypedDict):
     tax_retrieval_trace: NotRequired[list[dict[str, object]]]
     evidence_sufficient: NotRequired[bool | None]
     notice_results: NotRequired[list[dict[str, object]]]
+    backend_notice_results: NotRequired[list[dict[str, object]] | None]
     notice_backend_available: NotRequired[bool]
     calculation_result: NotRequired[dict[str, object] | None]
     calculation_required: NotRequired[bool]
@@ -167,7 +168,7 @@ class GraphState(TypedDict):
     tax_cache_prior_evidence_ids: NotRequired[list[int]]
 
 
-NoticeSearch = Callable[[GraphState], list[dict[str, object]]]
+NoticeSearch = Callable[[GraphState], list[dict[str, object]] | None]
 Rerank = Callable[
     [str, list[VectorSearchResult], int],
     list[VectorSearchResult],
@@ -885,6 +886,12 @@ def build_graph(
                 "notice_results": [],
                 "notice_backend_available": True,
                 "termination_reason": "notice_backend_error",
+            }
+        if notice_results is None:
+            return {
+                "notice_results": [],
+                "notice_backend_available": False,
+                "termination_reason": "notice_integration_unavailable",
             }
         logger.info("Notice route count: results=%d", len(notice_results))
         return {

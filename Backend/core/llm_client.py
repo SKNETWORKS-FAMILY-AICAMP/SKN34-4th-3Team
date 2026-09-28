@@ -13,6 +13,8 @@ import uuid
 import urllib.error
 import urllib.request
 
+import httpx
+
 from core.config import (
     LLM_API_URL,
     LLM_TIMEOUT_BIZPLAN,
@@ -116,7 +118,66 @@ def rag_answer(
     200 + `status="integration_unavailable"`을 돌려주므로 판단은 응답에 맡긴다.
     """
     resolved = category or "tax"
-    body: dict = {"category": resolved, "question": question}
+    body = _chat_body(
+        question, resolved, user_context, notice_results, conversation_history, roadmap_step
+    )
+    return _post(
+        "/rag/chat",
+        body,
+        timeout=_CHAT_TIMEOUTS.get(resolved, LLM_TIMEOUT_CHAT_TAX),
+    )
+
+
+async def async_rag_answer(
+    question: str,
+    *,
+    category: str | None = None,
+    user_context: dict | None = None,
+    notice_results: list[dict] | None = None,
+    conversation_history: list[dict] | None = None,
+    roadmap_step: str | None = None,
+) -> dict | None:
+    """비동기 채팅 경로에서 LLM의 기존 JSON 계약을 호출한다."""
+    resolved = category or "tax"
+    body = _chat_body(
+        question, resolved, user_context, notice_results, conversation_history, roadmap_step
+    )
+    timeout = _CHAT_TIMEOUTS.get(resolved, LLM_TIMEOUT_CHAT_TAX)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(f"{LLM_API_URL}/rag/chat", json=body)
+            response.raise_for_status()
+            return response.json() if response.content else {}
+    except httpx.HTTPStatusError as exc:
+        error_code = "HTTP_ERROR"
+        retryable = exc.response.status_code >= 500
+        try:
+            error = exc.response.json().get("error")
+            if isinstance(error, dict):
+                error_code = str(error.get("code") or error_code)
+                retryable = bool(error.get("retryable", retryable))
+        except (ValueError, AttributeError):
+            pass
+        logger.warning(
+            "LLM HTTP error: method=POST path=/rag/chat status=%s code=%s retryable=%s",
+            exc.response.status_code,
+            error_code,
+            retryable,
+        )
+    except (httpx.RequestError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        _log_transport_error("POST", "/rag/chat", exc)
+    return None
+
+
+def _chat_body(
+    question: str,
+    category: str,
+    user_context: dict | None,
+    notice_results: list[dict] | None,
+    conversation_history: list[dict] | None,
+    roadmap_step: str | None,
+) -> dict:
+    body: dict = {"category": category, "question": question}
     if user_context is not None:
         body["userContext"] = user_context
     if notice_results is not None:
@@ -126,11 +187,7 @@ def rag_answer(
         body["conversationHistory"] = conversation_history
     if roadmap_step is not None:
         body["roadmapStep"] = roadmap_step
-    return _post(
-        "/rag/chat",
-        body,
-        timeout=_CHAT_TIMEOUTS.get(resolved, LLM_TIMEOUT_CHAT_TAX),
-    )
+    return body
 
 
 def extract_receipt(

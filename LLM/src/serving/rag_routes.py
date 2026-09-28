@@ -117,7 +117,7 @@ class RagRuntime:
         *,
         embedding_factory: Callable[[], Embeddings] = get_embedding_model,
         llm_factory: Callable[[], BaseChatModel] = get_llm,
-        notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None,
+        notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None = None,
     ) -> None:
         """모델 팩토리와 비어 있는 RAG 실행 상태를 초기화한다.
 
@@ -136,7 +136,7 @@ class RagRuntime:
         self._hybrid_settings: Settings | None = None
         self._graph: CompiledStateGraph | None = None
         self._graph_settings: Settings | None = None
-        self._graph_notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None
+        self._graph_notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None = None
         self.document_count = 0
         self.chunk_count = 0
         self.index_source: Literal["cache", "embedding"] | None = None
@@ -232,7 +232,7 @@ class RagRuntime:
     def require_graph(
         self,
         settings: Settings,
-        notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+        notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None,
     ) -> CompiledStateGraph:
         with self._cache_lock:
             if (
@@ -611,13 +611,12 @@ async def adapter_chat(
             ],
             roadmap_step=request_body.roadmapStep,
             user_id=None,
-            notice_search=(
-                (
-                    lambda _state: [
-                        notice.model_dump(mode="json", exclude_none=True)
-                        for notice in request_body.noticeResults or []
-                    ]
-                )
+            notice_search=_backend_notice_search,
+            backend_notice_results=(
+                [
+                    notice.model_dump(mode="json", exclude_none=True)
+                    for notice in request_body.noticeResults
+                ]
                 if request_body.noticeResults is not None
                 else None
             ),
@@ -1262,9 +1261,10 @@ async def _execute_graph(
     conversation_history: list[dict[str, str]],
     roadmap_step: RoadmapStep | None,
     user_id: int | None,
-    notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+    notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None,
     rag_runtime: RagRuntime,
     settings: Settings,
+    backend_notice_results: list[dict[str, object]] | None = None,
 ) -> GraphState:
     """두 HTTP 계약이 공유하는 단일 LangGraph 실행 함수."""
     normalized_question = validate_question(
@@ -1275,11 +1275,11 @@ async def _execute_graph(
     resolved_user_context = user_context
     if resolved_user_context is None and user_id is not None:
         resolved_user_context = (
-            get_database_user_profile(user_id, settings)
+            await asyncio.to_thread(get_database_user_profile, user_id, settings)
             if settings.vector_store_backend == "postgres"
             else get_mock_user_profile(user_id)
         )
-    graph = rag_runtime.require_graph(settings, notice_search)
+    graph = await asyncio.to_thread(rag_runtime.require_graph, settings, notice_search)
     return await graph.ainvoke(
         {
             "query": normalized_question,
@@ -1290,8 +1290,14 @@ async def _execute_graph(
             "user_context": resolved_user_context,
             "conversation_history": conversation_history,
             "roadmap_step": roadmap_step,
+            "backend_notice_results": backend_notice_results,
         }
     )
+
+
+def _backend_notice_search(state: GraphState) -> list[dict[str, object]] | None:
+    """요청별 공고는 GraphState에서 읽어 컴파일된 그래프를 재사용한다."""
+    return state.get("backend_notice_results")
 
 
 def _backend_user_context(context: BackendUserContext | None) -> dict | None:

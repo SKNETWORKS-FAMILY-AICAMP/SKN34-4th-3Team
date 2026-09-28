@@ -32,9 +32,9 @@ def suggested(
 
 
 @router.post("/messages", response=ChatMessageResponse, summary="챗봇 질문 보내기")
-def send_message(request, body: ChatMessageRequest):
+async def send_message(request, body: ChatMessageRequest):
     """LLM RAG를 우선 호출하고, 실패하면 목업 답변을 저장합니다."""
-    return chat_service.send_message(
+    return await chat_service.send_message_async(
         request.auth["id"],
         body.category,
         body.question,

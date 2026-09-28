@@ -20,6 +20,9 @@ const getConfirmationNotice = ({ status, guardrailReason } = {}) => {
 // 응답 대기·화면 전환에서 방을 구분하는 키. 서버 저장 전인 새 대화는 id가 없어 따로 표시한다.
 const NEW_ROOM = 'new';
 const roomKey = (id) => (id == null ? NEW_ROOM : id);
+// 페이지 이동으로 컴포넌트가 사라져도 진행 중인 요청은 브라우저 탭에서 유지한다.
+const pendingChats = new Map();
+const pendingChatKey = (userId, category) => `${userId}:${category}`;
 
 export function AiConsult({
   user,
@@ -80,7 +83,6 @@ export function AiConsult({
     })();
     return () => {
       alive = false;
-      if (ctlRef.current) ctlRef.current.abort();
     };
   }, []);
 
@@ -95,31 +97,70 @@ export function AiConsult({
       return;
     }
     let alive = true;
-    setHistBusy(true);
-    setErr('');
+    let loadVersion = 0;
+    const task = pendingChats.get(pendingChatKey(userId, category));
+    setHistLoaded(false);
     setTurns([]);
-    Promise.all([api.chatRooms(category), api.chatHistory(category)])
-      .then(([r, h]) => {
+    setBusy(Boolean(task));
+    setPendingKey(task ? roomKey(task.roomId) : null);
+    if (task) {
+      ctlRef.current = task.controller;
+      setProgress('답변을 기다리고 있어요…');
+    }
+    setErr('');
+    const loadHistory = (initial) => {
+      const version = ++loadVersion;
+      setHistBusy(true);
+      return Promise.all([api.chatRooms(category), api.chatHistory(category)])
+        .then(([r, h]) => {
+          if (!alive || version !== loadVersion) return;
+          const list = (r && r.rooms) || [];
+          const fetched = (h && h.messages) || [];
+          setRoomList(list);
+          setRows(fetched);
+          const selected = initial
+            ? (task ? task.roomId : list.length ? list[0].id : null)
+            : (roomKeyRef.current === NEW_ROOM && task?.resultRoomId != null
+              ? task.resultRoomId : roomKeyRef.current === NEW_ROOM ? null : roomKeyRef.current);
+          roomKeyRef.current = roomKey(selected);
+          setRoomId(selected);
+          const loadedTurns = selected == null ? [] : turnsOf(selected, fetched);
+          if (initial && task && !task.done && roomKey(selected) === roomKey(task.roomId)) {
+            pendingTurnsRef.current = [...loadedTurns, { role: 'user', content: task.question }];
+            setTurns(pendingTurnsRef.current);
+          } else {
+            setTurns(loadedTurns);
+          }
+          setHistLoaded(true);
+        })
+        .catch(() => {
+          if (!alive || version !== loadVersion) return;
+          setErr('이전 대화 기록을 불러오지 못했어요.');
+          setHistLoaded(true);
+        })
+        .finally(() => {
+          if (alive && version === loadVersion) setHistBusy(false);
+        });
+    };
+    let onComplete;
+    if (task) {
+      onComplete = () => {
         if (!alive) return;
-        const list = (r && r.rooms) || [];
-        const fetched = (h && h.messages) || [];
-        setRoomList(list);
-        setRows(fetched);
-        const first = list.length ? list[0].id : null;
-        setRoomId(first);
-        setTurns(first == null ? [] : turnsOf(first, fetched));
-        setHistLoaded(true);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setErr('이전 대화 기록을 불러오지 못했어요.');
-        setHistLoaded(true);
-      })
-      .finally(() => {
-        if (alive) setHistBusy(false);
-      });
+        setBusy(false);
+        setPendingKey(null);
+        setProgress('');
+        setStream('');
+        pendingTurnsRef.current = null;
+        ctlRef.current = null;
+        if (task.resultRoomId == null) setErr('답변을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        loadHistory(false);
+      };
+      task.listeners.add(onComplete);
+    }
+    loadHistory(true);
     return () => {
       alive = false;
+      if (task) task.listeners.delete(onComplete);
     };
   }, [userId, category]);
 
@@ -149,7 +190,8 @@ export function AiConsult({
 
   const ask = async (text) => {
     const q = (text || '').trim();
-    if (!q || busy) return;
+    const taskKey = userId && category ? pendingChatKey(userId, category) : null;
+    if (!q || busy || (taskKey && pendingChats.has(taskKey))) return;
     setErr('');
     setNeedsLogin(false);
     // 지금 보고 있는 방에 이어 쓴다. 새 대화면 첫 답변과 함께 서버가 방을 만든다.
@@ -183,6 +225,11 @@ export function AiConsult({
     }, 5000);
     const ctl = new AbortController();
     ctlRef.current = ctl;
+    const task = taskKey ? {
+      roomId: askedRoomId, question: q, controller: ctl, listeners: new Set(), done: false,
+      resultRoomId: null,
+    } : null;
+    if (task) pendingChats.set(taskKey, task);
 
     // 1) Backend RAG — DB(세법 4,459조문 / 정책)에서 근거 문서 검색
     let rag = null;
@@ -208,6 +255,7 @@ export function AiConsult({
     }
     // 서버에 저장된 메시지와 방을 목록에도 반영한다.
     if (rag && rag.messageId != null && rag.roomId != null) {
+      if (task) task.resultRoomId = rag.roomId;
       const now = new Date().toISOString();
       // created_at 을 빼면 사이드바에서 날짜를 못 읽어 '날짜 미상'으로 빠진다.
       setRows((cur) => [
@@ -313,6 +361,11 @@ export function AiConsult({
       setPendingKey(null);
       pendingTurnsRef.current = null;
       ctlRef.current = null;
+      if (task) {
+        task.done = true;
+        pendingChats.delete(taskKey);
+        task.listeners.forEach((listener) => listener());
+      }
     }
   };
 
