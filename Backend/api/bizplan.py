@@ -4,6 +4,8 @@ from api.deps import user_auth
 from schemas.bizplan import (
     BizplanCoachRequest,
     BizplanCoachResponse,
+    BizplanDraftResponse,
+    BizplanDraftSave,
     BusinessPlanEvaluateRequest,
     BusinessPlanEvaluateResponse,
     BusinessPlanRefineRequest,
@@ -15,6 +17,7 @@ from schemas.bizplan import (
     BusinessPlanTemplateRequest,
     BusinessPlanTemplateResponse,
 )
+from schemas.users import UpdatedResponse
 from services import bizplan_service
 
 router = Router(tags=["사업계획서"], auth=user_auth)
@@ -58,3 +61,16 @@ def render(request, body: BusinessPlanRenderRequest):
 def coach(request, body: BizplanCoachRequest):
     """작성 중인 사업계획서 내용을 참고해 아이디어 구체화를 돕습니다. 대화 기록은 저장하지 않습니다."""
     return bizplan_service.coach(body.model_dump())
+
+
+@router.get("/draft", response=BizplanDraftResponse, summary="사업계획서 임시저장 조회")
+def draft(request):
+    """로그인한 사용자의 임시저장 초안을 반환합니다. 없으면 data가 null입니다."""
+    return bizplan_service.get_draft(request.auth["id"])
+
+
+@router.put("/draft", response=UpdatedResponse, summary="사업계획서 임시저장")
+def save_draft(request, body: BizplanDraftSave):
+    """작성 화면 상태를 유저당 1건으로 덮어써 저장합니다."""
+    bizplan_service.save_draft(request.auth["id"], body.data)
+    return {"updated": True}

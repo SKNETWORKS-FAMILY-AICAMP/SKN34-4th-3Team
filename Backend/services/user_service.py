@@ -2,6 +2,9 @@ from ninja.errors import HttpError
 
 from core import repo
 
+# 프론트 ROADMAP_TASKS 항목 구성 버전. 순서가 바뀌면 올려 예전 체크를 무효화한다.
+ROADMAP_VERSION = 2
+
 
 def get_me(user_id: int) -> dict:
     user = repo.get_user(user_id)
@@ -46,6 +49,14 @@ def get_business_profile(user_id: int) -> dict:
 
 def update_business_profile(user_id: int, payload: dict) -> None:
     repo.upsert_profile(user_id, payload)
+
+
+def get_roadmap_progress(user_id: int) -> dict:
+    return {"version": ROADMAP_VERSION, "done": repo.list_roadmap_done(user_id, ROADMAP_VERSION)}
+
+
+def set_roadmap_task(user_id: int, task_key: str, done: bool) -> None:
+    repo.set_roadmap_task(user_id, ROADMAP_VERSION, task_key, done)
 
 
 def onboarding_complete(user_id: int) -> bool:
