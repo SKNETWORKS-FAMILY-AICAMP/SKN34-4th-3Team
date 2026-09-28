@@ -3,6 +3,8 @@
 > 작성일 2026-09-28, develop `d35f0c4` 기준. 학원 내부망 노트북 배포(`Docs/README.md` 12절)를 AWS로 옮기는 계획. 코드 변경 전 설계 단계 문서.
 >
 > 2026-09-28 `origin/feature/scheduler`(DB 수집 스케줄러) 검토 결과를 반영해 수집 스케줄링을 GitHub Actions로 확정(10절).
+>
+> 2026-09-28 1차 구현: 도메인 미보유로 **HTTP(Elastic IP) 배포**, Data EC2는 Private 서브넷 + NAT Gateway. 구현 파일 `docker-compose.app.yml`, `docker-compose.data.yml`, `.github/workflows/deploy.yml`, `scripts/backup_db.sh`. 콘솔 절차는 `Docs/AWS_DEPLOY_GUIDE.md`. 수집 스케줄링(10절)과 HTTPS는 후속 작업.
 
 ## 1. 배경과 목표
 
@@ -108,8 +110,8 @@ Private 서브넷의 Data EC2는 외부 인터넷 불필요(이미지 pull 시�
 
 | 대상 | 변경 내용 |
 |---|---|
-| `docker-compose.yml` | App용(`docker-compose.app.yml`)과 Data용(`docker-compose.data.yml`)으로 분리하거나 profile로 분리 |
-| llm 서비스 `ELASTICSEARCH_URL` | `http://elasticsearch:9200` 하드코딩 → `${ELASTICSEARCH_URL}` 환경변수로 변경 |
+| `docker-compose.yml` | 로컬 개발·학원 내부망 배포용으로 유지. AWS 전용 `docker-compose.app.yml`, `docker-compose.data.yml` 추가 (구현 완료) |
+| llm 서비스 `ELASTICSEARCH_URL` | App compose에서 `http://${COMPOSE_DB_HOST}:${COMPOSE_ES_PORT}`로 조합 (Postgres와 같은 Data EC2) |
 | `COMPOSE_DB_HOST` | Data EC2 private IP 지정 (이미 변수로 분리되어 있음) |
 | backend·llm `depends_on` | 다른 호스트의 db·elasticsearch는 compose 의존성으로 대기 불가 → 해당 항목 제거, healthcheck 재시도에 의존 |
 | 호스트 포트 노출 | App: 8000·8001 매핑 제거 / Data: 5432·9200은 private IP에만 바인딩 |
