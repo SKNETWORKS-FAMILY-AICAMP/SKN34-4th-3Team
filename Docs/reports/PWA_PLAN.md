@@ -181,5 +181,5 @@ AWS (HTTPS)
 | 모바일 레이아웃 | CSS에 `@media` 규칙은 있으나 실기기 기준 점검 이력 없음 | 주요 화면(정책 검색, AI 상담, 경비 관리, 사업계획서, 마이페이지)을 휴대폰 폭에서 점검·보완 |
 | 뒤로 가기 | 화면 전환이 URL이 아닌 상태값(`Frontend/src/App.jsx`의 `view`, `pageKey`)으로 처리됨. `standalone`에는 브라우저 뒤로 가기 버튼이 없어 Android 뒤로 가기 시 앱이 바로 종료됨 | 화면 전환 시 `history.pushState`·`popstate` 연동 또는 화면 내 뒤로 가기 버튼 제공 |
 | 노치·홈 인디케이터 영역 | `viewport-fit=cover`, `env(safe-area-inset-*)` 미적용 | iOS 설치 앱에서 상·하단 가림 여부 확인 후 여백 적용 |
-| 스플래시·테마 색 | `theme_color: #3182F6`, `background_color: #f7f8fe` 임시 지정. 다크모드(`color-scheme: light dark`) 미반영 | 디자인 확정 후 manifest·`theme-color` 값 조정, 필요 시 다크모드용 `theme-color` 추가 |
+| 스플래시·테마 색 | (적용 완료) 파란 `theme_color`로 상단에 파란 띠가 생기던 문제 수정. manifest `theme_color`·`background_color`를 `--ground`(#f4f6fd)로 통일, `index.html`에 라이트/다크용 `theme-color` meta 2개, 앱 내 다크모드 토글(`hooks.js` `useThemeToggle`) 시 meta 색 동기화. 데스크톱 설치 앱은 `display_override: ['window-controls-overlay']`로 OS 타이틀바 제거, Nav를 창 드래그 영역으로 지정·창 버튼 폭만큼 우측 여백 확보, Nav를 타이틀바 높이(`env(titlebar-area-height)`) 한 줄로 축소(`01-base.css`, `03-home.css`) | 실기기(Chrome·Edge 설치 앱)에서 창 버튼 겹침·드래그 동작 확인 |
 | 터치 조작 | 터치 기준 점검 이력 없음 | 버튼·입력 요소 터치 영역 크기, 모바일 키보드 표시 시 입력창 가림 점검 |

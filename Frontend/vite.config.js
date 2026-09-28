@@ -21,8 +21,12 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        theme_color: '#3182F6',
-        background_color: '#f7f8fe',
+        // 데스크톱 Chrome·Edge 설치 앱은 OS 타이틀바 대신 창 버튼만 앱 우상단에 겹쳐 표시한다.
+        // 미지원 환경(모바일 등)은 위 standalone 으로 표시된다.
+        display_override: ['window-controls-overlay'],
+        // 상단 상태바·타이틀바가 화면과 이어져 보이도록 앱 배경(--ground)과 같은 색을 쓴다.
+        theme_color: '#f4f6fd',
+        background_color: '#f4f6fd',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },

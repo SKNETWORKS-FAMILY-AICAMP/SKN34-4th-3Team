@@ -255,6 +255,54 @@
   .hamburger:hover span {
     background: var(--blue-deep);
   }
+
+  /* 데스크톱 설치 앱(Window Controls Overlay): 타이틀바 대신 Nav가 창 맨 위에 온다.
+     위 Nav 기본 규칙을 덮어써야 하므로 그 뒤에 둔다. */
+  @media (display-mode: window-controls-overlay) {
+    .nav {
+      /* 타이틀바가 없으므로 Nav 빈 곳을 잡고 창을 끌 수 있게 한다. */
+      -webkit-app-region: drag;
+      app-region: drag;
+      /* 창 버튼(─ □ ✕)과 햄버거 버튼이 겹치지 않게 그 폭만큼 비운다. */
+      padding-left: env(titlebar-area-x, 0px);
+      padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+    }
+    .nav button,
+    .nav a {
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+    }
+    /* 창 버튼과 한 줄에 맞도록 Nav를 타이틀바 높이로 줄이고 창 가장자리에 붙인다.
+       Chrome이 그리는 창 버튼 배경이 titlebar-area 보다 조금 크므로 높이·우측 여백을 더 준다. */
+    .nav .wrap {
+      max-width: none;
+      padding: 0 28px 0 14px;
+    }
+    .nav__row {
+      height: calc(env(titlebar-area-height, 33px) + 6px);
+      gap: 10px;
+    }
+    .brand {
+      gap: 8px;
+      font-size: 14px;
+    }
+    .brand__mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      font-size: 9px;
+    }
+    .nav__user {
+      font-size: 12.5px;
+    }
+    .hamburger {
+      width: 34px;
+      height: 28px;
+      padding: 0 8px;
+      gap: 4px;
+      border-radius: 8px;
+    }
+  }
   .btn {
     display: inline-block;
     border-radius: 11px;
