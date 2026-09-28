@@ -1,3 +1,6 @@
+import json
+
+from django.http import StreamingHttpResponse
 from ninja import Router, Path, Query
 from ninja.errors import HttpError
 
@@ -41,6 +44,29 @@ async def send_message(request, body: ChatMessageRequest):
         roadmap_step=body.roadmapStep,
         room_id=body.roomId,
     )
+
+
+@router.post("/messages/stream", summary="챗봇 답변 스트리밍")
+async def send_message_stream(request, body: ChatMessageRequest):
+    user_id = request.auth["id"]
+    options = await chat_service.prepare_message_stream_async(
+        user_id, body.category, roadmap_step=body.roadmapStep, room_id=body.roomId,
+    )
+
+    async def events():
+        async for event in chat_service.send_message_stream_async(
+            user_id,
+            body.category,
+            body.question,
+            room_id=body.roomId,
+            options=options,
+        ):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    response = StreamingHttpResponse(events(), content_type="application/x-ndjson; charset=utf-8")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 @router.get("/messages", summary="대화 히스토리 조회")

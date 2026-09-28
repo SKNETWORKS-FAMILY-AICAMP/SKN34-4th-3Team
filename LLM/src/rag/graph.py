@@ -15,6 +15,7 @@ from typing import Literal, NotRequired, Required, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, ConfigDict, Field
@@ -1570,7 +1571,7 @@ def build_graph(
             "termination_reason": "calculation_complete",
         }
 
-    async def answer_node(state: GraphState) -> dict[str, object]:
+    async def answer_node(state: GraphState, config: RunnableConfig) -> dict[str, object]:
         """각 branch 결과만 사용해 공통 Structured Answer를 생성한다."""
         if state.get("guardrail_reason") == "out_of_scope":
             result = UnifiedAnswerResult(
@@ -1626,7 +1627,10 @@ def build_graph(
                 return _answer_update(fallback_answer("error"), [])
 
         generation_started = perf_counter()
+        answer_update = config.get("configurable", {}).get("on_answer_update")
         try:
+            if calculation_answer is not None and answer_update is not None:
+                await answer_update(calculation_answer)
             result = await generate_unified_answer(
                 fast_reasoning_llm if route in {"tax", "policy"} else router_llm,
                 query=state["query"],
@@ -1642,6 +1646,7 @@ def build_graph(
                 route_context=_answer_context(state),
                 status=status,
                 source_count=len(sources),
+                on_answer_update=answer_update if calculation_answer is None else None,
             )
             cited_sources = [
                 sources[source_number - 1]

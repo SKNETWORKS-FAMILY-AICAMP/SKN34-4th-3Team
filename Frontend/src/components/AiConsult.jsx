@@ -238,7 +238,12 @@ export function AiConsult({
       const chatBody = { question: q, category: category || 'tax' };
       if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
       if (askedRoomId != null) chatBody.roomId = askedRoomId;
-      rag = await api.chat(chatBody, { signal: ctl.signal });
+      rag = await api.chatStream(chatBody, {
+        signal: ctl.signal,
+        onDraft: (answer) => {
+          if (isViewingAsked()) setStream(answer);
+        },
+      });
     } catch (e) {
       // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
       needLogin = e && e.status === 401;
@@ -546,7 +551,7 @@ export function AiConsult({
         ))}
         {pendingKey === roomKey(roomId) &&
           (stream ? (
-            <div className="msg msg--ai"><Markdown text={stream} /></div>
+            <div className="msg msg--ai"><Markdown text={stream} /><small>답변 작성 중…</small></div>
           ) : (
             <div className="ai__progress" role="status" aria-live="polite">
               <span className="typing" aria-hidden="true"><i /><i /><i /></span>

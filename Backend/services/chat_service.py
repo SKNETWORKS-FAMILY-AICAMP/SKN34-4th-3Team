@@ -1,11 +1,13 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import aclosing
 from datetime import date
 
 from asgiref.sync import sync_to_async
 from ninja.errors import HttpError
 
 from core import repo
-from core.llm_client import async_rag_answer, rag_answer
+from core.llm_client import async_rag_answer, async_rag_answer_stream, rag_answer
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +250,43 @@ async def send_message_async(
     )
     rag = await async_rag_answer(question, **options)
     return await sync_to_async(_complete_message)(user_id, category, question, room_id, rag)
+
+
+async def prepare_message_stream_async(
+    user_id: int,
+    category: str,
+    *,
+    roadmap_step: str | None = None,
+    room_id: int | None = None,
+) -> dict:
+    return await sync_to_async(_prepare_message)(
+        user_id, category, roadmap_step=roadmap_step, room_id=room_id
+    )
+
+
+async def send_message_stream_async(
+    user_id: int,
+    category: str,
+    question: str,
+    *,
+    room_id: int | None,
+    options: dict,
+) -> AsyncIterator[dict]:
+    rag = None
+    try:
+        async with aclosing(async_rag_answer_stream(question, **options)) as stream:
+            async for event in stream:
+                if event.get("type") == "draft":
+                    yield event
+                elif event.get("type") == "done":
+                    rag = event.get("result")
+                    break
+    except Exception:
+        logger.exception("Streaming LLM chat failed; using existing fallback")
+    result = await sync_to_async(_complete_message)(
+        user_id, category, question, room_id, rag
+    )
+    yield {"type": "done", "result": result}
 
 
 def _complete_message(

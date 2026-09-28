@@ -3,7 +3,8 @@ import base64
 import binascii
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import suppress
 from functools import partial
 from threading import RLock
 from typing import Literal, Protocol
@@ -594,6 +595,8 @@ async def adapter_chat(
     request_body: RagChatRequest,
     rag_runtime: RagRuntime,
     settings_config: Settings,
+    *,
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> RagChatResponse:
     """Backend 사용자 Context와 공고 결과를 LangGraph 입력에 연결한다."""
     try:
@@ -622,6 +625,7 @@ async def adapter_chat(
             ),
             rag_runtime=rag_runtime,
             settings=settings_config,
+            on_answer_update=on_answer_update,
         )
         sources = [
             _backend_source(source)
@@ -653,6 +657,39 @@ async def adapter_chat(
             exc,
             fallback_message="RAG chat failed.",
         ) from exc
+
+
+async def adapter_chat_stream(
+    request_body: RagChatRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> AsyncIterator[dict[str, object]]:
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def on_answer_update(answer: str) -> None:
+        await queue.put({"type": "draft", "answer": answer})
+
+    async def run() -> None:
+        try:
+            result = await adapter_chat(
+                request_body, rag_runtime, settings_config,
+                on_answer_update=on_answer_update,
+            )
+            await queue.put({"type": "done", "result": result.model_dump(mode="json")})
+        except Exception:
+            logger.exception("Streaming RAG chat failed")
+            await queue.put({"type": "error"})
+        finally:
+            await queue.put(None)
+
+    task = asyncio.create_task(run())
+    try:
+        while (event := await queue.get()) is not None:
+            yield event
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 async def adapter_legal_basis(
@@ -1265,6 +1302,7 @@ async def _execute_graph(
     rag_runtime: RagRuntime,
     settings: Settings,
     backend_notice_results: list[dict[str, object]] | None = None,
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> GraphState:
     """두 HTTP 계약이 공유하는 단일 LangGraph 실행 함수."""
     normalized_question = validate_question(
@@ -1280,18 +1318,21 @@ async def _execute_graph(
             else get_mock_user_profile(user_id)
         )
     graph = await asyncio.to_thread(rag_runtime.require_graph, settings, notice_search)
+    graph_input = {
+        "query": normalized_question,
+        "category": category,
+        "policy_id": policy_id,
+        "top_k": result_limit,
+        "decision": decision,
+        "user_context": resolved_user_context,
+        "conversation_history": conversation_history,
+        "roadmap_step": roadmap_step,
+        "backend_notice_results": backend_notice_results,
+    }
+    if on_answer_update is None:
+        return await graph.ainvoke(graph_input)
     return await graph.ainvoke(
-        {
-            "query": normalized_question,
-            "category": category,
-            "policy_id": policy_id,
-            "top_k": result_limit,
-            "decision": decision,
-            "user_context": resolved_user_context,
-            "conversation_history": conversation_history,
-            "roadmap_step": roadmap_step,
-            "backend_notice_results": backend_notice_results,
-        }
+        graph_input, config={"configurable": {"on_answer_update": on_answer_update}}
     )
 
 

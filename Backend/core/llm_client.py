@@ -12,6 +12,7 @@ import logging
 import uuid
 import urllib.error
 import urllib.request
+from collections.abc import AsyncIterator
 
 import httpx
 
@@ -167,6 +168,37 @@ async def async_rag_answer(
     except (httpx.RequestError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         _log_transport_error("POST", "/rag/chat", exc)
     return None
+
+
+async def async_rag_answer_stream(
+    question: str,
+    *,
+    category: str | None = None,
+    user_context: dict | None = None,
+    notice_results: list[dict] | None = None,
+    conversation_history: list[dict] | None = None,
+    roadmap_step: str | None = None,
+) -> AsyncIterator[dict]:
+    resolved = category or "tax"
+    body = _chat_body(
+        question, resolved, user_context, notice_results, conversation_history, roadmap_step
+    )
+    timeout = _CHAT_TIMEOUTS.get(resolved, LLM_TIMEOUT_CHAT_TAX)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        async with client.stream("POST", f"{LLM_API_URL}/rag/chat/stream", json=body) as response:
+            response.raise_for_status()
+            completed = False
+            async for line in response.aiter_lines():
+                if not line:
+                    continue
+                event = json.loads(line)
+                if event.get("type") == "error":
+                    raise ValueError("LLM streaming chat failed")
+                if event.get("type") == "done":
+                    completed = True
+                yield event
+            if not completed:
+                raise ValueError("LLM streaming chat ended without a result")
 
 
 def _chat_body(
