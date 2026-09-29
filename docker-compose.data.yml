@@ -1,0 +1,48 @@
+# AWS Data EC2 전용. App EC2 는 docker-compose.app.yml 을 쓴다.
+#   docker compose -f docker-compose.data.yml up -d --build
+# 포트는 DATA_BIND_IP(이 인스턴스의 private IP)에만 연다. 접근 제어는 보안그룹(sg-data)이 맡는다.
+# 절차: Docs/AWS_DEPLOY_GUIDE.md
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: startup_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DATA_BIND_IP:?DATA_BIND_IP(이 인스턴스의 private IP)가 필요하다}:5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # 빈 볼륨 최초 생성 시에만 적용된다. 이후 스키마 변경은 App EC2 의 db-migrate 가 적용한다.
+      - ./DB/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./DB/app_extras.sql:/docker-entrypoint-initdb.d/02_app_extras.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  elasticsearch:
+    build: ./elasticsearch
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ports:
+      - "${DATA_BIND_IP:?DATA_BIND_IP(이 인스턴스의 private IP)가 필요하다}:9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+volumes:
+  db_data:
+  elasticsearch_data:

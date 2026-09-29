@@ -228,11 +228,18 @@ def _seed() -> None:
             "INSERT INTO tax_info(user_id,tax_type,details,updated_at) VALUES (?,?,?,?)",
             (uid, "부가가치세", "분기 예정·확정 신고 대상", _iso(datetime.now())),
         )
-    if not fetchone("SELECT id FROM admin_users WHERE email = ?", (ADMIN_EMAIL,)):
-        insert(
-            "INSERT INTO admin_users(email,password_hash,role,created_at) VALUES (?,?,?,?)",
-            (ADMIN_EMAIL, hash_password(ADMIN_PASSWORD), "admin", _iso(datetime.now())),
-        )
+    # 기동할 때마다 ADMIN_PASSWORD 로 맞춘다. 기존 DB 에 남은 옛 비밀번호도 이 값으로 바뀐다.
+    if ADMIN_PASSWORD:
+        if fetchone("SELECT id FROM admin_users WHERE email = ?", (ADMIN_EMAIL,)):
+            execute(
+                "UPDATE admin_users SET password_hash = ? WHERE email = ?",
+                (hash_password(ADMIN_PASSWORD), ADMIN_EMAIL),
+            )
+        else:
+            insert(
+                "INSERT INTO admin_users(email,password_hash,role,created_at) VALUES (?,?,?,?)",
+                (ADMIN_EMAIL, hash_password(ADMIN_PASSWORD), "admin", _iso(datetime.now())),
+            )
     if int(scalar("SELECT COUNT(*) FROM calendar_events WHERE event_type = ?", ("TAX",)) or 0) == 0:
         tax_dates = [
             ("부가가치세 1기 예정 신고", "2026-04-25", "1~3월분 예정 신고·납부"),
