@@ -84,7 +84,7 @@ fi
 
 echo
 echo "  화면       http://localhost:5173  (브라우저 자동 실행)"
-echo "  데모 계정  demo@demo.com / demo123    관리자  admin@demo.com / admin123"
+echo "  데모 계정  demo@demo.com / demo123    관리자  .env 의 ADMIN_EMAIL / ADMIN_PASSWORD"
 echo "  Ctrl+C 는 Frontend 만 멈춥니다."
 echo
 exec npm run dev

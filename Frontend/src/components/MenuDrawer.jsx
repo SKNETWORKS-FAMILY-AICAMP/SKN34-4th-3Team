@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
-import { NAV_MENU, DEMO_EMAIL, DEMO_PASSWORD } from '../constants.js';
+import { NAV_MENU } from '../constants.js';
 import { pad2 } from '../utils.js';
 
 export function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {

@@ -1,6 +1,7 @@
 """Policy·Notice·Tax 상태를 공통 사용자 응답으로 변환한다."""
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -25,8 +26,8 @@ class UnifiedAnswerResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    answer: str
     status: AnswerStatus
+    answer: str
     cited_source_numbers: list[int] = Field(default_factory=list)
 
 
@@ -120,28 +121,46 @@ async def generate_unified_answer(
     route_context: dict[str, object],
     status: AnswerStatus,
     source_count: int,
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> UnifiedAnswerResult:
     """route에 필요한 Context만 전달해 최종 Structured Output을 생성한다."""
     prompt = TAX_ANSWER_PROMPT if route == "tax" else ANSWER_PROMPT
-    chain = prompt | llm.with_structured_output(UnifiedAnswerResult)
-    result = UnifiedAnswerResult.model_validate(
-        await chain.ainvoke(
-            {
-                "query": query,
-                "standalone_query": standalone_query or query,
-                "conversation_history": json.dumps(
-                    compact_conversation_history(conversation_history or []),
-                    ensure_ascii=False,
-                ),
-                "route": route,
-                "personalized": personalized,
-                "user_context": json.dumps(user_context, ensure_ascii=False),
-                "route_context": json.dumps(route_context, ensure_ascii=False),
-                "status": status,
-            },
-            config={"run_name": "langgraph_unified_answer"},
+    inputs = {
+        "query": query,
+        "standalone_query": standalone_query or query,
+        "conversation_history": json.dumps(
+            compact_conversation_history(conversation_history or []),
+            ensure_ascii=False,
+        ),
+        "route": route,
+        "personalized": personalized,
+        "user_context": json.dumps(user_context, ensure_ascii=False),
+        "route_context": json.dumps(route_context, ensure_ascii=False),
+        "status": status,
+    }
+    config = {"run_name": "langgraph_unified_answer"}
+    if on_answer_update is None:
+        chain = prompt | llm.with_structured_output(UnifiedAnswerResult)
+        result = UnifiedAnswerResult.model_validate(await chain.ainvoke(inputs, config=config))
+    else:
+        # A JSON schema returns incremental dictionaries; the Pydantic parser only
+        # emits the completed object and would hide the answer until generation ends.
+        chain = prompt | llm.with_structured_output(
+            UnifiedAnswerResult.model_json_schema(), strict=True
         )
-    )
+        result = None
+        shown = ""
+        async for partial in chain.astream(inputs, config=config):
+            answer = partial.get("answer")
+            if isinstance(answer, str) and answer and answer != shown:
+                shown = answer
+                await on_answer_update(shown)
+            result = partial
+        if result is None:
+            raise ValueError("Unified answer stream returned no result")
+        if not {"status", "answer", "cited_source_numbers"}.issubset(result):
+            raise ValueError("Unified answer stream ended before all fields arrived")
+        result = UnifiedAnswerResult.model_validate(result)
     if result.status != status:
         raise ValueError("Unified answer changed the deterministic status")
     invalid_numbers = [

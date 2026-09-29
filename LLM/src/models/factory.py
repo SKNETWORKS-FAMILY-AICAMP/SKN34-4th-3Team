@@ -32,8 +32,7 @@ def get_llm(settings: Settings | None = None) -> BaseChatModel:
 
     return ChatOpenAI(
         model=settings_config.llm_model,
-        api_key=settings_config.openai_api_key,
-        temperature=0,
+        api_key=settings_config.openai_api_key
     )
 
 
@@ -52,6 +51,8 @@ def configure_chat_model(
 
     if isinstance(llm, ChatOpenAI):
         updates = dict(options)
+        if reasoning_effort is not None:
+            updates["temperature"] = None
         if max_completion_tokens is not None:
             updates.pop("max_completion_tokens")
             updates["max_tokens"] = max_completion_tokens

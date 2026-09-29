@@ -85,7 +85,7 @@ if not exist "node_modules" (
 
 echo.
 echo   App      http://localhost:5173  ^(opens automatically^)
-echo   Demo     demo@demo.com / demo123     Admin  admin@demo.com / admin123
+echo   Demo     demo@demo.com / demo123     Admin  ADMIN_EMAIL / ADMIN_PASSWORD in .env
 echo   Ctrl+C stops the Frontend only.
 echo.
 call npm run dev
