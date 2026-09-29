@@ -1,7 +1,10 @@
 """llm_client.rag_answer: conversationHistory 직렬화."""
 
+import json
 import unittest
 from unittest.mock import patch
+
+import httpx
 
 from core import llm_client
 
@@ -55,6 +58,32 @@ class RagAnswerPayloadTest(unittest.TestCase):
         with patch.object(llm_client, "_post", return_value={}) as post:
             llm_client.rag_answer("질문", category="policy", conversation_history=[{"role": "user", "content": "q"}])
         self.assertEqual(post.call_args[1]["timeout"], llm_client.LLM_TIMEOUT_CHAT_POLICY)
+
+
+class AsyncRagAnswerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_async_request_preserves_chat_payload(self):
+        received = []
+
+        def respond(request):
+            received.append(request)
+            return httpx.Response(200, json={"answer": "답변"})
+
+        transport = httpx.MockTransport(respond)
+        client_type = httpx.AsyncClient
+        with patch.object(llm_client.httpx, "AsyncClient", side_effect=lambda **kwargs: client_type(
+            transport=transport, **kwargs
+        )):
+            result = await llm_client.async_rag_answer(
+                "질문", category="policy", user_context={"userId": 1}, notice_results=[]
+            )
+
+        self.assertEqual(result, {"answer": "답변"})
+        self.assertEqual(received[0].url.path, "/rag/chat")
+        self.assertEqual(received[0].method, "POST")
+        self.assertEqual(json.loads(received[0].content), {
+            "category": "policy", "question": "질문",
+            "userContext": {"userId": 1}, "noticeResults": [],
+        })
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ urlpatterns = [
     path("rag/ready", views.public_ready),
     path("rag/reindex", views.public_reindex),
     path("rag/chat", views.public_chat),
+    path("rag/chat/stream", views.public_chat_stream),
     path("rag/legal-basis", views.public_legal_basis),
     path("rag/deductibility", views.public_deductibility),
     path("rag/summarize-announcement", views.public_summarize_announcement),

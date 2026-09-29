@@ -461,6 +461,37 @@ def test_backend_adapter_notice_uses_only_supplied_results(tmp_path: Path) -> No
     ]
 
 
+def test_backend_adapter_reuses_graph_with_request_specific_notices(tmp_path: Path) -> None:
+    model = FakeStructuredChatModel({
+        RouteDecision: {"route": "notice", "personalized": False},
+        UnifiedAnswerResult: {
+            "answer": "신청 가능한 공고입니다.",
+            "status": "success",
+            "cited_source_numbers": [1],
+        },
+    })
+    client = build_client(tmp_path / "index.json", llm_factory=lambda: model)
+
+    def ask(announcement_id: int):
+        return client.post("/rag/chat", json={
+            "category": "policy", "question": "신청 가능한 공고가 있나요?",
+            "noticeResults": [{
+                "announcementId": announcement_id,
+                "title": f"공고 {announcement_id}",
+                "sourceUrl": f"https://example.com/notices/{announcement_id}",
+            }],
+        })
+
+    first = ask(7)
+    graph = client.app.state.rag_runtime._graph
+    second = ask(8)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["sources"][0]["title"] == "공고 7"
+    assert second.json()["sources"][0]["title"] == "공고 8"
+    assert client.app.state.rag_runtime._graph is graph
+
+
 def test_backend_adapter_missing_notice_payload_is_unavailable(
     tmp_path: Path,
 ) -> None:

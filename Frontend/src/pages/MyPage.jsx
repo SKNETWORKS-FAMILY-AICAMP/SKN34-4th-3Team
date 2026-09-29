@@ -550,13 +550,11 @@ export function ChatLog({ user }) {
 // REGIONS 는 users.region 의 CHECK 제약(DB/app_extras.sql)이 허용하는 17개 시·도와 같다.
 
 export function ProfileSettings({ user, only, onSaved }) {
-  // 저장된 값이 목록에 없으면(예전 '대전광역시' 형식 등) 첫 항목으로 맞춰 준다
-  const pick = (list, v) => (list.indexOf(v) >= 0 ? v : list[0]);
   const [form, setForm] = useState({
     name: user.name,
     email: user.email || '',
-    biz: pick(INDUSTRIES, user.biz),
-    region: pick(REGIONS, user.region),
+    biz: user.biz || '',
+    region: user.region || '',
     age: user.age ? String(user.age) : '',
   });
   const [notif, setNotif] = useState({ tax: true, deadline: true, news: false });
@@ -580,8 +578,9 @@ export function ProfileSettings({ user, only, onSaved }) {
     try {
       await api.updateMe(patch);
       await api.updateBusinessProfile({ industry: form.biz });
-      // 화면의 user 는 업종을 biz 로 들고 있어 서버 필드명(industry)과 다르다.
-      if (onSaved) onSaved({ ...patch, biz: form.biz });
+      const updatedUser = await api.currentUser();
+      if (!updatedUser) throw new Error('사용자 정보를 조회하지 못했습니다.');
+      if (onSaved) onSaved(updatedUser);
       setSavedMsg('저장되었습니다.');
     } catch {
       setSavedMsg('저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
@@ -599,12 +598,16 @@ export function ProfileSettings({ user, only, onSaved }) {
           <label className="fld"><span>이름</span><input style={inputStyle} value={form.name} onChange={upd('name')} /></label>
           <label className="fld"><span>이메일</span><input style={inputStyle} type="email" value={form.email} onChange={upd('email')} /></label>
           <label className="fld"><span>업종</span>
-            <select style={inputStyle} value={form.biz} onChange={upd('biz')}>
+            <select style={inputStyle} value={form.biz} onChange={upd('biz')} required>
+              <option value="" disabled>업종을 선택해 주세요</option>
+              {form.biz && !INDUSTRIES.includes(form.biz) && <option value={form.biz}>{form.biz}</option>}
               {INDUSTRIES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
           </label>
           <label className="fld"><span>사업장 지역</span>
-            <select style={inputStyle} value={form.region} onChange={upd('region')}>
+            <select style={inputStyle} value={form.region} onChange={upd('region')} required>
+              <option value="" disabled>지역을 선택해 주세요</option>
+              {form.region && !REGIONS.includes(form.region) && <option value={form.region}>{form.region}</option>}
               {REGIONS.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
           </label>
