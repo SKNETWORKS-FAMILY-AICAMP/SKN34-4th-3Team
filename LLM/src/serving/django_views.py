@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
+import json
 from collections.abc import Awaitable, Callable
 from html import escape
 from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.core.exceptions import RequestDataTooBig
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from pydantic import BaseModel, ValidationError
 
@@ -213,6 +214,30 @@ async def public_chat(request: HttpRequest) -> HttpResponse:
     return await _dispatch(
         request, method="POST", handler=rag_routes.adapter_chat, schema=RagChatRequest,
     )
+
+
+@csrf_exempt
+async def public_chat_stream(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return _method_not_allowed("POST")
+    try:
+        if request.content_type != "application/json":
+            return _error(415, "Content-Type must be application/json")
+        body = RagChatRequest.model_validate_json(request.body)
+        settings = get_settings()
+    except ValidationError as exc:
+        return _validation_error(exc)
+    except RequestDataTooBig:
+        return _error(413)
+
+    async def events():
+        async for event in rag_routes.adapter_chat_stream(body, _runtime, settings):
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    response = StreamingHttpResponse(events(), content_type="application/x-ndjson; charset=utf-8")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 @csrf_exempt

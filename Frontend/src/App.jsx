@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { api } from './api.js';
-import { loadStoredUser, loadRoadmapDone, clearLegacyRoadmapDone } from './utils.js';
-import { DEFAULT_BIZ, DEFAULT_REGION, USER_STORE_KEY } from './constants.js';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { api, getToken } from './api.js';
+import { loadRoadmapDone, clearLegacyRoadmapDone } from './utils.js';
+import { USER_STORE_KEY } from './constants.js';
 import { ScrollProgress, FloatingThemeToggle } from './components/common.jsx';
 import { Nav } from './components/Nav.jsx';
 import { LoginModal } from './components/LoginModal.jsx';
@@ -10,49 +10,34 @@ import { MyPage } from './pages/MyPage.jsx';
 import { Home } from './pages/Home.jsx';
 
 export function App() {
-  // 로그인 유지: 로그아웃 전까지 새로고침해도 세션 유지 (localStorage)
-  const [user, setUser] = useState(loadStoredUser);
+  const [user, setUser] = useState(null);
   const [view, setView] = useState('home');
   const [pageKey, setPageKey] = useState('tax');
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
+  const bizplanUnsavedRef = useRef(false);
+  const reportBizplanUnsaved = useCallback((unsaved) => { bizplanUnsavedRef.current = unsaved; }, []);
   // 창업 로드맵 체크 상태 — 로드맵 페이지와 마이페이지가 공유. 서버(user_roadmap_progress)가 원본(아래 [userId] effect).
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
 
+  // 이전 버전의 사용자 캐시는 더 이상 읽지 않는다.
   useEffect(() => {
-    try {
-      if (user) localStorage.setItem(USER_STORE_KEY, JSON.stringify(user));
-      else localStorage.removeItem(USER_STORE_KEY);
-    } catch (e) {
-      /* 저장 불가 환경은 무시 */
-    }
-  }, [user]);
+    try { localStorage.removeItem(USER_STORE_KEY); } catch { /* 저장소 접근 불가 */ }
+  }, []);
 
-  // localStorage 의 user 는 화면 유지용일 뿐 토큰이 살아 있다는 보장이 아니다.
-  // Backend 에 물어 실제 세션을 확인한다. 토큰이 없거나 만료면 me() 가 null 을 준다.
+  // 토큰으로 사용자와 사업자 정보를 DB에서 복원한다.
   useEffect(() => {
     let alive = true;
+    const token = getToken();
     api
-      .me()
+      .currentUser()
       .then((u) => {
-        if (!alive) return;
-        if (u) {
-          setUser((cur) => ({
-            ...(cur || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }),
-            id: u.id,
-            name: u.name || (cur && cur.name) || '회원',
-            email: u.email,
-            region: u.region || (cur && cur.region),
-          }));
-        } else {
-          // 저장된 화면 상태만 남고 토큰이 죽은 경우 — 로그아웃 상태로 맞춘다.
-          setUser(null);
-        }
+        if (alive && token === getToken()) setUser(u);
       })
       .catch(() => {
-        /* Backend 미실행·타임아웃 — 토큰은 그대로 두고 화면 상태를 유지한다 */
+        /* Backend 미실행·타임아웃 — 저장된 사용자 정보로 대체하지 않는다 */
       });
     return () => { alive = false; };
   }, []);
@@ -136,7 +121,15 @@ export function App() {
     }
   };
 
+  const confirmLeaveBizplan = () => {
+    if (view !== 'page' || pageKey !== 'bizplan' || !bizplanUnsavedRef.current) return true;
+    if (!window.confirm('저장하지 않은 사업계획서 내용이 있습니다. 저장하지 않고 벗어나면 변경 내용이 삭제됩니다. 계속할까요?')) return false;
+    bizplanUnsavedRef.current = false;
+    return true;
+  };
+
   const handleNavigate = (key) => {
+    if (key !== 'bizplan' && !confirmLeaveBizplan()) return;
     if (key === 'home') {
       setView('home');
       window.scrollTo(0, 0);
@@ -153,6 +146,7 @@ export function App() {
 
   const handleLoginClick = () => {
     if (user) {
+      if (!confirmLeaveBizplan()) return;
       api.logout();
       setUser(null);
       setView('home');
@@ -178,7 +172,7 @@ export function App() {
       <React.Fragment>
         <MyPage
           user={user}
-          onProfileSaved={(patch) => setUser((cur) => ({ ...cur, ...patch }))}
+          onProfileSaved={setUser}
           onHome={() => setView('home')}
           onLogout={() => {
             api.logout();
@@ -206,9 +200,10 @@ export function App() {
         <SubPage
           pageKey={pageKey}
           user={user}
-          onHome={() => setView('home')}
+          onHome={() => handleNavigate('home')}
           onLoginClick={handleLoginClick}
           onNavigate={handleNavigate}
+          onBizplanUnsavedChange={reportBizplanUnsaved}
           roadmapDone={roadmapDone}
           setRoadmapDone={updateRoadmapDone}
           savedPolicies={savedPolicies}
