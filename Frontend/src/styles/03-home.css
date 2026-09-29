@@ -287,6 +287,12 @@
   html {
     scroll-padding-top: 66px; /* sticky nav 높이 보정 */
   }
+  /* 데스크톱 설치 앱(Window Controls Overlay)은 Nav가 타이틀바 높이로 줄어든다(01-base.css). */
+  @media (display-mode: window-controls-overlay) {
+    html {
+      scroll-padding-top: calc(env(titlebar-area-height, 33px) + 3px);
+    }
+  }
   .home-flow > section {
     min-height: 100vh;
     min-height: 100dvh;

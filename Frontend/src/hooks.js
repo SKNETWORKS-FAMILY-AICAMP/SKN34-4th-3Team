@@ -69,6 +69,11 @@ export function useThemeToggle() {
       (!document.documentElement.getAttribute('data-theme') &&
         window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    // 설치 앱(PWA)의 상태바·타이틀바 색도 새 테마 배경(--ground)에 맞춘다.
+    const color = isDark ? '#f4f6fd' : '#0d101e';
+    document
+      .querySelectorAll('meta[name="theme-color"]')
+      .forEach((m) => m.setAttribute('content', color));
   }, []);
 }
 
