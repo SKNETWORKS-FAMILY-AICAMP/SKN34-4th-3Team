@@ -24,7 +24,7 @@ from src.data.postgres_repository import (
 )
 from src.features.document_processing import PdfDocumentError
 from src.features.business_plan_documents import (
-    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, convert_hwpx_to_pdf, decode_template,
+    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, decode_template,
     inspect_template, render_default_hwpx, render_default_pdf,
     render_hwpx_form, render_pdf_form,
 )
@@ -1028,7 +1028,7 @@ async def adapter_business_plan_template_inspect(
         fields = await asyncio.to_thread(inspect_template, kind, data)
         return BusinessPlanTemplateResponse(
             kind=kind, fields=fields,
-            outputFormats=["pdf"] if kind == "pdf" else ["hwpx", "pdf"],
+            outputFormats=[kind],
         )
     except BusinessPlanDocumentError as exc:
         raise ApiError(status_code=422, detail=str(exc)) from exc
@@ -1046,6 +1046,8 @@ async def adapter_business_plan_render(
             kind, data = decode_template(
                 request_body.template.fileName, request_body.template.contentBase64
             )
+            if request_body.format != kind:
+                raise BusinessPlanDocumentError(f"{kind.upper()} 양식은 {kind.upper()}로만 출력할 수 있습니다.")
             fields = await asyncio.to_thread(inspect_template, kind, data)
             values = {section["label"]: section["content"] for section in sections}
             if set(fields) != set(values) or len(fields) != len(sections):
@@ -1073,12 +1075,9 @@ async def adapter_business_plan_render(
                     raise BusinessPlanDocumentError("첨부 이미지의 합계는 4 MiB 이하여야 합니다.")
                 images[section["label"]] = (image.mimeType, raw)
             if kind == "pdf":
-                if request_body.format != "pdf":
-                    raise BusinessPlanDocumentError("PDF 양식은 PDF로만 출력할 수 있습니다.")
                 result = await asyncio.to_thread(render_pdf_form, data, values, request_body.title, images)
             else:
-                hwpx = await asyncio.to_thread(render_hwpx_form, data, values, images)
-                result = hwpx if request_body.format == "hwpx" else await asyncio.to_thread(convert_hwpx_to_pdf, hwpx)
+                result = await asyncio.to_thread(render_hwpx_form, data, values, images)
         elif request_body.images:
             raise BusinessPlanDocumentError("이미지를 배치할 PDF/HWPX 양식이 필요합니다.")
         elif request_body.format == "hwpx":

@@ -32,8 +32,7 @@ def get_llm(settings: Settings | None = None) -> BaseChatModel:
 
     return ChatOpenAI(
         model=settings_config.llm_model,
-        api_key=settings_config.openai_api_key,
-        temperature=0,
+        api_key=settings_config.openai_api_key
     )
 
 

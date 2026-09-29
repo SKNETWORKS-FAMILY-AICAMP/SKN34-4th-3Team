@@ -208,38 +208,6 @@ function scoreTone(score) {
   return 'bad';
 }
 
-function planToMarkdown(form, plan) {
-  const basicSummary = [form.startupStatus, form.industry, form.businessRegion, form.businessType]
-    .filter(Boolean).join(' · ');
-  const lines = [
-    `# ${form.businessName || '사업계획서'} 초안`,
-    '',
-    basicSummary ? `> ${basicSummary}` : '',
-    '',
-    '## 세 줄 요약',
-    plan.summary,
-    '',
-  ];
-  (plan.sections || []).forEach((s) => {
-    lines.push(`## ${s.label}`, s.content, '');
-  });
-  lines.push('---', 'AI가 입력한 내용만으로 작성한 초안입니다. 수치·실적은 직접 확인해 채우고, 제출 전 검토해 주세요.');
-  return lines.filter((l) => l !== undefined).join('\n');
-}
-
-function downloadMarkdown(form, plan) {
-  const text = planToMarkdown(form, plan);
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(form.businessName || '사업계획서').replace(/[\\/:*?"<>|]/g, '')}_사업계획서.md`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1406,15 +1374,12 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                     <React.Fragment>
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
-                        <button type="button" className="exp-upload" onClick={() => downloadMarkdown(form, finalPlan)}>
-                          📄 텍스트 초안 다운로드 (.md)
-                        </button>
-                        {(!templateInfo || templateInfo.outputFormats.includes('hwpx')) && (
+                        {(!templateInfo || templateInfo.kind === 'hwpx') && (
                           <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat}>
                             {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
                           </button>
                         )}
-                        {(!templateInfo || templateInfo.outputFormats.includes('pdf')) && (
+                        {(!templateInfo || templateInfo.kind === 'pdf') && (
                           <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat}>
                             {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
                           </button>
