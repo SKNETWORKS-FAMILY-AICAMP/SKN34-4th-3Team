@@ -5,6 +5,8 @@
 > 2026-09-28 로컬 구현(10절 ① 단계) 완료: `Frontend/vite.config.js`, `index.html`, `nginx.conf`, `public/` 아이콘. 병합·실기기 검증은 AWS 이후.
 >
 > 선행 작업은 AWS 마이그레이션(`feature/aws`, `Docs/reports/AWS_MIGRATION_PLAN.md`). AWS 이전·HTTPS 적용 후 병합하며, 병합 이후에는 `main` 기준 AWS 자동 배포에 PWA 산출물이 함께 포함되어 별도 배포 작업 없이 갱신되는 구조.
+>
+> 2026-09-29 도메인 구매. AWS 1차 배포는 develop·main 반영 완료, `feature/pwa`에 develop 병합. HTTPS 코드 변경은 별도 브랜치 없이 `feature/pwa`에서 PWA와 함께 진행(2절). 절차는 `Docs/AWS_DEPLOY_GUIDE.md` 12절.
 
 ## 1. 배경과 목표
 
@@ -25,13 +27,16 @@
 |---|---|
 | HTTPS 필수 | Service Worker는 보안 컨텍스트(HTTPS, localhost 예외)에서만 등록 가능 |
 | AWS 1차 배포 | 도메인 미보유로 Elastic IP + HTTP (`Docs/AWS_DEPLOY_GUIDE.md` 개요) → 설치·SW 동작 불가 |
-| HTTPS 적용 시점 | `Docs/AWS_DEPLOY_GUIDE.md` 12절(도메인 확보 → certbot → nginx 443). 같은 절 4단계가 "이후 PWA 적용" |
+| HTTPS 적용 시점 | `Docs/AWS_DEPLOY_GUIDE.md` 12절(DNS 연결 → certbot 최초 발급 → nginx 443 → 자동 갱신 전환) |
 | HTTP 환경에서 병합 시 영향 | 비보안 컨텍스트에서는 `navigator.serviceWorker`가 없어 등록 코드가 실행되지 않음. manifest 링크만 남아 기존 동작에 영향 없음 |
 
-병합 순서
-1. `feature/aws` → develop → main (AWS 자동 배포 가동)
-2. `feature/pwa`를 최신 develop 기준으로 rebase → develop → main
-3. HTTPS 적용(AWS 12절) 후 실기기 설치 검증
+병합 순서 (2026-09-29 변경: HTTPS를 `feature/pwa`에서 함께 진행)
+1. ~~`feature/aws` → develop → main (AWS 자동 배포 가동)~~ 완료
+2. `feature/pwa`에 develop 병합 (완료)
+3. 도메인 DNS 연결, `sg-app` 443 개방, EC2에서 인증서 최초 발급 (AWS 12-1~12-3절, 수동)
+4. `feature/pwa`에 HTTPS 코드 변경 추가 (AWS 12-4절, 6절 nginx 구성)
+5. `feature/pwa` → develop → main → 자동 배포. **3번 인증서 발급 완료 후 병합** (인증서 없으면 nginx 기동 실패)
+6. 인증서 자동 갱신 전환 (AWS 12-5절), 실기기 설치 검증 (11절)
 
 PWA 코드는 프론트 한정 변경이라 AWS 작업과 병행해 localhost에서 개발·검증 가능. 실기기 검증만 HTTPS 이후 진행.
 
@@ -71,9 +76,10 @@ PWA 코드는 프론트 한정 변경이라 AWS 작업과 병행해 localhost에
 | `Frontend/vite.config.js` | `VitePWA({...})` 플러그인 추가, 4절 설정·manifest 정의 |
 | `Frontend/index.html` | `<meta name="theme-color">`, `<link rel="apple-touch-icon">` 추가 (manifest 링크는 플러그인이 주입) |
 | `Frontend/public/` | `pwa-192x192.png`, `pwa-512x512.png`, `maskable-icon-512x512.png`, `apple-touch-icon-180x180.png` 추가. `npx @vite-pwa/assets-generator --preset minimal-2023 public/favicon.svg`로 1회 생성 후 커밋 (의존성 미추가, 부산물 `pwa-64x64.png`·`favicon.ico`는 삭제) |
-| `Frontend/nginx.conf` | SW·manifest 캐시 헤더 추가 (6절) |
+| `Frontend/nginx.conf` | SW·manifest 캐시 헤더 추가 (6절). HTTPS 작업 시 `nginx-locations.conf`로 이동 예정 |
 | `Frontend/src/main.jsx` | 변경 없음 (`injectRegister: 'auto'`) |
-| `.github/workflows/deploy.yml`, `docker-compose.app.yml`, `Frontend/Dockerfile` | 변경 없음 (7절) |
+| `.github/workflows/deploy.yml` | 변경 없음 (7절) |
+| `docker-compose.app.yml`, `Frontend/Dockerfile` | PWA 목적 변경 없음. HTTPS 작업으로 443 포트·인증서 마운트·nginx 설정 파일 추가 (AWS 12-4절) |
 
 ## 6. nginx 캐시 헤더
 
@@ -97,7 +103,11 @@ location /assets/ {
 }
 ```
 
-AWS HTTPS 단계(`AWS_DEPLOY_GUIDE.md` 12절)에서 `nginx.conf`에 443 server 블록이 추가되고 80 블록은 리다이렉트 전용이 됨. 위 location은 **443 블록에 위치해야 함**. 두 작업이 같은 파일을 수정하므로 PWA 병합은 HTTPS 변경 이후 rebase해 충돌을 정리하는 순서로 진행(2절). HTTPS 적용 전 병합하는 경우 80 블록에 두고, HTTPS 작업 시 443 블록으로 함께 이동.
+HTTPS 적용 시 nginx 구성 (`AWS_DEPLOY_GUIDE.md` 12-4절, `feature/pwa`에서 함께 변경)
+- 로컬 `docker-compose.yml`도 `nginx.conf`를 사용 → 443 블록을 직접 넣으면 인증서 없는 로컬이 깨짐
+- 공통 location(`/api/`, `/ppt`, `/ppt/`, `/`)과 위 캐시 헤더 location 2개를 `Frontend/nginx-locations.conf`로 이동, 이미지 내 `/etc/nginx/snippets/app-locations.conf`로 복사
+- `nginx.conf`(로컬, 80)와 `nginx.https.conf`(AWS, 443 + 80 리다이렉트) 모두 같은 파일을 include → 캐시 헤더가 양쪽에 동일 적용
+- `docker-compose.app.yml`이 `nginx.https.conf`를 `default.conf` 위치에 마운트
 
 ## 7. main 병합 → AWS 자동 반영 흐름
 
@@ -126,8 +136,8 @@ GitHub Actions (.github/workflows/deploy.yml)
 |---|---|---|
 | 화면 코드, SW, precache 목록 | 자동 | main 병합 → frontend 재빌드 → autoUpdate |
 | manifest(앱 이름·색상), 아이콘 | 자동 | 재빌드 시 반영. 이미 설치된 앱의 아이콘·이름 갱신은 OS·브라우저 주기에 따라 지연 가능 |
-| nginx 캐시 헤더 | 자동 | `nginx.conf`가 frontend 이미지에 포함 |
-| 도메인, HTTPS 인증서 | **수동** | AWS 12절. 인증서 갱신은 certbot 자동 갱신 |
+| nginx 캐시 헤더 | 자동 | `nginx-locations.conf`가 frontend 이미지에 포함 |
+| 도메인, HTTPS 인증서 | **수동** | AWS 12-1~12-3절. 갱신은 12-5절 전환 후 certbot 자동 갱신 |
 
 ## 8. 주의점
 
@@ -150,8 +160,10 @@ GitHub Actions (.github/workflows/deploy.yml)
 | 단계 | 작업 | 환경 |
 |---|---|---|
 | ① | 5절 파일 변경, 아이콘 생성, 11절 localhost 항목 검증 | localhost (AWS 작업과 병행 가능) |
-| ② | AWS 병합 완료 후 `feature/pwa` rebase, `nginx.conf` 충돌 정리 → develop → main | AWS (HTTP 또는 HTTPS) |
-| ③ | HTTPS 적용 후 실기기 설치·자동 갱신 검증 | AWS (HTTPS) |
+| ② | `feature/pwa`에 develop 병합 (2026-09-29 완료) | - |
+| ③ | DNS 연결·443 개방·인증서 최초 발급 (AWS 12-1~12-3절) | AWS 콘솔·EC2 (수동) |
+| ④ | `feature/pwa`에 HTTPS 코드 변경 (6절 nginx 구성, AWS 12-4절), 11절 localhost 재검증 → develop → main | localhost → AWS |
+| ⑤ | 인증서 자동 갱신 전환 (AWS 12-5절), 실기기 설치·자동 갱신 검증 | AWS (HTTPS) |
 
 ## 11. 검증 항목
 
@@ -173,7 +185,7 @@ AWS (HTTPS)
 
 ## 12. 후속 작업: 앱 디자인 수정
 
-1차 구현은 기존 웹 화면을 그대로 PWA로 감싼 형태. 설치 앱으로 쓰기에 부족한 부분이 있어 추후 디자인 수정 필요. 실기기 검증(10절 ③) 시 함께 점검.
+1차 구현은 기존 웹 화면을 그대로 PWA로 감싼 형태. 설치 앱으로 쓰기에 부족한 부분이 있어 추후 디자인 수정 필요. 실기기 검증(10절 ⑤) 시 함께 점검.
 
 | 항목 | 현황 | 수정 방향 |
 |---|---|---|
