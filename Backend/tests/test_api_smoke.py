@@ -3,7 +3,7 @@
 import base64
 import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -12,7 +12,7 @@ import django  # noqa: E402
 django.setup()
 
 from django.core.files.uploadedfile import SimpleUploadedFile  # noqa: E402
-from ninja.testing import TestClient  # noqa: E402
+from ninja.testing import TestAsyncClient, TestClient  # noqa: E402
 
 from api import deps  # noqa: E402
 from config.api import api  # noqa: E402
@@ -20,6 +20,7 @@ from core.security import create_token  # noqa: E402
 from services import chat_service, expense_service, policy_service  # noqa: E402
 
 client = TestClient(api)
+async_client = TestAsyncClient(api)
 
 
 class AuthTest(unittest.TestCase):
@@ -142,17 +143,46 @@ class PublicEndpointTest(unittest.TestCase):
         self.assertEqual(res.status_code, 422)
 
 
-class ChatClearTest(unittest.TestCase):
-    def test_legacy_ids_param_is_400_and_deletes_nothing(self):
+class ChatApiTest(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_ids_param_is_400_and_deletes_nothing(self):
         repo = MagicMock()
         repo.get_user.return_value = {"id": 1, "status": "active"}
         token = create_token(1, "user")
         with patch.object(deps, "repo", repo), patch.object(chat_service, "clear_messages") as clear:
-            res = client.delete(
+            res = await async_client.delete(
                 "/chat/messages?ids=1,2", headers={"Authorization": f"Bearer {token}"}
             )
         self.assertEqual(res.status_code, 400)
         clear.assert_not_called()
+
+    async def test_message_uses_async_service_with_authenticated_user(self):
+        repo = MagicMock()
+        repo.get_user.return_value = {"id": 1, "status": "active"}
+        send = AsyncMock(return_value={
+            "messageId": 3, "roomId": 4, "answer": "답변", "grounded": True,
+            "llmUsed": True, "needsConfirmation": False, "status": "success",
+            "guardrailReason": None,
+        })
+        token = create_token(1, "user")
+        with patch.object(deps, "repo", repo), patch.object(chat_service, "send_message_async", send):
+            res = await async_client.post(
+                "/chat/messages",
+                json={"category": "tax", "question": "부가세 신고는 언제인가요?"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        self.assertEqual(res.status_code, 200)
+        send.assert_awaited_once_with(
+            1, "tax", "부가세 신고는 언제인가요?", roadmap_step=None, room_id=None
+        )
+
+    async def test_admin_token_cannot_send_message(self):
+        token = create_token(1, "admin")
+        res = await async_client.post(
+            "/chat/messages",
+            json={"category": "tax", "question": "부가세 신고는 언제인가요?"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(res.status_code, 403)
 
 
 if __name__ == "__main__":

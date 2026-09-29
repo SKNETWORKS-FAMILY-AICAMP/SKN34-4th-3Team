@@ -208,38 +208,6 @@ function scoreTone(score) {
   return 'bad';
 }
 
-function planToMarkdown(form, plan) {
-  const basicSummary = [form.startupStatus, form.industry, form.businessRegion, form.businessType]
-    .filter(Boolean).join(' · ');
-  const lines = [
-    `# ${form.businessName || '사업계획서'} 초안`,
-    '',
-    basicSummary ? `> ${basicSummary}` : '',
-    '',
-    '## 세 줄 요약',
-    plan.summary,
-    '',
-  ];
-  (plan.sections || []).forEach((s) => {
-    lines.push(`## ${s.label}`, s.content, '');
-  });
-  lines.push('---', 'AI가 입력한 내용만으로 작성한 초안입니다. 수치·실적은 직접 확인해 채우고, 제출 전 검토해 주세요.');
-  return lines.filter((l) => l !== undefined).join('\n');
-}
-
-function downloadMarkdown(form, plan) {
-  const text = planToMarkdown(form, plan);
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(form.businessName || '사업계획서').replace(/[\\/:*?"<>|]/g, '')}_사업계획서.md`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -314,7 +282,7 @@ function ScoreGauge({ score }) {
   );
 }
 
-export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onToggleSavedPolicy }) {
+export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onToggleSavedPolicy, onUnsavedChange }) {
   const userId = user && user.id;
   const mainRef = useRef(null);
   const [active, setActive] = useState('refine');
@@ -362,6 +330,37 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
+  const savedDraftRef = useRef(null);
+  const draftSnapshot = {
+    form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
+    selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
+    fieldAnalysis, supplementAnswers, supplementImages, supplementChoices, editedSectionKeys,
+  };
+  const hasUnsavedChanges = !!(editedBeforeLoad || (draftLoaded && savedDraftRef.current
+    && Object.keys(draftSnapshot).some((key) => draftSnapshot[key] !== savedDraftRef.current[key]
+      && JSON.stringify(draftSnapshot[key]) !== JSON.stringify(savedDraftRef.current[key]))));
+
+  useEffect(() => {
+    if (draftLoaded && !savedDraftRef.current) savedDraftRef.current = draftSnapshot;
+  }, [draftLoaded, draftSnapshot]);
+
+  useEffect(() => {
+    onUnsavedChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onUnsavedChange]);
+
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warnBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   // 서버에서 받은 초안을 화면 상태로 되돌린다. 불러오는 동안 사용자가 고친 기초 정보는 유지한다.
   const applyDraft = (draft) => {
@@ -395,6 +394,9 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   // 임시저장한 값은 복원하고, 비어 있는 기초 정보만 가입 프로필로 채운다.
   useEffect(() => {
     if (!userId) return;
+    savedDraftRef.current = null;
+    setDraftLoaded(false);
+    setEditedBeforeLoad(false);
     editedFieldsRef.current = new Set();
     setProfileIndustry('');
     setForm({ ...EMPTY_FORM });
@@ -428,6 +430,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           });
           return next;
         });
+        setDraftLoaded(true);
       });
     return () => { current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -508,6 +511,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   };
 
   const setReviewedField = (key, value) => {
+    if (!draftLoaded) setEditedBeforeLoad(true);
     editedFieldsRef.current.add(key);
     setForm((f) => ({ ...f, [key]: value }));
     setPlan(null);
@@ -980,12 +984,11 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
       return;
     }
     let note = '임시저장했어요';
+    const snapshotToSave = draftSnapshot;
     try {
-      await api.saveBizplanDraft({
-        form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
-        selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
-        fieldAnalysis, supplementAnswers, supplementImages, supplementChoices, supplementPage, editedSectionKeys,
-      });
+      await api.saveBizplanDraft({ ...snapshotToSave, supplementPage });
+      savedDraftRef.current = snapshotToSave;
+      setEditedBeforeLoad(false);
     } catch (e2) {
       if (e2 && e2.status === 401) {
         onRequireLogin && onRequireLogin();
@@ -1371,7 +1374,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       );
                     })}
                   </div>
-                  <button type="button" className="exp-upload" onClick={regeneratePlan} disabled={generating}>
+                  <button type="button" className="exp-upload" onMouseDown={(event) => event.preventDefault()}
+                    onClick={regeneratePlan} disabled={generating}>
                     보완 내용으로 초안 다시 생성하기
                   </button>
                 </React.Fragment>
@@ -1406,15 +1410,12 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                     <React.Fragment>
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
-                        <button type="button" className="exp-upload" onClick={() => downloadMarkdown(form, finalPlan)}>
-                          📄 텍스트 초안 다운로드 (.md)
-                        </button>
-                        {(!templateInfo || templateInfo.outputFormats.includes('hwpx')) && (
+                        {(!templateInfo || templateInfo.kind === 'hwpx') && (
                           <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat}>
                             {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
                           </button>
                         )}
-                        {(!templateInfo || templateInfo.outputFormats.includes('pdf')) && (
+                        {(!templateInfo || templateInfo.kind === 'pdf') && (
                           <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat}>
                             {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
                           </button>

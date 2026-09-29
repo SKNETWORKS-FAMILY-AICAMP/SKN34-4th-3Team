@@ -15,6 +15,7 @@ from typing import Literal, NotRequired, Required, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, ConfigDict, Field
@@ -130,6 +131,7 @@ class GraphState(TypedDict):
     tax_retrieval_trace: NotRequired[list[dict[str, object]]]
     evidence_sufficient: NotRequired[bool | None]
     notice_results: NotRequired[list[dict[str, object]]]
+    backend_notice_results: NotRequired[list[dict[str, object]] | None]
     notice_backend_available: NotRequired[bool]
     calculation_result: NotRequired[dict[str, object] | None]
     calculation_required: NotRequired[bool]
@@ -167,7 +169,7 @@ class GraphState(TypedDict):
     tax_cache_prior_evidence_ids: NotRequired[list[int]]
 
 
-NoticeSearch = Callable[[GraphState], list[dict[str, object]]]
+NoticeSearch = Callable[[GraphState], list[dict[str, object]] | None]
 Rerank = Callable[
     [str, list[VectorSearchResult], int],
     list[VectorSearchResult],
@@ -570,6 +572,7 @@ def build_graph(
 
     async def configured_roadmap_coach(
         state: GraphState,
+        on_answer_update: Callable[[str], Awaitable[None]] | None = None,
     ) -> RoadmapCoachResult:
         return await generate_roadmap_coach_response(
             router_llm,
@@ -577,6 +580,7 @@ def build_graph(
             roadmap_step=state.get("roadmap_step"),
             user_context=state.get("user_context"),
             conversation_history=state.get("conversation_history", []),
+            on_answer_update=on_answer_update,
         )
 
     async def configured_intent_classifier(
@@ -633,9 +637,7 @@ def build_graph(
     question_contextualizer_function = (
         question_contextualizer or configured_question_contextualizer
     )
-    roadmap_coach_function = roadmap_coach or configured_roadmap_coach
-
-    async def roadmap_coach_node(state: GraphState) -> dict[str, object]:
+    async def roadmap_coach_node(state: GraphState, config: RunnableConfig) -> dict[str, object]:
         """검색·Router·재작성 없이 한 번의 모델 호출로 로드맵 질문을 처리한다."""
         if is_roadmap_deterministically_blocked(
             state["query"],
@@ -652,7 +654,11 @@ def build_graph(
                 "cited_source_numbers": [],
             }
         try:
-            result = await roadmap_coach_function(state)
+            if roadmap_coach is None:
+                answer_update = config.get("configurable", {}).get("on_answer_update")
+                result = await configured_roadmap_coach(state, answer_update)
+            else:
+                result = await roadmap_coach(state)
         except Exception as exc:
             # 토큰 상한에 걸린 구조화 출력 파싱 실패와 그 밖의 원인을 로그에서
             # 구분할 수 있도록 예외 타입을 함께 남긴다.
@@ -885,6 +891,12 @@ def build_graph(
                 "notice_results": [],
                 "notice_backend_available": True,
                 "termination_reason": "notice_backend_error",
+            }
+        if notice_results is None:
+            return {
+                "notice_results": [],
+                "notice_backend_available": False,
+                "termination_reason": "notice_integration_unavailable",
             }
         logger.info("Notice route count: results=%d", len(notice_results))
         return {
@@ -1563,7 +1575,7 @@ def build_graph(
             "termination_reason": "calculation_complete",
         }
 
-    async def answer_node(state: GraphState) -> dict[str, object]:
+    async def answer_node(state: GraphState, config: RunnableConfig) -> dict[str, object]:
         """각 branch 결과만 사용해 공통 Structured Answer를 생성한다."""
         if state.get("guardrail_reason") == "out_of_scope":
             result = UnifiedAnswerResult(
@@ -1619,7 +1631,10 @@ def build_graph(
                 return _answer_update(fallback_answer("error"), [])
 
         generation_started = perf_counter()
+        answer_update = config.get("configurable", {}).get("on_answer_update")
         try:
+            if calculation_answer is not None and answer_update is not None:
+                await answer_update(calculation_answer)
             result = await generate_unified_answer(
                 fast_reasoning_llm if route in {"tax", "policy"} else router_llm,
                 query=state["query"],
@@ -1635,6 +1650,7 @@ def build_graph(
                 route_context=_answer_context(state),
                 status=status,
                 source_count=len(sources),
+                on_answer_update=answer_update if calculation_answer is None else None,
             )
             cited_sources = [
                 sources[source_number - 1]

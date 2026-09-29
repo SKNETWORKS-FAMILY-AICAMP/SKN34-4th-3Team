@@ -1,0 +1,82 @@
+# AWS App EC2 전용. db·elasticsearch 는 Data EC2 의 docker-compose.data.yml 이 띄운다.
+# 로컬 개발·학원 내부망 배포는 기존 docker-compose.yml 을 쓴다.
+#   docker compose -f docker-compose.app.yml run --rm db-migrate
+#   docker compose -f docker-compose.app.yml up -d --build
+# 발표자료(/ppt/)까지 띄우려면 .env 에 COMPOSE_PROFILES=presentation 을 둔다.
+# 절차: Docs/AWS_DEPLOY_GUIDE.md
+services:
+  backend:
+    build:
+      context: ./Backend
+    restart: unless-stopped
+    environment:
+      LLM_API_URL: http://llm:8001
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
+      TOKEN_SECRET: ${TOKEN_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # 공개 서버라 관리자 비밀번호 없이는 기동하지 않는다. 기존 DB 의 관리자 비밀번호도 이 값으로 바뀐다.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD(관리자 비밀번호)가 필요하다}
+    # 소스 bind mount 없이 이미지만으로 실행한다. 8000 은 호스트에 열지 않는다(nginx 가 /api 로 넘긴다).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)"]
+      interval: 10s
+      timeout: 15s
+      retries: 10
+      start_period: 30s
+    # db·elasticsearch 는 다른 호스트라 compose 의존성으로 기다릴 수 없다. llm healthcheck 재시도에 맡긴다.
+    depends_on:
+      llm:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./Frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Frontend/nginx.https.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  presentation:
+    build:
+      context: ./Presentation
+    profiles: ["presentation"]
+    restart: unless-stopped
+
+  llm:
+    build:
+      context: ./LLM
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
+      VECTOR_STORE_BACKEND: postgres
+      # Postgres 와 같은 Data EC2 에 있다.
+      ELASTICSEARCH_URL: http://${COMPOSE_DB_HOST}:${COMPOSE_ES_PORT:-9200}
+      PORT: 8001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # 배포마다 app_extras.sql 을 Data EC2 의 DB 에 다시 적용한다(전 문장 재실행 안전).
+  # up 으로는 뜨지 않고 run --rm db-migrate 로만 실행한다.
+  db-migrate:
+    image: pgvector/pgvector:pg16
+    profiles: ["migrate"]
+    restart: "no"
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./DB/app_extras.sql:/app_extras.sql:ro
+    command: ["psql", "-h", "${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}", "-p", "${COMPOSE_DB_PORT:-5432}", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/app_extras.sql"]
