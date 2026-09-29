@@ -14,6 +14,9 @@ services:
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
       TOKEN_SECRET: ${TOKEN_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # 공개 서버라 관리자 비밀번호 없이는 기동하지 않는다. 기존 DB 의 관리자 비밀번호도 이 값으로 바뀐다.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD(관리자 비밀번호)가 필요하다}
     # 소스 bind mount 없이 이미지만으로 실행한다. 8000 은 호스트에 열지 않는다(nginx 가 /api 로 넘긴다).
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=10)"]

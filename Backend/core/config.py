@@ -29,8 +29,7 @@ APP_DESCRIPTION = """
 - **LLM**: `LLM_API_URL`(기본 `http://127.0.0.1:8001`)이 살아 있으면 RAG/OCR/요약을 호출하고, 실패 시 목업으로 내려갑니다.
 - Rule 판정(세액감면·정책 자격)은 Backend에 두고, LLM은 근거 설명만 붙입니다.
 
-**데모 계정:** `demo@demo.com` / `demo123`  
-**관리자:** `admin@demo.com` / `admin123`
+**데모 계정:** `demo@demo.com` / `demo123`
 """
 OPENAPI_TAGS = [
     {"name": "상태", "description": "서버·DB·LLM 연결 여부"},
@@ -56,8 +55,9 @@ MAX_REDUCTION_RATE = 100
 
 DEMO_EMAIL = "demo@demo.com"
 DEMO_PASSWORD = "demo123"
-ADMIN_EMAIL = "admin@demo.com"
-ADMIN_PASSWORD = "admin123"
+# 관리자 계정은 환경변수로만 받는다. ADMIN_PASSWORD 가 없으면 관리자 계정을 시드하지 않는다.
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL") or "admin@demo.com"
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
 LLM_API_URL = os.getenv("LLM_API_URL", "http://127.0.0.1:8001").rstrip("/")
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "25"))

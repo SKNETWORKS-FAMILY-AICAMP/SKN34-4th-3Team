@@ -285,10 +285,6 @@ export const NO_EVENTS = {}; // useApi fallback은 참조가 고정된 모듈 �
 
 export const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-export const DEMO_EMAIL = 'demo@demo.com';
-
-export const DEMO_PASSWORD = 'demo123';
-
 // 한국표준산업분류 대분류 기준 (창업이 많은 순서로 정렬)
 
 export const INDUSTRIES = [
