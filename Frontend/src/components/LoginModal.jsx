@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
-import { DEMO_EMAIL, DEMO_PASSWORD, INDUSTRIES, REGIONS, DEFAULT_BIZ, DEFAULT_REGION } from '../constants.js';
+import { INDUSTRIES, REGIONS, DEFAULT_BIZ, DEFAULT_REGION } from '../constants.js';
 import { inputStyle, linkBtn, fieldLabel, socialBtn } from '../utils.js';
 
 export function LoginModal({ onClose, onSuccess }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
   const [name, setName] = useState('');
-  const [email, setEmail] = useState(DEMO_EMAIL);
-  const [pw, setPw] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [biz, setBiz] = useState(DEFAULT_BIZ);
   const [region, setRegion] = useState(REGIONS[0]); // 처음엔 서울
@@ -86,8 +86,8 @@ export function LoginModal({ onClose, onSuccess }) {
     authenticate(() => api.login(email, pw));
   };
 
-  // 소셜 로그인은 백엔드에 대응이 없어 데모 계정으로 실제 로그인해 토큰만 받는다.
-  const socialDemo = (displayName) => authenticate(() => api.login(DEMO_EMAIL, DEMO_PASSWORD), displayName);
+  // 소셜 로그인은 백엔드에 대응이 없어 안내만 띄운다.
+  const socialPending = () => setErr('소셜 로그인은 준비 중입니다.');
 
   const isLogin = mode === 'login';
 
@@ -175,13 +175,13 @@ export function LoginModal({ onClose, onSuccess }) {
           <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />또는<span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
-          <button type="button" disabled={busy} onClick={() => socialDemo('카카오 사용자')} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
+          <button type="button" disabled={busy} onClick={socialPending} style={{ ...socialBtn, background: '#FEE500', color: '#191919' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" fill="#191919">
               <path d="M12 3C6.48 3 2 6.54 2 10.8c0 2.76 1.86 5.18 4.66 6.55-.15.53-.7 2.5-.8 2.9-.12.48.18.47.37.35.15-.1 2.4-1.63 3.37-2.28.66.1 1.34.15 2 .15 5.52 0 10-3.54 10-7.9S17.52 3 12 3z" />
             </svg>
             카카오로 계속하기
           </button>
-          <button type="button" disabled={busy} onClick={() => socialDemo('네이버 사용자')} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
+          <button type="button" disabled={busy} onClick={socialPending} style={{ ...socialBtn, background: '#03C75A', color: '#fff' }}>
             <span style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 900, fontSize: 14 }}>N</span>
             네이버로 계속하기
           </button>

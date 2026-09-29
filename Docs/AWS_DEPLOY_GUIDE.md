@@ -159,7 +159,10 @@ COMPOSE_DB_HOST=<DATA_IP>
 COMPOSE_DB_PORT=5432
 COMPOSE_ES_PORT=9200
 COMPOSE_PROFILES=presentation   # 발표자료가 필요 없으면 비움
+ADMIN_PASSWORD=<관리자 비밀번호>   # 필수. 없으면 compose 실행 실패
 ```
+
+`ADMIN_PASSWORD`는 backend 기동 시 관리자 계정(`ADMIN_EMAIL`, 기본 `admin@demo.com`)에 적용. 기존 DB에 남은 옛 비밀번호도 이 값으로 갱신됨.
 
 `.env`의 `ELASTICSEARCH_URL`은 `docker-compose.app.yml`이 `http://<COMPOSE_DB_HOST>:9200`으로 덮어씀.
 
@@ -191,6 +194,9 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 
 이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트 → `git pull` → `db-migrate` → `up -d --build` 순서로 자동 배포.
 
+- PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
+- 자동 배포 대상은 App EC2뿐. Data EC2 변경은 10-1단계로 수동 반영
+
 ## 10. 백업 cron (Data EC2)
 
 ```bash
@@ -201,6 +207,33 @@ crontab -e
 ```
 
 한국 시간 기준으로 맞추려면 `sudo timedatectl set-timezone Asia/Seoul`.
+
+## 10-1. Data EC2 수동 반영
+
+자동 배포는 App EC2만 갱신. 아래 파일이 바뀐 `main` 병합 후에는 수동 반영 필요.
+
+| 변경 대상 | 자동 반영 | 조치 |
+|---|---|---|
+| `DB/app_extras.sql` | O (배포마다 db-migrate) | 없음 |
+| `DB/01_schema.sql` | X (빈 볼륨 최초 생성 시에만 적용) | 같은 변경을 `DB/app_extras.sql`에 재실행 안전한 문장으로 추가 |
+| `elasticsearch/`, `docker-compose.data.yml` | X | 아래 절차 |
+| Data EC2 `.env` | X | 아래 절차 |
+
+스키마 변경 규칙: 기존 DB에 반영돼야 하는 변경은 반드시 `DB/app_extras.sql`에 `ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`처럼 여러 번 실행해도 안전한 형태로 추가. `01_schema.sql`에만 넣으면 운영 DB에 반영되지 않음.
+
+Data EC2 반영 절차
+
+```bash
+ssh -i startup-on.pem -J ubuntu@<APP_EIP> ubuntu@<DATA_IP>
+cd ~/SKN34-4th-3Team
+git pull --ff-only origin main
+docker compose -f docker-compose.data.yml up -d --build
+docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 healthy 확인
+```
+
+- 볼륨(`db_data`, `elasticsearch_data`)은 유지되므로 데이터 손실 없음
+- DB 컨테이너가 재생성되면 App EC2의 backend·llm 연결이 잠시 끊김. 시연 중에는 반영 금지
+- `elasticsearch/`(분석기·플러그인) 변경 시 인덱스 재생성 필요. App EC2에서 `docker compose -f docker-compose.app.yml restart llm backend` 실행(backend 기동 시 LLM 인덱스가 비어 있으면 재색인) 후 `http://<APP_EIP>/api/health`의 `ragReady=true` 확인
 
 ## 11. 검증
 
