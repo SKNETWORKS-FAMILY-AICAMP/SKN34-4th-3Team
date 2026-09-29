@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -371,6 +371,27 @@ class ExistingContractTest(unittest.TestCase):
 
         self.assertEqual(result["answer"], chat_service.MOCK_ANSWERS["roadmap"])
         self.assertNotIn("근거 문서", result["answer"])
+
+
+class AsyncChatServiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_async_path_reads_context_and_saves_answer(self):
+        repo = FakeRepo([row(1, "policy", "이전 질문", "이전 답변", room_id=7)])
+        answer = AsyncMock(return_value=RAG_OK)
+        with patch.object(chat_service, "repo", repo), patch.object(
+            chat_service, "async_rag_answer", answer
+        ):
+            result = await chat_service.send_message_async(
+                1, "policy", "새 질문", room_id=7
+            )
+
+        self.assertEqual(result["roomId"], 7)
+        self.assertEqual(result["answer"], "LLM 답변")
+        self.assertEqual(len(repo.inserted), 1)
+        answer.assert_awaited_once()
+        options = answer.await_args.kwargs
+        self.assertEqual(options["user_context"]["userId"], 1)
+        self.assertEqual(options["conversation_history"][0]["content"], "이전 질문")
+        self.assertEqual(options["notice_results"], [])
 
 
 if __name__ == "__main__":

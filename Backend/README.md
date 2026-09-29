@@ -64,7 +64,7 @@ Content-Type: application/json
 | 역할 | 이메일 | 비밀번호 |
 |------|--------|----------|
 | 유저 | demo@demo.com | demo123 |
-| 관리자 | admin@demo.com | admin123 |
+| 관리자 | `ADMIN_EMAIL` (기본 admin@demo.com) | `ADMIN_PASSWORD` (환경변수, 비면 관리자 계정 미생성) |
 
 ---
 
@@ -81,6 +81,7 @@ Content-Type: application/json
 | `LLM_TIMEOUT_LEGAL_BASIS` / `_DEDUCTIBILITY` / `_SUMMARIZE` / `_OCR` / `_REINDEX` | `30` / `30` / `45` / `60` / `180` | 나머지 LLM 엔드포인트별 제한(초) |
 | `TOKEN_SECRET` | **없음 (필수)** | 토큰 서명 키. 미설정 시 기동 실패 |
 | `TOKEN_TTL_SECONDS` | `604800` (7일) | 토큰 만료 |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@demo.com` / 없음 | 관리자 계정. 비밀번호가 있으면 기동 시 생성하거나 그 값으로 갱신 |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | 비어 있음 | 실메일 발송용. `SMTP_HOST`가 없으면 알림함에만 쌓임 |
 | `SMTP_PORT` / `SMTP_FROM` | `587` / `noreply@skn34.local` | |
 

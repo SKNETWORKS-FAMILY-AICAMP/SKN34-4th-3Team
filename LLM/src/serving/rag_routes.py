@@ -3,7 +3,8 @@ import base64
 import binascii
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import suppress
 from functools import partial
 from threading import RLock
 from typing import Literal, Protocol
@@ -23,7 +24,7 @@ from src.data.postgres_repository import (
 )
 from src.features.document_processing import PdfDocumentError
 from src.features.business_plan_documents import (
-    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, convert_hwpx_to_pdf, decode_template,
+    BusinessPlanDocumentError, BusinessPlanRendererUnavailable, decode_template,
     inspect_template, render_default_hwpx, render_default_pdf,
     render_hwpx_form, render_pdf_form,
 )
@@ -117,7 +118,7 @@ class RagRuntime:
         *,
         embedding_factory: Callable[[], Embeddings] = get_embedding_model,
         llm_factory: Callable[[], BaseChatModel] = get_llm,
-        notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None,
+        notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None = None,
     ) -> None:
         """모델 팩토리와 비어 있는 RAG 실행 상태를 초기화한다.
 
@@ -136,7 +137,7 @@ class RagRuntime:
         self._hybrid_settings: Settings | None = None
         self._graph: CompiledStateGraph | None = None
         self._graph_settings: Settings | None = None
-        self._graph_notice_search: Callable[[GraphState], list[dict[str, object]]] | None = None
+        self._graph_notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None = None
         self.document_count = 0
         self.chunk_count = 0
         self.index_source: Literal["cache", "embedding"] | None = None
@@ -232,7 +233,7 @@ class RagRuntime:
     def require_graph(
         self,
         settings: Settings,
-        notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+        notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None,
     ) -> CompiledStateGraph:
         with self._cache_lock:
             if (
@@ -594,6 +595,8 @@ async def adapter_chat(
     request_body: RagChatRequest,
     rag_runtime: RagRuntime,
     settings_config: Settings,
+    *,
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> RagChatResponse:
     """Backend 사용자 Context와 공고 결과를 LangGraph 입력에 연결한다."""
     try:
@@ -611,18 +614,18 @@ async def adapter_chat(
             ],
             roadmap_step=request_body.roadmapStep,
             user_id=None,
-            notice_search=(
-                (
-                    lambda _state: [
-                        notice.model_dump(mode="json", exclude_none=True)
-                        for notice in request_body.noticeResults or []
-                    ]
-                )
+            notice_search=_backend_notice_search,
+            backend_notice_results=(
+                [
+                    notice.model_dump(mode="json", exclude_none=True)
+                    for notice in request_body.noticeResults
+                ]
                 if request_body.noticeResults is not None
                 else None
             ),
             rag_runtime=rag_runtime,
             settings=settings_config,
+            on_answer_update=on_answer_update,
         )
         sources = [
             _backend_source(source)
@@ -654,6 +657,39 @@ async def adapter_chat(
             exc,
             fallback_message="RAG chat failed.",
         ) from exc
+
+
+async def adapter_chat_stream(
+    request_body: RagChatRequest,
+    rag_runtime: RagRuntime,
+    settings_config: Settings,
+) -> AsyncIterator[dict[str, object]]:
+    queue: asyncio.Queue[dict[str, object] | None] = asyncio.Queue()
+
+    async def on_answer_update(answer: str) -> None:
+        await queue.put({"type": "draft", "answer": answer})
+
+    async def run() -> None:
+        try:
+            result = await adapter_chat(
+                request_body, rag_runtime, settings_config,
+                on_answer_update=on_answer_update,
+            )
+            await queue.put({"type": "done", "result": result.model_dump(mode="json")})
+        except Exception:
+            logger.exception("Streaming RAG chat failed")
+            await queue.put({"type": "error"})
+        finally:
+            await queue.put(None)
+
+    task = asyncio.create_task(run())
+    try:
+        while (event := await queue.get()) is not None:
+            yield event
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
 
 
 async def adapter_legal_basis(
@@ -992,7 +1028,7 @@ async def adapter_business_plan_template_inspect(
         fields = await asyncio.to_thread(inspect_template, kind, data)
         return BusinessPlanTemplateResponse(
             kind=kind, fields=fields,
-            outputFormats=["pdf"] if kind == "pdf" else ["hwpx", "pdf"],
+            outputFormats=[kind],
         )
     except BusinessPlanDocumentError as exc:
         raise ApiError(status_code=422, detail=str(exc)) from exc
@@ -1010,6 +1046,8 @@ async def adapter_business_plan_render(
             kind, data = decode_template(
                 request_body.template.fileName, request_body.template.contentBase64
             )
+            if request_body.format != kind:
+                raise BusinessPlanDocumentError(f"{kind.upper()} 양식은 {kind.upper()}로만 출력할 수 있습니다.")
             fields = await asyncio.to_thread(inspect_template, kind, data)
             values = {section["label"]: section["content"] for section in sections}
             if set(fields) != set(values) or len(fields) != len(sections):
@@ -1037,12 +1075,9 @@ async def adapter_business_plan_render(
                     raise BusinessPlanDocumentError("첨부 이미지의 합계는 4 MiB 이하여야 합니다.")
                 images[section["label"]] = (image.mimeType, raw)
             if kind == "pdf":
-                if request_body.format != "pdf":
-                    raise BusinessPlanDocumentError("PDF 양식은 PDF로만 출력할 수 있습니다.")
                 result = await asyncio.to_thread(render_pdf_form, data, values, request_body.title, images)
             else:
-                hwpx = await asyncio.to_thread(render_hwpx_form, data, values, images)
-                result = hwpx if request_body.format == "hwpx" else await asyncio.to_thread(convert_hwpx_to_pdf, hwpx)
+                result = await asyncio.to_thread(render_hwpx_form, data, values, images)
         elif request_body.images:
             raise BusinessPlanDocumentError("이미지를 배치할 PDF/HWPX 양식이 필요합니다.")
         elif request_body.format == "hwpx":
@@ -1262,9 +1297,11 @@ async def _execute_graph(
     conversation_history: list[dict[str, str]],
     roadmap_step: RoadmapStep | None,
     user_id: int | None,
-    notice_search: Callable[[GraphState], list[dict[str, object]]] | None,
+    notice_search: Callable[[GraphState], list[dict[str, object]] | None] | None,
     rag_runtime: RagRuntime,
     settings: Settings,
+    backend_notice_results: list[dict[str, object]] | None = None,
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> GraphState:
     """두 HTTP 계약이 공유하는 단일 LangGraph 실행 함수."""
     normalized_question = validate_question(
@@ -1275,23 +1312,32 @@ async def _execute_graph(
     resolved_user_context = user_context
     if resolved_user_context is None and user_id is not None:
         resolved_user_context = (
-            get_database_user_profile(user_id, settings)
+            await asyncio.to_thread(get_database_user_profile, user_id, settings)
             if settings.vector_store_backend == "postgres"
             else get_mock_user_profile(user_id)
         )
-    graph = rag_runtime.require_graph(settings, notice_search)
+    graph = await asyncio.to_thread(rag_runtime.require_graph, settings, notice_search)
+    graph_input = {
+        "query": normalized_question,
+        "category": category,
+        "policy_id": policy_id,
+        "top_k": result_limit,
+        "decision": decision,
+        "user_context": resolved_user_context,
+        "conversation_history": conversation_history,
+        "roadmap_step": roadmap_step,
+        "backend_notice_results": backend_notice_results,
+    }
+    if on_answer_update is None:
+        return await graph.ainvoke(graph_input)
     return await graph.ainvoke(
-        {
-            "query": normalized_question,
-            "category": category,
-            "policy_id": policy_id,
-            "top_k": result_limit,
-            "decision": decision,
-            "user_context": resolved_user_context,
-            "conversation_history": conversation_history,
-            "roadmap_step": roadmap_step,
-        }
+        graph_input, config={"configurable": {"on_answer_update": on_answer_update}}
     )
+
+
+def _backend_notice_search(state: GraphState) -> list[dict[str, object]] | None:
+    """요청별 공고는 GraphState에서 읽어 컴파일된 그래프를 재사용한다."""
+    return state.get("backend_notice_results")
 
 
 def _backend_user_context(context: BackendUserContext | None) -> dict | None:
