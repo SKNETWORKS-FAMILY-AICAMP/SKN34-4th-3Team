@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api, getToken } from './api.js';
 import { loadRoadmapDone, clearLegacyRoadmapDone } from './utils.js';
 import { USER_STORE_KEY } from './constants.js';
@@ -15,6 +15,8 @@ export function App() {
   const [pageKey, setPageKey] = useState('tax');
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
+  const bizplanUnsavedRef = useRef(false);
+  const reportBizplanUnsaved = useCallback((unsaved) => { bizplanUnsavedRef.current = unsaved; }, []);
   // 창업 로드맵 체크 상태 — 로드맵 페이지와 마이페이지가 공유. 서버(user_roadmap_progress)가 원본(아래 [userId] effect).
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
@@ -119,7 +121,15 @@ export function App() {
     }
   };
 
+  const confirmLeaveBizplan = () => {
+    if (view !== 'page' || pageKey !== 'bizplan' || !bizplanUnsavedRef.current) return true;
+    if (!window.confirm('저장하지 않은 사업계획서 내용이 있습니다. 저장하지 않고 벗어나면 변경 내용이 삭제됩니다. 계속할까요?')) return false;
+    bizplanUnsavedRef.current = false;
+    return true;
+  };
+
   const handleNavigate = (key) => {
+    if (key !== 'bizplan' && !confirmLeaveBizplan()) return;
     if (key === 'home') {
       setView('home');
       window.scrollTo(0, 0);
@@ -136,6 +146,7 @@ export function App() {
 
   const handleLoginClick = () => {
     if (user) {
+      if (!confirmLeaveBizplan()) return;
       api.logout();
       setUser(null);
       setView('home');
@@ -189,9 +200,10 @@ export function App() {
         <SubPage
           pageKey={pageKey}
           user={user}
-          onHome={() => setView('home')}
+          onHome={() => handleNavigate('home')}
           onLoginClick={handleLoginClick}
           onNavigate={handleNavigate}
+          onBizplanUnsavedChange={reportBizplanUnsaved}
           roadmapDone={roadmapDone}
           setRoadmapDone={updateRoadmapDone}
           savedPolicies={savedPolicies}
