@@ -79,7 +79,7 @@ const EXP_JUDGE_CATS = ['사무용품', '통신비', '차량유지비', '광고�
 // 목록 카드는 폭이 좁아 서버가 주는 긴 tierLabel 대신 짧은 표기를 쓴다.
 const TIER_SHORT_LABELS = { high: '높음', ambiguous: '확인 필요', low: '어려움' };
 // 카드의 상태 태그(경비 인정/확인 필요/어려움)에 쓰는 문구.
-const TIER_TAG_TEXT = { high: '경비 인정', ambiguous: '경비 확인 필요', low: '경비 인정 어려움' };
+const TIER_BADGE = { high: '인정', ambiguous: '확인 필요', low: '불인정' };
 // 카드 상태 태그 색상 + 필터 탭에 쓰는 클래스. high=인정 / ambiguous=확인 필요 / low=불인정.
 const TIER_CLASS = { high: 'ok', ambiguous: 'check', low: 'bad' };
 const TIER_TABS = [
@@ -102,6 +102,48 @@ function formatUploadedAt(iso) {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+// 목록에는 거래일을 "2026.08.18"처럼 보여준다.
+function formatTxDate(value) {
+  return value ? String(value).slice(0, 10).replaceAll('-', '.') : '거래일 미상';
+}
+
+// 영수증마다 여러 개로 나오던 태그(빠짐·증빙 부적격 등)를 사유 한 줄로 합친다.
+// 먼저 걸린 사유 하나만 보여주고, 나머지는 "외 N건"으로 센다.
+function receiptReason(item) {
+  const missing = item.missingFields || [];
+  const reasons = [];
+  if (missing.includes('상호')) reasons.push('상호명이 인식되지 않았어요');
+  if (missing.includes('금액')) reasons.push('금액이 인식되지 않았어요');
+  if (missing.includes('거래일')) reasons.push('거래일이 인식되지 않았어요');
+  // 증빙 부적격(false)은 간이영수증이 3만 원을 넘을 때만 나온다(소득세법 제160조의2).
+  if (item.proofValid === false) reasons.push('간이영수증은 3만 원 이하만 증빙으로 인정돼요');
+  else if (item.proofValid == null || missing.some((m) => m.startsWith('증빙'))) {
+    reasons.push('증빙 종류를 확인하지 못했어요');
+  }
+  // 빠진 것도 없고 증빙도 적격인데 "확인 필요"라면, 지출항목 특성상 업무 관련성을 봐야 하는 경우다.
+  if (!reasons.length && item.tier === 'ambiguous') reasons.push('업무 관련성을 직접 확인해 주세요');
+  if (!reasons.length) return '';
+  return reasons.length > 1 ? `${reasons[0]} 외 ${reasons.length - 1}건` : reasons[0];
+}
+
+// 펼친 목록·메뉴 밖을 누르거나 Esc를 누르면 닫는다.
+function useDismiss(ref, open, close) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) close();
+    };
+    const onKey = (e) => e.key === 'Escape' && close();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 }
 
 const STEP_ICONS = { pass: '✔', warn: '!', fail: '✖', unknown: '?' };
@@ -427,25 +469,15 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
   const [catBusy, setCatBusy] = useState(false);
   const [catErr, setCatErr] = useState('');
   const [catOpen, setCatOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // 카드를 접었다 펴도 "읽은 내용/판단/법령" 펼침 상태가 그대로 유지되도록 카드 레벨에서 들고 있는다.
   const [foldOpen, setFoldOpen] = useState({ read: false, judge: false, law: false });
   const catListRef = React.useRef(null);
   const catWrapRef = React.useRef(null);
+  const menuWrapRef = React.useRef(null);
 
-  // 펼쳐진 목록 밖을 누르거나 Esc를 누르면 닫는다.
-  useEffect(() => {
-    if (!catOpen) return undefined;
-    const onDown = (e) => {
-      if (catWrapRef.current && !catWrapRef.current.contains(e.target)) setCatOpen(false);
-    };
-    const onKey = (e) => e.key === 'Escape' && setCatOpen(false);
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [catOpen]);
+  useDismiss(catWrapRef, catOpen, () => setCatOpen(false));
+  useDismiss(menuWrapRef, menuOpen, () => setMenuOpen(false));
 
   // 열릴 때 현재 항목이 목록 안에서 보이도록 스크롤한다(페이지 스크롤은 건드리지 않는다).
   useEffect(() => {
@@ -538,10 +570,12 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
 
   const tierCls = TIER_CLASS[item.tier] || 'check';
   const uploadedLabel = formatUploadedAt(item.uploadedAt);
+  const vendorUnknown = !item.vendor || item.vendor === '상호 미상';
+  const reason = receiptReason(item);
 
   return (
-    <li className="exp-row">
-      <div className="exp-row__main">
+    <li className={'exp-row' + (open ? ' is-open' : '')}>
+      <div className="exp-row__grid">
         <button
           type="button"
           className="exp-row__thumb"
@@ -556,16 +590,12 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
           )}
         </button>
 
-        <div className="exp-row__body">
-          <div className="exp-row__top">
-            <span className="exp-row__vendor">{item.vendor}</span>
-            <span className="u-num exp-row__amount">{item.amount.toLocaleString()}원</span>
-          </div>
-
-          <div className="exp-row__meta">
-            {uploadedLabel && <span title="영수증을 올린 시각">{uploadedLabel} 업로드</span>}
-            <span className="exp-row__dot" aria-hidden="true">·</span>
-            <div className="exp-dd exp-dd--flat" ref={catWrapRef}>
+        <div className="exp-row__info">
+          <div className="exp-row__line1">
+            <span className={'exp-row__vendor' + (vendorUnknown ? ' is-unknown' : '')}>
+              {item.vendor || '상호 미상'}
+            </span>
+            <div className="exp-dd" ref={catWrapRef}>
               <button
                 type="button"
                 className={'exp-row__cat' + (catOpen ? ' is-open' : '')}
@@ -576,7 +606,7 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
                 aria-label={`지출항목: ${item.category}. 눌러서 바꾸기`}
               >
                 {item.category}
-                <span className="exp-dd__chev" aria-hidden="true">{catOpen ? '▴' : '▾'}</span>
+                <span className="exp-dd__chev" aria-hidden="true">▾</span>
               </button>
               {catOpen && (
                 <div className="exp-dd__list" role="listbox" aria-label="지출항목" ref={catListRef}>
@@ -597,30 +627,59 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
               )}
             </div>
           </div>
+          <div className="exp-row__sub" title={uploadedLabel ? `${uploadedLabel} 업로드` : undefined}>
+            {formatTxDate(item.date)} · {item.proofTypeLabel}
+          </div>
+          {reason && <div className="exp-row__reason">{reason}</div>}
           {catBusy && <p className="exp-card__busy" role="status">지출항목을 바꾸고 판정을 다시 계산하고 있어요…</p>}
           {catErr && <p className="cal__err">{catErr}</p>}
+        </div>
 
-          <div className="exp-row__tags">
-            <span className={'exp-row__tag exp-row__tag--' + tierCls}>
-              {TIER_TAG_TEXT[item.tier] || item.tierLabel}
-            </span>
-            <span className="exp-row__tag">{item.proofTypeLabel}</span>
-            {item.proofValid === false && <span className="exp-row__tag exp-row__tag--warn">증빙 부적격</span>}
-            {item.proofValid === null && <span className="exp-row__tag exp-row__tag--warn">증빙 확인 필요</span>}
-            {(item.missingFields || []).map((m) => (
-              <span key={m} className="exp-row__tag exp-row__tag--warn">빠짐: {m}</span>
-            ))}
-          </div>
+        <span className={'exp-badge exp-badge--' + tierCls}>{TIER_BADGE[item.tier] || item.tierLabel}</span>
 
-          <div className="exp-row__actions">
-            <button type="button" className="exp-row__link" onClick={openDetail} aria-expanded={open}>
-              {open ? '상세 접기' : '판독·판단·법령 상세보기'}
-            </button>
-            <span className="exp-row__sep" aria-hidden="true">|</span>
-            <button type="button" className="exp-row__link exp-row__link--danger" onClick={remove}>삭제</button>
-          </div>
+        <span className="exp-row__amount">{item.amount.toLocaleString()}원</span>
+
+        <div className="exp-menu" ref={menuWrapRef}>
+          <button
+            type="button"
+            className="exp-menu__btn"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={`${item.vendor || '상호 미상'} 영수증 메뉴`}
+          >
+            ⋮
+          </button>
+          {menuOpen && (
+            <div className="exp-menu__list" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="exp-menu__item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  openDetail();
+                }}
+              >
+                {open ? '상세 접기' : '판독·판단·법령 상세보기'}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="exp-menu__item exp-menu__item--danger"
+                onClick={() => {
+                  setMenuOpen(false);
+                  remove();
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          )}
         </div>
       </div>
+      {/* 삭제 실패 같은 오류는 상세를 펼치지 않았어도 보여준다(상세 안에서는 법령 섹션에 따로 나온다). */}
+      {err && !open && <p className="cal__err exp-row__err">{err}</p>}
 
       {zoom && imgUrl && (
         <div
@@ -700,6 +759,7 @@ export function ExpenseTracker({ user, onRequireLogin }) {
   const [err, setErr] = useState('');
   const [tierFilter, setTierFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = React.useRef(null);
   const userId = user && user.id;
 
@@ -723,9 +783,8 @@ export function ExpenseTracker({ user, onRequireLogin }) {
 
   // 한 번에 여러 장을 고를 수 있다. 한 장씩 순서대로 올려서(동시에 여러 OCR 요청을 던지지 않아)
   // 서버 부담을 줄이고, 실패한 파일만 따로 모아 끝나고 한 번에 알려준다.
-  const onFile = async (e) => {
-    const picked = Array.from(e.target.files || []);
-    e.target.value = '';
+  // 파일 선택 창과 끌어다 놓기 모두 이 함수로 올린다.
+  const uploadFiles = async (picked) => {
     if (!picked.length) return;
     if (!userId) {
       onRequireLogin && onRequireLogin();
@@ -796,6 +855,23 @@ export function ExpenseTracker({ user, onRequireLogin }) {
     }
   };
 
+  const onFile = (e) => {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = '';
+    uploadFiles(picked);
+  };
+
+  const onDragOver = (e) => {
+    e.preventDefault();
+    if (!dragOver) setDragOver(true);
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (uploading) return;
+    uploadFiles(Array.from((e.dataTransfer && e.dataTransfer.files) || []));
+  };
+
   const onDeleted = (id) => setItems((cur) => cur.filter((x) => x.expenseId !== id));
   const onCategoryChanged = (id, category, detail) =>
     setItems((cur) =>
@@ -817,7 +893,20 @@ export function ExpenseTracker({ user, onRequireLogin }) {
   const highCount = items.filter((x) => x.tier === 'high').length;
   const ambiguousCount = items.filter((x) => x.tier === 'ambiguous').length;
   const lowCount = items.filter((x) => x.tier === 'low').length;
-  const approvalRate = items.length ? Math.round((highCount / items.length) * 100) : 0;
+  const tierCounts = { all: items.length, high: highCount, ambiguous: ambiguousCount, low: lowCount };
+
+  // 인정률 카드는 이번 달(거래일 기준) 영수증만 센다. 필터 건수는 전체 기준 그대로다.
+  const today = new Date();
+  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const monthItems = items.filter((x) => String(x.date || '').startsWith(monthKey));
+  const month = {
+    total: monthItems.length,
+    high: monthItems.filter((x) => x.tier === 'high').length,
+    ambiguous: monthItems.filter((x) => x.tier === 'ambiguous').length,
+    low: monthItems.filter((x) => x.tier === 'low').length,
+  };
+  const monthRate = month.total ? Math.round((month.high / month.total) * 100) : null;
+  const monthShare = (n) => (month.total ? `${(n / month.total) * 100}%` : '0%');
 
   const searchNorm = search.trim().toLowerCase();
   const filteredItems = items
@@ -829,12 +918,18 @@ export function ExpenseTracker({ user, onRequireLogin }) {
     setSearch('');
   };
 
+  const pageHead = (
+    <header className="exp-head">
+      <h2 className="exp-head__title">지출관리</h2>
+    </header>
+  );
+
   return (
     <div className="tool">
       <div className="tool__panel exp2">
         {!userId ? (
           <React.Fragment>
-            <h2 className="exp-eyebrow"><span className="exp-eyebrow__dot" aria-hidden="true" />지출관리 · 영수증 경비 판정</h2>
+            {pageHead}
             <p className="cvx__empty">
               로그인하면 영수증을 올리고 경비 판정을 받을 수 있어요.{' '}
               {onRequireLogin && (
@@ -855,99 +950,95 @@ export function ExpenseTracker({ user, onRequireLogin }) {
             />
             <div className="exp2__layout">
               <aside className="exp2__side">
-                <h2 className="exp-eyebrow"><span className="exp-eyebrow__dot" aria-hidden="true" />지출관리 · 영수증 경비 판정</h2>
+                {pageHead}
 
                 {uploading ? (
                   <div className="exp-ai" role="status" aria-live="polite">
-                    <span className="exp-ai__glow exp-ai__glow--a" aria-hidden="true" />
-                    <span className="exp-ai__glow exp-ai__glow--b" aria-hidden="true" />
-                    <div className="exp-ai__orb" aria-hidden="true">
-                      <span className="exp-ai__orb-ring" />
-                      <span className="exp-ai__orb-core" />
+                    <div className="exp-ai__scan" aria-hidden="true">
+                      <span className="exp-ai__paper">
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                      <span className="exp-ai__beam" />
+                      {uploadTotal > 1 && (
+                        <span className="exp-ai__count">{uploadIndex}/{uploadTotal}</span>
+                      )}
                     </div>
-                    <div className="exp-ai__text">
-                      <p className="exp-ai__title">
-                        AI가 영수증을 분석하고 있어요
-                        {uploadTotal > 1 && ` (${uploadIndex}/${uploadTotal})`}
-                      </p>
+                    <div className="exp-ai__body">
+                      <p className="exp-ai__title">AI가 영수증을 분석하고 있어요</p>
+                      <ol className="exp-ai__steps">
+                        {ANALYZE_STEPS.map((label, i) => (
+                          <li
+                            key={label}
+                            className={i < uploadStep ? 'is-done' : i === uploadStep ? 'is-active' : ''}
+                          >
+                            <span className="exp-ai__dot" aria-hidden="true" />
+                            {label}
+                          </li>
+                        ))}
+                      </ol>
                       <p className="exp-ai__sub">{uploadMsg || '영수증을 확인하고 있어요…'}</p>
                     </div>
-                    <ol className="exp-ai__steps">
-                      {ANALYZE_STEPS.map((label, i) => (
-                        <li
-                          key={label}
-                          className={i < uploadStep ? 'is-done' : i === uploadStep ? 'is-active' : ''}
-                        >
-                          <span className="exp-ai__dot" aria-hidden="true" />
-                          {label}
-                        </li>
-                      ))}
-                    </ol>
                   </div>
                 ) : (
-                  <button type="button" className="exp-upload" onClick={pickFile}>
-                    📷 영수증 올리기 (여러 장 선택 가능)
+                  <button
+                    type="button"
+                    className={'exp-drop' + (dragOver ? ' is-over' : '')}
+                    onClick={pickFile}
+                    onDragOver={onDragOver}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={onDrop}
+                  >
+                    <span className="exp-drop__icon" aria-hidden="true">+</span>
+                    <span className="exp-drop__title">영수증 올리기</span>
+                    <span className="exp-drop__hint">끌어다 놓거나 클릭 · 여러 장 가능</span>
                   </button>
                 )}
                 {err && <p className="cal__err">{err}</p>}
 
                 {!loading && items.length > 0 && (
                   <React.Fragment>
-                    <div className="exp-stats exp-stats--vert">
-                      <div className="exp-stat">
-                        <span className="exp-stat__lbl">전체 영수증</span>
-                        <span className="exp-stat__num">{items.length}건</span>
+                    <section className="exp-rate" aria-label="이번 달 인정률">
+                      <p className="exp-rate__lbl">이번 달 인정률</p>
+                      <p className="exp-rate__num">{monthRate == null ? '—' : `${monthRate}%`}</p>
+                      <p className="exp-rate__sub">
+                        {month.total ? `${month.total}건 중 ${month.high}건` : '이번 달 거래 영수증이 없어요'}
+                      </p>
+                      <div
+                        className="exp-rate__bar"
+                        role="img"
+                        aria-label={`인정 ${month.high}건, 확인 필요 ${month.ambiguous}건, 불인정 ${month.low}건`}
+                      >
+                        <span className="exp-rate__seg exp-rate__seg--ok" style={{ width: monthShare(month.high) }} />
+                        <span className="exp-rate__seg exp-rate__seg--check" style={{ width: monthShare(month.ambiguous) }} />
+                        <span className="exp-rate__seg exp-rate__seg--bad" style={{ width: monthShare(month.low) }} />
                       </div>
-                      <div className="exp-stat exp-stat--ok">
-                        <span className="exp-stat__lbl">경비 인정</span>
-                        <span className="exp-stat__num">{highCount}건</span>
-                      </div>
-                      <div className="exp-stat exp-stat--check">
-                        <span className="exp-stat__lbl">확인 필요</span>
-                        <span className="exp-stat__num">{ambiguousCount}건</span>
-                      </div>
-                      <div className="exp-stat exp-stat--bad">
-                        <span className="exp-stat__lbl">경비 불인정</span>
-                        <span className="exp-stat__num">{lowCount}건</span>
-                      </div>
-                      <div className="exp-stat exp-stat--accent">
-                        <span className="exp-stat__lbl">인정률</span>
-                        <span className="exp-stat__num">{approvalRate}%</span>
-                      </div>
-                    </div>
+                    </section>
 
-                    <div className="exp-tabs exp-tabs--vert" role="tablist" aria-label="경비 인정 상태 필터">
-                      {TIER_TABS.map((t) => {
-                        const count = t.key === 'all' ? items.length : t.key === 'high' ? highCount : t.key === 'ambiguous' ? ambiguousCount : lowCount;
-                        return (
-                          <button
-                            key={t.key}
-                            type="button"
-                            role="tab"
-                            aria-selected={tierFilter === t.key}
-                            className={'exp-tab' + (tierFilter === t.key ? ' is-on' : '')}
-                            onClick={() => setTierFilter(t.key)}
-                          >
-                            {t.label} <span className="exp-tab__count">{count}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <nav className="exp-filter" aria-label="경비 인정 상태 필터">
+                      {TIER_TABS.map((t) => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          aria-pressed={tierFilter === t.key}
+                          className={'exp-filter__item' + (tierFilter === t.key ? ' is-on' : '')}
+                          onClick={() => setTierFilter(t.key)}
+                        >
+                          <span
+                            className={'exp-filter__dot' + (TIER_CLASS[t.key] ? ` exp-filter__dot--${TIER_CLASS[t.key]}` : '')}
+                            aria-hidden="true"
+                          />
+                          {t.label}
+                          <span className="exp-filter__count">{tierCounts[t.key]}</span>
+                        </button>
+                      ))}
+                    </nav>
 
-                    <input
-                      type="text"
-                      className="exp-search exp-search--full"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="상호·지출항목 검색"
-                      aria-label="영수증 검색"
-                    />
-                    <button
-                      type="button"
-                      className="exp-excel exp-excel--full"
-                      onClick={() => downloadExpensesExcel(filteredItems)}
-                    >
-                      📊 엑셀로 다운로드
+                    <button type="button" className="exp-export" onClick={() => downloadExpensesExcel(filteredItems)}>
+                      엑셀로 내보내기
                     </button>
                   </React.Fragment>
                 )}
@@ -958,32 +1049,46 @@ export function ExpenseTracker({ user, onRequireLogin }) {
                   <p className="ai__hint">불러오는 중…</p>
                 ) : items.length === 0 ? (
                   <p className="cvx__empty">아직 올린 영수증이 없어요.</p>
-                ) : filteredItems.length === 0 ? (
-                  <div className="exp-empty">
-                    <p>조건에 맞는 영수증이 없어요.</p>
-                    <button type="button" className="exp-empty__reset" onClick={resetFilters}>
-                      필터 초기화
-                    </button>
-                  </div>
                 ) : (
                   <React.Fragment>
-                    <div className="exp2__mainhead">
-                      <span className="exp-toolbar__count">영수증 {filteredItems.length}건</span>
+                    <div className="exp-listhead">
+                      <h3 className="exp-listhead__title">
+                        영수증 <span className="exp-listhead__count">{filteredItems.length}</span>건
+                      </h3>
+                      <input
+                        type="text"
+                        className="exp-listhead__search"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="상호·지출항목 검색"
+                        aria-label="영수증 검색"
+                      />
                     </div>
-                    <ul className="exp-list exp-list--cards">
-                      {filteredItems.map((it) => (
-                        <ReceiptCard
-                          key={it.expenseId}
-                          item={it}
-                          onDeleted={onDeleted}
-                          onCategoryChanged={onCategoryChanged}
-                        />
-                      ))}
-                    </ul>
-                    <div className="exp-total">
-                      <span>합계 · 인정 가능성 높음 {filteredItems.filter((x) => x.tier === 'high').length}/{filteredItems.length}건</span>
-                      <span className="u-num">{filteredTotal.toLocaleString()}원</span>
-                    </div>
+                    {filteredItems.length === 0 ? (
+                      <div className="exp-empty">
+                        <p>조건에 맞는 영수증이 없어요.</p>
+                        <button type="button" className="exp-empty__reset" onClick={resetFilters}>
+                          필터 초기화
+                        </button>
+                      </div>
+                    ) : (
+                      <React.Fragment>
+                        <ul className="exp-list">
+                          {filteredItems.map((it) => (
+                            <ReceiptCard
+                              key={it.expenseId}
+                              item={it}
+                              onDeleted={onDeleted}
+                              onCategoryChanged={onCategoryChanged}
+                            />
+                          ))}
+                        </ul>
+                        <div className="exp-total">
+                          <span>합계 · 인정 {filteredItems.filter((x) => x.tier === 'high').length}/{filteredItems.length}건</span>
+                          <span className="exp-total__sum">{filteredTotal.toLocaleString()}원</span>
+                        </div>
+                      </React.Fragment>
+                    )}
                   </React.Fragment>
                 )}
               </div>

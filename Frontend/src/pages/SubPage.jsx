@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { LogoMark, BrandWord } from '../components/LogoMark.jsx';
 import { MenuDrawer } from '../components/MenuDrawer.jsx';
 import { Nav } from '../components/Nav.jsx';
 import { RoadmapGuide } from './RoadmapGuide.jsx';
@@ -23,7 +24,8 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, onBiz
   const body = (
     <React.Fragment>
       <div className={'fp' + (slim ? ' fp--wide' : '') + (pageKey === 'roadmap' ? ' fp--wideplus' : '')}>
-        {pageKey !== 'bizplan' && (
+        {/* 사업계획서·지출관리는 페이지 안에 자체 제목이 있어 공용 제목을 겹쳐 두지 않는다. */}
+        {pageKey !== 'bizplan' && pageKey !== 'expenses' && (
           <div className={'fp__head' + (slim ? ' fp__head--plain' : '')}>
             <div className="fp__head-in">
               <h1 className="fp__title">{meta.title}</h1>
@@ -49,12 +51,12 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, onBiz
           )}
           {pageKey === 'tax' && <TaxAssistantPage user={user} onRequireLogin={onLoginClick} />}
           {pageKey === 'expenses' && (
-            <div className="exp-page">
+            <div className="exp-page exp-page--full">
               <ExpenseTracker user={user} onRequireLogin={onLoginClick} />
             </div>
           )}
           {pageKey === 'bizplan' && (
-            <div className="exp-page">
+            <div className="exp-page exp-page--full">
               <BusinessPlanPage user={user} onRequireLogin={onLoginClick}
                 savedPolicies={savedPolicies} onToggleSavedPolicy={onToggleSavedPolicy}
                 onUnsavedChange={onBizplanUnsavedChange} />
@@ -77,8 +79,8 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, onBiz
           <header className="rmhead">
             <div className="rmhead__in">
               <button className="brand" type="button" onClick={onHome}>
-                <span className="brand__mark" aria-hidden="true">ON</span>
-                창업ON
+                <LogoMark />
+                <BrandWord />
               </button>
               <button
                 className="hamburger"

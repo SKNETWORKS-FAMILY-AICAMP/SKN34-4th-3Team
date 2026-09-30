@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { LogoMark, BrandWord } from '../components/LogoMark.jsx';
 import { useApi, api } from '../api.js';
 import {
   MP_MENU, MP_RECENT_MAX, CHATLOG_TABS,
@@ -830,8 +831,8 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
     <div className="mp">
       <aside className="mp-side">
         <button className="mp-brand" type="button" onClick={onHome}>
-          <span className="brand__mark" aria-hidden="true">ON</span>
-          창업ON
+          <LogoMark />
+          <BrandWord />
         </button>
         <nav className="mp-nav" aria-label="마이페이지 메뉴">
           {MP_MENU.map((m, i) => {

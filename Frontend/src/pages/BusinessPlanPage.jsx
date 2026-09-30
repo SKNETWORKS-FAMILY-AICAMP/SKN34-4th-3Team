@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { INDUSTRIES, REGIONS } from '../constants.js';
 import { linkBtn } from '../utils.js';
@@ -79,6 +79,20 @@ const VISIBLE_STEPS = [
   { key: 'done', label: '재평가 및 저장' },
 ];
 
+// 단계별 섹션 카드. tone은 색 계열(a=파랑, b=보라, c=회색). 사이드 메뉴·카드 머리글이 같은 값을 쓴다.
+const STEP_SECTIONS = {
+  refine: [
+    { id: 'basic', letter: 'A', tone: 'a', title: '기초 정보', menu: 'A · 기초 정보', desc: '사업의 기본 사항을 선택하고 입력해요' },
+    { id: 'idea', letter: 'B', tone: 'b', title: '아이디어 정리', menu: 'B · 아이디어 정리', desc: '누구의 어떤 문제를 어떻게 풀고, 어떻게 수익을 내는지 적어요' },
+    { id: 'extra', letter: 'C', tone: 'c', title: '추가 설명 (선택)', menu: 'C · 추가 설명', desc: '초안에 더 반영하고 싶은 내용이 있으면 적어요' },
+  ],
+  // 시안이 정한 설명 문구가 없어 제목만 둔다.
+  setup: [
+    { id: 'announcement', letter: 'A', tone: 'a', title: '제출할 공고 (선택)', menu: 'A · 제출할 공고' },
+    { id: 'template', letter: 'B', tone: 'b', title: '사업계획서 양식 (선택 · PDF/HWPX)', menu: 'B · 사업계획서 양식' },
+  ],
+};
+
 const FIELD_ANALYSIS_MARKER = '__FIELD_ANALYSIS_V1__';
 
 function fieldLabel(label) {
@@ -157,6 +171,27 @@ function reviewRows(value, minimum = 1) {
   return Math.min(8, Math.max(minimum, wrappedLines));
 }
 
+// 아이디어 정리 항목의 textarea: 내용에 맞춰 높이가 자동으로 늘어난다.
+// field-sizing: content를 못 쓰는 브라우저를 위해 값이 바뀔 때마다 scrollHeight로 맞춘다.
+function AutoTextarea({ value, onChange, ...rest }) {
+  const ref = useRef(null);
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  };
+  useLayoutEffect(fit, [value]);
+  useEffect(() => {
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
+  return (
+    <textarea ref={ref} rows={1} value={value} {...rest}
+      onChange={(event) => { onChange(event.target.value); fit(); }} />
+  );
+}
+
 function FieldControl({ field, value, onChange }) {
   if (field.options) {
     return (
@@ -231,19 +266,32 @@ function downloadBase64File({ fileName, mimeType, contentBase64 }) {
   URL.revokeObjectURL(url);
 }
 
+// AI가 일하는 동안 보여주는 애니메이션: 문서에 줄이 차례로 써지고 반짝이가 깜빡인다.
+// 이 화면 전용 스타일(bp2__ai*)만 쓴다. 예전에는 지출관리 애니메이션 클래스를 빌려 써서,
+// 그쪽 스타일이 바뀌면 함께 깨졌다.
 function AnalyzingPanel({ title, sub }) {
   return (
-    <div className="exp-ai" role="status" aria-live="polite">
-      <span className="exp-ai__glow exp-ai__glow--a" aria-hidden="true" />
-      <span className="exp-ai__glow exp-ai__glow--b" aria-hidden="true" />
-      <div className="exp-ai__orb" aria-hidden="true">
-        <span className="exp-ai__orb-ring" />
-        <span className="exp-ai__orb-core" />
+    <div className="bp2__ai" role="status" aria-live="polite">
+      <div className="bp2__ai-art" aria-hidden="true">
+        <span className="bp2__ai-doc">
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+        <svg className="bp2__ai-spark bp2__ai-spark--a" viewBox="0 0 24 24" focusable="false">
+          <path d="M12 1.5l2.6 7.9 7.9 2.6-7.9 2.6L12 22.5l-2.6-7.9L1.5 12l7.9-2.6z" fill="currentColor" />
+        </svg>
+        <svg className="bp2__ai-spark bp2__ai-spark--b" viewBox="0 0 24 24" focusable="false">
+          <path d="M12 1.5l2.6 7.9 7.9 2.6-7.9 2.6L12 22.5l-2.6-7.9L1.5 12l7.9-2.6z" fill="currentColor" />
+        </svg>
       </div>
-      <div className="exp-ai__text">
-        <p className="exp-ai__title">{title}</p>
-        <p className="exp-ai__sub">{sub}</p>
+      <div className="bp2__ai-text">
+        <p className="bp2__ai-title">{title}</p>
+        <p className="bp2__ai-sub">{sub}</p>
       </div>
+      <span className="bp2__ai-bar" aria-hidden="true" />
     </div>
   );
 }
@@ -272,6 +320,39 @@ function AnnouncementCards({ items, savedIds, selectedPolicyId, savingId, select
   );
 }
 
+// 섹션 카드: 색 띠 머리글(A/B/C 배지 + 제목 + 한 줄 설명) 아래에 본문. 사이드 메뉴가 id로 스크롤한다.
+function SectionCard({ section, open = true, onToggle, children }) {
+  const titleId = 'bp-sec-title-' + section.id;
+  const bodyId = 'bp-sec-body-' + section.id;
+  return (
+    <section id={'bp-sec-' + section.id}
+      className={'bp2__card bp2__card--' + section.tone + (open ? '' : ' is-collapsed')}
+      aria-labelledby={titleId} data-bp-section={section.id}>
+      <header className="bp2__card-head">
+        <span className="bp2__badge" aria-hidden="true">{section.letter}</span>
+        <div className="bp2__card-titles">
+          <h3 id={titleId} className="bp2__card-title">{section.title}</h3>
+          {section.desc && <p className="bp2__card-desc">{section.desc}</p>}
+        </div>
+        {onToggle && (
+          <button type="button" className="bp2__toggle" aria-expanded={open} aria-controls={bodyId}
+            aria-label={section.title + (open ? ' 접기' : ' 펼치기')} title={open ? '접기' : '펼치기'}
+            onClick={onToggle}>
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
+      </header>
+      <div id={bodyId} className="bp2__collapse">
+        <div className="bp2__collapse-in">
+          <div className="bp2__card-body">{children}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ScoreGauge({ score }) {
   const pct = Math.max(0, Math.min(100, score));
   return (
@@ -285,6 +366,11 @@ function ScoreGauge({ score }) {
 export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onToggleSavedPolicy, onUnsavedChange }) {
   const userId = user && user.id;
   const mainRef = useRef(null);
+  // 왼쪽 "섹션 이동" 메뉴에서 지금 보이는 섹션. 화면 상태일 뿐 작성 내용과는 무관하다.
+  const [activeSection, setActiveSection] = useState('');
+  const [collapsed, setCollapsed] = useState({});
+  const toggleCard = (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
+  const sectionLockRef = useRef(0);
   const [active, setActive] = useState('refine');
   const [form, setForm] = useState(EMPTY_FORM);
   const [profileIndustry, setProfileIndustry] = useState('');
@@ -317,6 +403,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [selectingPolicyId, setSelectingPolicyId] = useState(null);
   const [pickerSaveError, setPickerSaveError] = useState('');
   const [templateFile, setTemplateFile] = useState(null);
+  const [templateDragOver, setTemplateDragOver] = useState(false);
+  const templateInputRef = useRef(null);
   const [templateError, setTemplateError] = useState('');
   const [templateInfo, setTemplateInfo] = useState(null);
   const [inspectingTemplate, setInspectingTemplate] = useState(false);
@@ -439,8 +527,51 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   }, [userId]);
 
   useEffect(() => {
-    if (mainRef.current) mainRef.current.scrollTop = 0;
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
+      // 화면은 페이지(.fp__body)가 스크롤되므로 단계가 바뀌면 그쪽도 맨 위로 올린다.
+      const scroller = mainRef.current.closest('.fp__body');
+      if (scroller) scroller.scrollTop = 0;
+    }
   }, [active, supplementPage]);
+
+  // 스크롤 위치에 따라 사이드 메뉴의 활성 섹션을 바꾼다(IntersectionObserver).
+  useEffect(() => {
+    const sections = STEP_SECTIONS[active];
+    setActiveSection(sections ? sections[0].id : '');
+    if (!sections || typeof IntersectionObserver === 'undefined') return undefined;
+    const els = sections.map((sec) => document.getElementById('bp-sec-' + sec.id)).filter(Boolean);
+    if (!els.length) return undefined;
+    const scroller = els[0].closest('.fp__body');
+    const visible = new Set();
+    // 맨 아래까지 내렸는가(내용이 짧아 스크롤이 없는 화면은 제외).
+    const atBottom = () => !!scroller && scroller.scrollTop > 0
+      && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4;
+    const pick = () => {
+      if (Date.now() < sectionLockRef.current) return; // 메뉴를 눌러 스크롤하는 동안은 깜빡이지 않게 둔다
+      // 짧은 마지막 카드는 관찰 구간에 못 들어오므로, 맨 아래면 마지막 섹션으로 본다.
+      if (atBottom()) {
+        setActiveSection(sections[sections.length - 1].id);
+        return;
+      }
+      // 관찰 구간에 걸린 섹션이 여럿이면(앞 카드 끝 + 다음 카드 시작) 지금 읽는 쪽인 아래쪽을 고른다.
+      const shown = sections.filter((sec) => visible.has(sec.id));
+      if (shown.length) setActiveSection(shown[shown.length - 1].id);
+    };
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const id = entry.target.getAttribute('data-bp-section');
+        if (entry.isIntersecting) visible.add(id); else visible.delete(id);
+      });
+      pick();
+    }, { rootMargin: '-15% 0px -65% 0px', threshold: 0 });
+    els.forEach((el) => io.observe(el));
+    if (scroller) scroller.addEventListener('scroll', pick, { passive: true });
+    return () => {
+      io.disconnect();
+      if (scroller) scroller.removeEventListener('scroll', pick);
+    };
+  }, [active, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -720,6 +851,19 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     } finally {
       setInspectingTemplate(false);
     }
+  };
+
+  // 끌어다 놓기·삭제도 파일 선택 창과 같은 inspectTemplate을 거친다(선택 없음 = 파일 지우기).
+  const onTemplateDrop = (event) => {
+    event.preventDefault();
+    setTemplateDragOver(false);
+    if (inspectingTemplate) return;
+    const files = event.dataTransfer && event.dataTransfer.files;
+    if (files && files.length) inspectTemplate({ target: { files, value: '' } });
+  };
+  const removeTemplate = () => {
+    if (templateInputRef.current) templateInputRef.current.value = '';
+    inspectTemplate({ target: { files: [], value: '' } });
   };
 
   const evaluateSections = (sections) => api.evaluateBusinessPlan({
@@ -1010,6 +1154,16 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     setActive(key);
   };
 
+  const goSection = (id) => {
+    const el = document.getElementById('bp-sec-' + id);
+    if (!el) return;
+    setCollapsed((prev) => (prev[id] ? { ...prev, [id]: false } : prev));
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    sectionLockRef.current = Date.now() + 900;
+    setActiveSection(id);
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
+
   const saveNow = async () => {
     if (!userId) {
       onRequireLogin && onRequireLogin();
@@ -1050,6 +1204,33 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const evaluationBasis = selectedAnnouncement
     ? `선택한 공고와 ${templateInfo ? '제출한 양식' : '기본 PSST 양식'}`
     : templateInfo ? '제출한 양식' : '기본 PSST 양식';
+  // 화면에 보이는 단계 기준 번호. 현재 단계가 목록에 없으면 첫 단계로 본다.
+  const currentIdx = Math.max(activeIdx, 0);
+  const stepNo = currentIdx + 1;
+  const stepSections = STEP_SECTIONS[active];
+  const currentStep = visibleSteps[currentIdx];
+  // 안내문: 지금 단계에서 다음 행동을 막고 있는 이유. 없으면 표시하지 않는다.
+  const guideText = active === 'refine'
+    ? (refinedDone ? 'AI 정리가 완료됐습니다. 내용을 검토하고 필요한 부분을 수정해 주세요.' : '')
+    : active === 'setup' && !refinedDone
+      ? '계획 정리에서 AI 정리를 완료해야 초안을 만들 수 있습니다.'
+      : '';
+  // 머리글과 타임라인이 같은 문구를 쓰도록 한 곳에서 정한다. 설명이 없는 단계는 빈 문자열.
+  const stepDesc = (key) => ({
+    setup: '공고와 양식은 선택 사항입니다. 양식이 없으면 기본 PSST 양식으로 초안을 만듭니다.',
+    supplement: '선택한 양식에서 추가 정보가 필요한 입력 칸만 확인하세요. 모르는 정보는 비워 둘 수 있습니다.',
+    preview: `${evaluationBasis} 기준의 AI 예비진단 결과를 확인하세요.`,
+    improve: '평가 내용을 참고해 항목을 수정하세요. 제목에 마우스를 올리거나 키보드로 선택하면 해당 평가를 볼 수 있습니다.',
+  }[key] || '');
+
+  const renderBasic = (field) => (
+    <label key={field.key} className={'bp-field' + (field.key === 'businessName' || field.multiline ? ' bp2__full' : '')}>
+      <span className="bp-field__label">{field.label}</span>
+      <FieldControl field={field.key === 'industry' ? { ...field, options: industryOptions } : field}
+        value={form[field.key]}
+        onChange={(value) => setReviewedField(field.key, value)} />
+    </label>
+  );
 
   if (!userId) {
     return (
@@ -1069,128 +1250,199 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
 
   return (
     <div className="bp2">
+      {/* 진행 단계 브레드크럼: 완료 단계는 눌러서 돌아가고, 예정 단계는 누를 수 없다. */}
+      <nav className="bp2__crumbs" aria-label="진행 단계">
+        <ol className="bp2__crumbs-in">
+          {visibleSteps.map((step, i) => {
+            const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo';
+            return (
+              <li key={step.key} className={'bp2__crumb is-' + state}
+                aria-current={state === 'current' ? 'step' : undefined}>
+                {state === 'done'
+                  ? <button type="button" onClick={() => goStep(step.key)}>{step.label}</button>
+                  : <span>{step.label}</span>}
+              </li>
+            );
+          })}
+        </ol>
+      </nav>
+
       <div className="bp2__body">
-        <aside className="bp2__sidebar">
-          <nav className="bp2__nav" aria-label="사업계획서 작성 단계">
-            {visibleSteps.map((step) => (
-              <button
-                key={step.key}
-                type="button"
-                className={'bp2__navitem' + (active === step.key ? ' is-active' : '')}
-                onClick={() => goStep(step.key)}
-              >
-                <span className={'bp2__navcheck' + (stepDone(step.key) ? ' is-done' : '')} aria-hidden="true">
-                  {stepDone(step.key) ? '✔' : ''}
-                </span>
-                {step.label}
-              </button>
-            ))}
-          </nav>
-          <div className="bp2__actions">
-            {savedNote && <span className="bp2__saved" role="status">{savedNote}</span>}
-            <button type="button" className="bp2__save" onClick={saveNow}>임시저장</button>
-            {nextStep && (
-              <button type="button" className="bp2__next" onClick={() => goStep(nextStep.key)}>
-                다음 단계 · {nextStep.label} ›
-              </button>
-            )}
-            {import.meta.env.DEV && (
-              <button type="button" className="bp2__preset" onClick={applyTestPreset}>
-                테스트용 프리셋 적용
-              </button>
-            )}
+        <aside className="bp2__side">
+          <div className="bp2__title-block">
+            <p className="bp2__eyebrow">STEP {stepNo}<span> / {visibleSteps.length}</span></p>
+            <h2 className="bp2__side-title">{currentStep ? currentStep.label : ''}</h2>
+            {stepDesc(active) && <p className="bp2__side-desc">{stepDesc(active)}</p>}
           </div>
-        </aside>
 
-        <main className="bp2__main" ref={mainRef}>
-          {err && <p className="cal__err">{err}</p>}
-
-          {active === 'refine' && (
-            <section>
-              <h3 className="bp2__stepttl">계획 정리</h3>
-              <p className="bp2__stepdesc">기초 정보와 아이디어를 입력한 뒤 AI로 정리하세요. 정리된 내용도 직접 수정할 수 있습니다.</p>
-              <p className="bp-hint">{refinedDone ? 'AI 정리가 완료됐습니다. 내용을 검토하고 필요한 부분을 수정해 주세요.' : '추가 설명을 제외한 모든 항목을 입력하면 AI 정리를 시작할 수 있습니다.'}</p>
-              <div className="bp-review">
-                <div className="bp-review__group">
-                  <h4>기초 정보</h4>
-                  <div className="bp-review__basics">
-                    {BASIC_FIELDS.map((field) => (
-                      <label key={field.key} className={'bp-field' + (field.multiline ? ' bp-review__wide' : field.key === 'businessName' ? ' bp-review__name' : '')}>
-                        <span className="bp-field__label">{field.label}</span>
-                        <FieldControl field={field.key === 'industry' ? { ...field, options: industryOptions } : field}
-                          value={form[field.key]}
-                          onChange={(value) => setReviewedField(field.key, value)} />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div className="bp-review__group">
-                  <h4>아이디어 정리</h4>
-                  <div className="bp-review__ideas">
-                    {IDEA_FIELDS.map((field) => (
-                      <label key={field.key} className={'bp-field' + (field.optional ? ' bp-review__wide' : '')}>
-                        <span className="bp-field__label">{field.label}</span>
-                        <FieldControl field={field} value={form[field.key]}
-                          onChange={(value) => setReviewedField(field.key, value)} />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <button type="button" className="exp-upload" onClick={runRefine} disabled={!basicReady || !ideaReady || refining}>
-                {refining ? '입력 정리 중…' : refinedDone ? 'AI로 다시 정리하기' : 'AI로 입력 정리하기'}
-              </button>
-            </section>
+          {stepSections && (
+            <nav className="bp2__secnav" aria-label="섹션 이동">
+              <ul>
+                {stepSections.map((sec) => (
+                  <li key={sec.id}>
+                    <button type="button" className={activeSection === sec.id ? 'is-on' : ''}
+                      aria-current={activeSection === sec.id ? 'location' : undefined}
+                      onClick={() => goSection(sec.id)}>
+                      {sec.menu}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
           )}
 
-          {active === 'setup' && (
-            <section>
-              <h3 className="bp2__stepttl">공고 양식 선택</h3>
-              <p className="bp2__stepdesc">공고와 양식은 선택 사항입니다. 양식이 없으면 기본 PSST 양식으로 초안을 만듭니다.</p>
-              <div className="bp-field">
-                <span className="bp-field__label">제출할 공고 (선택)</span>
-                <div className="bp-announcement-choice" role="group" aria-label="공고 선택 방식">
-                  <button type="button" className={selectedAnnouncement ? 'is-selected' : ''}
-                    aria-pressed={!!selectedAnnouncement} onClick={openAnnouncementPicker}>
-                    공고 선택
-                  </button>
-                  <button type="button" className={!selectedAnnouncement ? 'is-selected' : ''}
-                    aria-pressed={!selectedAnnouncement} onClick={clearAnnouncement}>
-                    공고 선택 안함
-                  </button>
-                </div>
-                {selectedAnnouncement && (
-                  <p className="bp-announcement-choice__selected" role="status">
-                    선택한 공고: {selectedAnnouncement.title}
-                  </p>
-                )}
-              </div>
-              {announcementError && <p className="cal__err">{announcementError}</p>}
-              <label className="bp-field">
-                <span className="bp-field__label">사업계획서 양식 (선택 · PDF/HWPX)</span>
-                <input type="file" accept=".pdf,.hwpx" onChange={inspectTemplate} disabled={inspectingTemplate} />
-              </label>
-              {templateError && <p className="cal__err">{templateError}</p>}
-              <p className="bp-hint">{templateFile
-                ? inspectingTemplate
-                  ? `${templateFile.name} 분석 중…`
-                  : `${templateFile.name} 분석 완료 · ${templateInfo?.fields?.length || 0}개 작성 항목을 찾았습니다.`
-                : '양식을 선택하지 않으면 기본 PSST 항목을 사용합니다.'}</p>
-              {!refinedDone && <p className="bp-hint">계획 정리에서 AI 정리를 완료해야 초안을 만들 수 있습니다.</p>}
-              <button type="button" className="exp-upload"
+          <div className="bp2__actions">
+            {active === 'refine' && (
+              <button type="button" className="bp2__cta" onClick={runRefine}
+                disabled={!basicReady || !ideaReady || refining}>
+                {refining ? '입력 정리 중…' : refinedDone ? 'AI로 다시 정리하기' : 'AI로 입력 정리하기'}
+              </button>
+            )}
+            {active === 'setup' && (
+              <button type="button" className="bp2__cta"
                 onClick={() => templateInfo ? runTemplateAnalysis() : generatePlan()}
                 disabled={inspectingTemplate || analyzingFields || (!!templateFile && !templateInfo)
                   || !basicReady || !ideaReady || !refinedDone || generating}>
                 {analyzingFields ? '양식 입력 영역 분석 중…' : generating ? '초안 작성 중…'
                   : templateInfo ? '양식 분석하고 초안 준비하기' : 'AI 초안 만들기'}
               </button>
-            </section>
+            )}
+            {nextStep && (
+              <button type="button" className="bp2__next" onClick={() => goStep(nextStep.key)}>
+                다음 단계 · {nextStep.label} ›
+              </button>
+            )}
+            <button type="button" className="bp2__save" onClick={saveNow}>임시저장</button>
+            {savedNote && <span className="bp2__saved" role="status">{savedNote}</span>}
+            {import.meta.env.DEV && (
+              <button type="button" className="bp2__preset" onClick={applyTestPreset}>
+                테스트용 프리셋 적용
+              </button>
+            )}
+          </div>
+          {guideText && <p className="bp2__guide">{guideText}</p>}
+        </aside>
+
+        <main className="bp2__main" ref={mainRef}>
+          {err && <p className="cal__err">{err}</p>}
+
+          {active === 'refine' && (
+            <React.Fragment>
+              <SectionCard section={STEP_SECTIONS.refine[0]} open={!collapsed[STEP_SECTIONS.refine[0].id]} onToggle={() => toggleCard(STEP_SECTIONS.refine[0].id)}>
+                <div className="bp2__basic">
+                  {BASIC_FIELDS.map(renderBasic)}
+                </div>
+              </SectionCard>
+              <SectionCard section={STEP_SECTIONS.refine[1]} open={!collapsed[STEP_SECTIONS.refine[1].id]} onToggle={() => toggleCard(STEP_SECTIONS.refine[1].id)}>
+                <div className="bp2__doc">
+                  {IDEA_FIELDS.filter((field) => !field.optional).map((field, i) => (
+                    <div key={field.key} className="bp2__doc-item">
+                      <label htmlFor={'bp-idea-' + field.key} className="bp2__doc-head">
+                        <span className="bp2__doc-no">{String(i + 1).padStart(2, '0')}</span>
+                        <span className="bp2__doc-name">{field.label}</span>
+                        <span className="bp2__doc-guide">{field.placeholder}</span>
+                      </label>
+                      <AutoTextarea id={'bp-idea-' + field.key} className="bp2__doc-text"
+                        value={form[field.key]} placeholder={field.placeholder}
+                        onChange={(value) => setReviewedField(field.key, value)} />
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+              <SectionCard section={STEP_SECTIONS.refine[2]} open={!collapsed[STEP_SECTIONS.refine[2].id]} onToggle={() => toggleCard(STEP_SECTIONS.refine[2].id)}>
+                <div className="bp2__grid3 bp2__grid3--extra">
+                  {IDEA_FIELDS.filter((field) => field.optional).map((field) => (
+                    <label key={field.key} className="bp-field bp2__span3">
+                      <span className="bp-field__label">{field.label}</span>
+                      <FieldControl field={field} value={form[field.key]}
+                        onChange={(value) => setReviewedField(field.key, value)} />
+                    </label>
+                  ))}
+                </div>
+              </SectionCard>
+            </React.Fragment>
+          )}
+
+          {active === 'setup' && (
+            <React.Fragment>
+              <SectionCard section={STEP_SECTIONS.setup[0]}>
+                {/* 실제 radio 기반이라 키보드로 고를 수 있다. 이미 선택된 카드를 다시 눌러도 공고 선택 창이 열리도록 onClick으로 처리한다. */}
+                <div className="bp2__choices" role="radiogroup" aria-labelledby="bp-sec-title-announcement">
+                  <label className={'bp2__choice' + (selectedAnnouncement ? ' is-selected' : '')}>
+                    <input type="radio" name="bp-announcement" className="bp2__choice-input"
+                      checked={!!selectedAnnouncement} onChange={() => {}} onClick={openAnnouncementPicker} />
+                    <span className="bp2__radio" aria-hidden="true" />
+                    <span className="bp2__choice-body">
+                      <span className="bp2__choice-title">공고 선택</span>
+                      <span className="bp2__choice-desc">지원할 공고를 골라 양식에 맞춰 작성합니다.</span>
+                    </span>
+                  </label>
+                  <label className={'bp2__choice' + (!selectedAnnouncement ? ' is-selected' : '')}>
+                    <input type="radio" name="bp-announcement" className="bp2__choice-input"
+                      checked={!selectedAnnouncement} onChange={() => {}} onClick={clearAnnouncement} />
+                    <span className="bp2__radio" aria-hidden="true" />
+                    <span className="bp2__choice-body">
+                      <span className="bp2__choice-title">공고 선택 안 함</span>
+                      <span className="bp2__choice-desc">공고 없이 기본 양식으로 초안을 만듭니다.</span>
+                    </span>
+                  </label>
+                </div>
+                {selectedAnnouncement && (
+                  <p className="bp-announcement-choice__selected" role="status">
+                    선택한 공고: {selectedAnnouncement.title}
+                  </p>
+                )}
+                {announcementError && <p className="cal__err">{announcementError}</p>}
+              </SectionCard>
+
+              <SectionCard section={STEP_SECTIONS.setup[1]}>
+                {/* 기본 파일 입력은 숨기고, 드롭존의 "파일 선택" 버튼이 대신 연다. */}
+                <input ref={templateInputRef} type="file" accept=".pdf,.hwpx" hidden
+                  aria-labelledby="bp-sec-title-template" onChange={inspectTemplate} disabled={inspectingTemplate} />
+                <div
+                  className={'bp2__drop' + (templateDragOver ? ' is-over' : '') + (templateFile ? ' has-file' : '')}
+                  onDragOver={(event) => { event.preventDefault(); setTemplateDragOver(true); }}
+                  onDragLeave={() => setTemplateDragOver(false)}
+                  onDrop={onTemplateDrop}
+                >
+                  {templateFile ? (
+                    <div className="bp2__drop-info">
+                      <span className="bp2__drop-name">{templateFile.name}</span>
+                      <span className="bp2__drop-sub" role="status">
+                        {inspectingTemplate
+                          ? '분석 중…'
+                          : templateInfo
+                            ? `분석 완료 · ${templateInfo.fields?.length || 0}개 작성 항목을 찾았습니다.`
+                            : ''}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="bp2__drop-info bp2__drop-empty">
+                      선택된 파일 없음 · 양식을 선택하지 않으면 기본 PSST 항목을 사용합니다.
+                    </p>
+                  )}
+                  <div className="bp2__drop-actions">
+                    <button type="button" className="bp2__btn"
+                      onClick={() => templateInputRef.current && templateInputRef.current.click()}
+                      disabled={inspectingTemplate}>
+                      {templateFile ? '다시 선택' : '파일 선택'}
+                    </button>
+                    {templateFile && (
+                      <button type="button" className="bp2__btn bp2__btn--danger"
+                        onClick={removeTemplate} disabled={inspectingTemplate}
+                        aria-label={`${templateFile.name} 삭제`}>
+                        삭제
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {templateError && <p className="cal__err">{templateError}</p>}
+              </SectionCard>
+            </React.Fragment>
           )}
 
           {active === 'supplement' && (
-            <section>
-              <h3 className="bp2__stepttl">계획 보완</h3>
-              <p className="bp2__stepdesc">선택한 양식에서 추가 정보가 필요한 입력 칸만 확인하세요. 모르는 정보는 비워 둘 수 있습니다.</p>
+            <section className="bp2__panel">
               {!fieldAnalysis.length ? (
                 <div className="bp2__empty">
                   <p>공고 양식 선택에서 양식을 분석해 주세요.</p>
@@ -1298,9 +1550,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'preview' && (
-            <section className="bp-eval">
-              <h3 className="bp2__stepttl">초안 평가</h3>
-              <p className="bp2__stepdesc">{evaluationBasis} 기준의 AI 예비진단 결과를 확인하세요.</p>
+            <section className="bp2__panel bp-eval">
 
               {!plan ? (
                 <div className="bp2__empty">
@@ -1345,9 +1595,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'improve' && (
-            <section>
-              <h3 className="bp2__stepttl">초안 수정</h3>
-              <p className="bp2__stepdesc">평가 내용을 참고해 항목을 수정하세요. 제목에 마우스를 올리거나 키보드로 선택하면 해당 평가를 볼 수 있습니다.</p>
+            <section className="bp2__panel">
               {!plan || !evalResult ? (
                 <div className="bp2__empty">
                   <p>초안을 평가한 뒤 계획을 보완할 수 있어요.</p>
@@ -1416,8 +1664,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'done' && (
-            <section>
-              <h3 className="bp2__stepttl">재평가 및 저장</h3>
+            <section className="bp2__panel">
               {!finalPlan ? (
                 <div className="bp2__empty">
                   <p>초안 수정을 마치고 초안을 다시 생성해 주세요.</p>
@@ -1509,14 +1756,16 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               saving={savingPolicyId === detailPolicy.policyId} onToggleSave={togglePickerSave}
               onClose={() => setDetailPolicy(null)} />
           )}
-          {(generating || analyzingFields) && (
+          {(generating || analyzingFields || refining) && (
         <div className="bp2__loading-backdrop">
           <div className="bp2__loading-dialog" role="dialog" aria-modal="true"
-            aria-label={analyzingFields ? '양식 분석 중' : '초안 작성 중'}>
+            aria-label={refining ? '입력 정리 중' : analyzingFields ? '양식 분석 중' : '초안 작성 중'}>
             <AnalyzingPanel
-              title={analyzingFields ? '양식의 입력 영역을 분석하고 있어요'
+              title={refining ? 'AI가 입력한 내용을 정리하고 있어요'
+                : analyzingFields ? '양식의 입력 영역을 분석하고 있어요'
                 : active === 'improve' ? '수정 내용을 반영해 초안을 다시 만들고 있어요' : 'AI가 초안을 작성하고 있어요'}
-              sub={analyzingFields ? '각 칸에 필요한 정보와 누락된 내용을 확인하고 있어요…'
+              sub={refining ? '기초 정보와 아이디어를 초안에 쓰기 좋게 다듬고 있어요…'
+                : analyzingFields ? '각 칸에 필요한 정보와 누락된 내용을 확인하고 있어요…'
                 : '입력한 내용과 양식에 맞춰 사업계획서 항목을 채우고 있어요…'}
             />
           </div>
