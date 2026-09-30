@@ -48,6 +48,9 @@ def fetch_list(keyword, page=1, display=100, max_retries=3):
         "display": display,
         "page": page,
     }
+    response = requests.get(LIST_URL, params=params, headers=HEADERS)
+    response.raise_for_status()
+    return response.json()
     retry_statuses = {403, 429, 500, 502, 503, 504}
 
     for attempt in range(1, max_retries + 1):
