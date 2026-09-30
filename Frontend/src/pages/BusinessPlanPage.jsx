@@ -1140,6 +1140,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     } catch (e2) {
       if (e2.status === 401) onRequireLogin && onRequireLogin();
       else if (e2.status === 409) setErr('서류는 8개까지 저장할 수 있습니다. 마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요.');
+      // 응답 전에 끊겨도 서버가 저장을 마쳤을 수 있어 재시도 전 확인을 안내한다.
+      else if (e2.name === 'AbortError' || e2.status === 502 || e2.status === 504) setErr('저장 결과를 확인하지 못했어요. 마이페이지 서류 탭에서 저장 여부를 확인한 뒤 다시 시도해 주세요.');
       else setErr(e2.detail || (e2.status === 413
         ? '파일이 50MiB를 넘어 저장하지 못했습니다.'
         : '파일을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));

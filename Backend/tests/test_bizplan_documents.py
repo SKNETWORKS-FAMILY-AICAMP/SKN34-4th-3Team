@@ -254,7 +254,9 @@ class BizplanDocumentRouteTest(unittest.TestCase):
         body = {key: value for key, value in BODY.items() if key != "format"}
         response = self.client.post("/bizplan/documents", json=body, headers=headers())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([call.args[0]["format"] for call in self.render.call_args_list], ["hwpx", "pdf"])
+        # 두 형식은 병렬로 렌더하므로 호출 순서 대신 형식 집합과 대표 형식을 확인한다.
+        self.assertCountEqual([call.args[0]["format"] for call in self.render.call_args_list], ["hwpx", "pdf"])
+        self.assertEqual(self.repo.insert_bizplan_document.call_args.args[3], "hwpx")
 
     def test_download_selects_format_and_rejects_unavailable_format(self):
         self.repo.get_bizplan_document.return_value = {

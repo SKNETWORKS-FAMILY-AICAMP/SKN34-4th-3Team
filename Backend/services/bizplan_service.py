@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ninja.errors import HttpError
@@ -191,10 +192,10 @@ def save_document(user_id: int, body: dict) -> dict:
     else:
         primary_format = body.get("format", "hwpx")
         formats = [primary_format, "pdf" if primary_format == "hwpx" else "hwpx"]
-    files = []
-    for format in formats:
-        rendered = render({**body, "format": format})
-        files.append(_decode_document_file(rendered, format))
+    # 형식별 렌더를 동시에 실행해 최악 대기 시간을 렌더 1회(LLM_TIMEOUT_BIZPLAN) 수준으로 맞춘다.
+    with ThreadPoolExecutor(max_workers=len(formats)) as executor:
+        rendered_files = list(executor.map(lambda format: render({**body, "format": format}), formats))
+    files = [_decode_document_file(rendered, format) for rendered, format in zip(rendered_files, formats)]
     primary, *additional = files
     row = repo.insert_bizplan_document(
         user_id, body["title"], primary["file_name"], primary["format"],
