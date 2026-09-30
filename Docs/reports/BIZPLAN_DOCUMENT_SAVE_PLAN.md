@@ -3,6 +3,10 @@
 > 작성일 2026-09-29, `feature/docu_save` `e51be47` 기준. 사업계획서 페이지에서 만든 HWPX/PDF 파일을 DB에 저장하고 마이페이지 '서류' 탭에서 목록·다운로드·삭제하는 기능의 계획. 코드 변경 전 설계 단계 문서.
 >
 > 2026-09-29 보관 제한 결정: 사용자당 8개·파일당 50MiB, 8개 도달 시 저장 거부, 동일 파일 중복 저장 허용(2절·8절).
+>
+> 2026-09-30 구현: 파일 보관 API·마이페이지 서류 탭을 추가했다. 동시 저장은 허용 오차 없이 최대 8개를 보장하도록 결정했고, 렌더링 후 사용자 행 잠금·개수 재확인·INSERT를 단일 트랜잭션으로 수행한다. 아래 현황·라인 번호는 최초 설계 시점 기준이다.
+
+> 추가 구현: 임시저장 최신 1건을 서류 탭 맨 위에 표시한다. ‘임시저장’ 표시·수정 시각·‘작성하기’ 버튼을 제공하고, 파일은 ‘저장된 문서’로 구분한다. 임시저장 항목은 파일 8개 제한에 포함하지 않으며 기존 초안 복원 흐름을 재사용한다. `GET /bizplan/documents`에 제목·수정 시각만 담은 `draft` 필드를 추가했다.
 
 ## 1. 배경과 목표
 
@@ -33,6 +37,7 @@
 | 보관 개수 | 사용자당 8개. 8개 보유 시 저장 거부(409), 자동 삭제 없음 | 사용자 모르게 기존 파일이 사라지지 않게 함. 서류 탭에서 직접 삭제 후 재저장 |
 | 파일 크기 | 파일당 50MiB. 초과 시 저장 거부(413) | 사용자당 DB 사용량 상한 400MiB(8 × 50MiB) |
 | 중복 저장 | 같은 내용 여러 번 저장 허용 | 개수 제한으로 증가량이 제한되므로 중복 검사 생략 |
+| 동시 저장 | 렌더링 후 `users` 행 잠금 → 개수 재확인 → INSERT를 단일 트랜잭션으로 실행 | 동시 요청·여러 탭에서도 사용자당 8개 상한 보장. 렌더링 중에는 잠금 없음 |
 
 ## 3. DB
 
@@ -67,8 +72,8 @@ CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
 | 파일 | 변경 |
 |---|---|
 | `Backend/api/bizplan.py` | 라우트 4개. 기존 `user_auth` router 사용. 파일 응답은 `api/expenses.py:68` `receipt_image` 패턴 |
-| `Backend/services/bizplan_service.py` | `save_document`: 보유 개수 확인(8개 이상 409) → 기존 `render()` 호출 → base64 디코드 → 크기 확인(50MiB 초과 413) → repo insert. 개수 확인을 렌더 앞에 두어 거부될 요청의 문서 API 호출 방지. `list_documents`, `get_document_file`, `delete_document`. 소유자 불일치·없음은 404(`expense_service.get_receipt_image` 패턴). 상수 `MAX_DOCUMENTS_PER_USER = 8`, `MAX_DOCUMENT_BYTES = 50 * 1024 * 1024`는 기존 `MAX_DRAFT_BYTES`(:23) 옆에 정의 |
-| `Backend/core/repo.py` | `insert_bizplan_document`, `count_bizplan_documents`, `list_bizplan_documents`, `get_bizplan_document`, `delete_bizplan_document`. `upsert_bizplan_draft`(:679) 옆, `db.insert/fetchall/fetchone/execute` 사용 |
+| `Backend/services/bizplan_service.py` | `save_document`: 보유 개수 확인(8개 이상 409) → 기존 `render()` 호출 → base64 디코드 → 크기 확인(50MiB 초과 413) → repo의 잠금·개수 재확인·insert(상한 도달 시 409). 개수 확인을 렌더 앞에 두어 거부될 요청의 문서 API 호출 방지. `list_documents`, `get_document_file`, `delete_document`. 소유자 불일치·없음은 404. 상수 `MAX_DOCUMENTS_PER_USER = 8`, `MAX_DOCUMENT_BYTES = 50 * 1024 * 1024`는 기존 `MAX_DRAFT_BYTES` 옆에 정의 |
+| `Backend/core/repo.py` | `insert_bizplan_document`, `count_bizplan_documents`, `list_bizplan_documents`, `get_bizplan_document`, `delete_bizplan_document`. 저장은 `db.connection()`의 단일 연결에서 `READ COMMITTED`·사용자 행 `FOR UPDATE`·개수 재조회·INSERT RETURNING 메타데이터를 실행. 목록·파일 조회·삭제에는 기존 DB 헬퍼를 사용하고 사용자 ID 조건을 적용 |
 | `Backend/schemas/bizplan.py` | `BizplanDocumentItem`(id, title, fileName, format, sizeBytes, createdAt), `BizplanDocumentListResponse` |
 
 ## 5. Frontend
@@ -84,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
 ## 6. 테스트·검증
 
 - `Backend/tests/test_bizplan_api.py`: 저장 → 목록 → 파일 조회 → 삭제, 다른 사용자 접근 404, 비로그인 401, 8개 보유 시 9번째 저장 409(렌더 미호출), 렌더 결과 50MiB 초과 413, 동일 요청 2회 저장 시 2건 생성
+- 구현 테스트는 `Backend/tests/test_bizplan_documents.py`, 실제 PostgreSQL 검증은 `test_bizplan_documents_postgres.py`에 분리했다. 전용 스키마에서 7개 보유 상태의 두 동시 저장이 200·409로 끝나고 최종 8개인지, 저장 실패 시 롤백되는지 확인한다. DB 테스트는 `BIZPLAN_DOCUMENT_DB_TESTS=1`로 활성화한다.
 - DB: `DB/app_extras.sql` 재적용 후 `bizplan_documents` 생성 확인
 - 수동: 사업계획서 작성 → '마이페이지에 저장' → 마이페이지 서류 탭에서 목록 표시·다운로드 파일 열림·삭제 확인
 
@@ -98,4 +104,4 @@ CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
 |---|---|
 | DB 용량 | BYTEA 저장으로 DB 증가. 사용자당 상한 400MiB(8개 × 50MiB)로 제한(2절) |
 | 렌더 중복 | 다운로드 후 저장하면 문서 API를 2회 호출. 개수 제한이 있으므로 허용, 최근 렌더 결과 재사용은 하지 않음 |
-| 동시 저장 | 개수 확인과 insert 사이에 같은 사용자가 동시에 저장하면 8개를 넘을 수 있음. 버튼 중복 클릭은 저장 중 비활성화로 막고, 서버는 초과분을 허용 오차로 둠 |
+| 동시 저장 | 렌더링 후 사용자별 행 잠금과 개수 재확인을 통해 8개 상한을 보장한다. 렌더링 중 다른 요청이 마지막 자리를 채우면 이미 렌더링을 마친 요청도 409로 거부될 수 있다. 다운로드·저장 중 버튼을 비활성화하고 중복 클릭을 차단한다 |

@@ -174,3 +174,26 @@ class BizplanDraftResponse(BaseModel):
     model_config = ConfigDict(title="사업계획서 임시저장 조회")
     data: dict | None = Field(default=None, description="저장된 작성 화면 상태. 없으면 null")
     updatedAt: datetime | None = Field(default=None, description="마지막 저장 시각")
+
+
+class BizplanDocumentItem(BaseModel):
+    id: int
+    title: str
+    fileName: str
+    format: Literal["pdf", "hwpx"]
+    sizeBytes: int
+    createdAt: datetime
+
+
+class BizplanDraftItem(BaseModel):
+    title: str
+    updatedAt: datetime
+
+
+class BizplanDocumentListResponse(BaseModel):
+    draft: BizplanDraftItem | None = None
+    documents: list[BizplanDocumentItem]
+
+
+class BizplanDocumentDeleteResponse(BaseModel):
+    deleted: bool

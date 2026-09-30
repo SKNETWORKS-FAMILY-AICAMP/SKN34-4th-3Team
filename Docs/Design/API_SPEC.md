@@ -101,7 +101,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## bizplan — 사업계획서
 
-사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 부른다. 모든 경로가 결과를 서버에 저장하지 않으며 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다.
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)과 마이페이지 서류 탭이 부른다. 생성·예비진단·정리·양식 검사·출력은 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다. 임시저장은 작성 상태 JSON을, 서류 저장은 서버에서 출력한 파일 원본을 DB에 별도로 보관한다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -113,8 +113,16 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
 | GET | /bizplan/draft | 사업계획서 임시저장 조회 | 필요 | - | `{ data, updatedAt }` (없으면 둘 다 `null`) | FS-29 |
 | PUT | /bizplan/draft | 사업계획서 임시저장(유저당 1건 덮어쓰기) | 필요 | `{ data }` (작성 화면 상태 객체, 양식·이미지 Base64 포함 12 MiB 이하, 초과 `413`) | `{ updated: true }` | FS-29 |
+| POST | /bizplan/documents | 서버에서 렌더링 후 파일 보관 | 필요 | `/bizplan/render`와 동일 | `{ id, title, fileName, format, sizeBytes, createdAt }`, `200` | FS-29 |
+| GET | /bizplan/documents | 내 임시저장 요약·저장 파일 목록(파일 최신순, 본문 제외) | 필요 | - | `{ draft: { title, updatedAt } 또는 null, documents: [{ id, title, fileName, format, sizeBytes, createdAt }] }`, `200` | FS-29 |
+| GET | /bizplan/documents/{id}/file | 내 서류 원본 다운로드 | 필요 | - | 바이너리, 저장된 MIME 타입·한글 파일명 지원 `Content-Disposition`, `200` | FS-29 |
+| DELETE | /bizplan/documents/{id} | 내 저장 서류 삭제 | 필요 | - | `{ deleted: true }`, `200` | FS-29 |
+
+서류는 사용자당 최대 8개, 파일당 50MiB이다. 중복 저장은 허용하고 자동 삭제하지 않는다. 저장 전 개수 확인으로 불필요한 렌더링을 막고, 렌더링 후 사용자 행 잠금·개수 재확인·INSERT를 한 트랜잭션으로 수행해 동시 저장에서도 상한을 보장한다. 개수 초과는 `409`, 파일 크기 초과는 `413`, 미인증은 `401`, 없는 서류와 다른 사용자의 서류 조회·삭제는 모두 `404`이다. 목록·다운로드·삭제는 LLM을 호출하지 않는다.
 
 `templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
+
+임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. 서류 탭에서는 임시저장 요약을 파일 목록보다 먼저 표시하고 ‘임시저장’과 ‘저장된 문서’로 구분한다. 임시저장 항목의 ‘작성하기’는 기존 `/bizplan/draft` 복원 흐름으로 연결한다. 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
 
 ## policies — 지원정책 탐색
 

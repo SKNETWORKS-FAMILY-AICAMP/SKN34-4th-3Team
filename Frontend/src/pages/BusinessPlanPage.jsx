@@ -330,6 +330,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
+  const [savingDocumentFormat, setSavingDocumentFormat] = useState('');
+  const fileOperationRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
   const savedDraftRef = useRef(null);
@@ -943,33 +945,63 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     }
   };
 
+  const buildRenderPayload = (format) => ({
+    format,
+    title: form.businessName || '사업계획서',
+    sections: finalPlan.sections,
+    template: templateInfo ? {
+      fileName: templateInfo.fileName,
+      contentBase64: templateInfo.contentBase64,
+    } : null,
+    images: finalPlan.sections.filter((section) =>
+      supplementImages[section.key] && supplementChoices[section.key] !== 'not_applicable'
+      && supplementChoices[section.key] !== 'no_information').map((section) => ({
+      key: section.key,
+      mimeType: supplementImages[section.key].mimeType,
+      contentBase64: supplementImages[section.key].contentBase64,
+    })),
+  });
+
   const renderPlan = async (format) => {
-    if (!finalPlan || renderingFormat) return;
+    if (!finalPlan || fileOperationRef.current) return;
+    fileOperationRef.current = true;
     setErr('');
     setRenderingFormat(format);
     try {
-      const rendered = await api.renderBusinessPlan({
-        format,
-        title: form.businessName || '사업계획서',
-        sections: finalPlan.sections,
-        template: templateInfo ? {
-          fileName: templateInfo.fileName,
-          contentBase64: templateInfo.contentBase64,
-        } : null,
-        images: finalPlan.sections.filter((section) =>
-          supplementImages[section.key] && supplementChoices[section.key] !== 'not_applicable'
-          && supplementChoices[section.key] !== 'no_information').map((section) => ({
-          key: section.key,
-          mimeType: supplementImages[section.key].mimeType,
-          contentBase64: supplementImages[section.key].contentBase64,
-        })),
-      });
+      const rendered = await api.renderBusinessPlan(buildRenderPayload(format));
       downloadBase64File(rendered);
     } catch (e2) {
       if (e2 && e2.status === 401) onRequireLogin && onRequireLogin();
       else setErr(e2.detail || `${format.toUpperCase()} 파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.`);
     } finally {
+      fileOperationRef.current = false;
       setRenderingFormat('');
+    }
+  };
+
+  const saveDocument = async (format) => {
+    if (!finalPlan || fileOperationRef.current) return;
+    if (!userId) {
+      onRequireLogin && onRequireLogin();
+      return;
+    }
+    fileOperationRef.current = true;
+    setErr('');
+    setSavedNote('');
+    setSavingDocumentFormat(format);
+    try {
+      await api.saveBizplanDocument(buildRenderPayload(format));
+      setSavedNote(`${format.toUpperCase()} 파일을 마이페이지 서류 탭에 저장했어요`);
+      setTimeout(() => setSavedNote(''), 4000);
+    } catch (e2) {
+      if (e2.status === 401) onRequireLogin && onRequireLogin();
+      else if (e2.status === 409) setErr('서류는 8개까지 저장할 수 있습니다. 마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요.');
+      else setErr(e2.detail || (e2.status === 413
+        ? '파일이 50MiB를 넘어 저장하지 못했습니다.'
+        : '파일을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+    } finally {
+      fileOperationRef.current = false;
+      setSavingDocumentFormat('');
     }
   };
 
@@ -1411,14 +1443,24 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
                         {(!templateInfo || templateInfo.kind === 'hwpx') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat}>
-                            {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
-                          </button>
+                          <React.Fragment>
+                            <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat || !!savingDocumentFormat}>
+                              {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
+                            </button>
+                            <button type="button" className="exp-upload" onClick={() => saveDocument('hwpx')} disabled={!!renderingFormat || !!savingDocumentFormat}>
+                              {savingDocumentFormat === 'hwpx' ? 'HWPX 저장 중…' : 'HWPX 마이페이지에 저장'}
+                            </button>
+                          </React.Fragment>
                         )}
                         {(!templateInfo || templateInfo.kind === 'pdf') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat}>
-                            {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
-                          </button>
+                          <React.Fragment>
+                            <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat || !!savingDocumentFormat}>
+                              {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
+                            </button>
+                            <button type="button" className="exp-upload" onClick={() => saveDocument('pdf')} disabled={!!renderingFormat || !!savingDocumentFormat}>
+                              {savingDocumentFormat === 'pdf' ? 'PDF 저장 중…' : 'PDF 마이페이지에 저장'}
+                            </button>
+                          </React.Fragment>
                         )}
                       </div>
                       <p className="bp-disclaimer">{templateInfo

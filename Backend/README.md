@@ -199,6 +199,27 @@ Content-Type: application/json
 | DELETE | `/expenses/{expenseId}` | Bearer | 지출·영수증 삭제 |
 | GET | `/expenses/{expenseId}/deductibility` | Bearer | |
 
+### 사업계획서 파일 보관
+
+| Method | Path | 인증 | 응답 |
+|--------|------|------|------|
+| POST | `/bizplan/documents` | Bearer | 기존 `/bizplan/render` 요청 → `{ id, title, fileName, format, sizeBytes, createdAt }` |
+| GET | `/bizplan/documents` | Bearer | `{ draft: { title, updatedAt } 또는 null, documents: [...] }` (메타데이터만, 파일 최신순) |
+| GET | `/bizplan/documents/{id}/file` | Bearer | 원본 바이너리·저장된 MIME 타입·다운로드 파일명 |
+| DELETE | `/bizplan/documents/{id}` | Bearer | `{ deleted: true }` |
+
+정상 응답은 모두 `200`. 서버에서 렌더링한 PDF/HWPX만 `bizplan_documents.file_data`(BYTEA)에 저장한다.
+사용자당 8개(초과 `409`), 파일당 50MiB(초과 `413`)이며 중복 저장은 허용한다.
+렌더링 전에 개수를 확인하고, 렌더링 후 한 DB 연결에서 사용자 행 잠금·개수 재확인·INSERT를 수행해 동시 요청에도 8개를 넘지 않는다.
+다른 사용자 또는 없는 파일의 조회·삭제는 `404`, 미인증은 `401`이다. 임시저장(`/bizplan/draft`)과는 별개다.
+프론트엔드는 `/api` 접두사를 사용하며 Vite/배포 프록시가 이를 제거한다.
+
+임시저장 최신 1건도 서류 탭 상단에 별도 표시하고 ‘작성하기’로 기존 작성 상태를 복원한다. 임시저장은 파일 8개 제한에 포함하지 않으며, 목록에는 초안 본문·양식·이미지를 내려주지 않는다.
+
+실제 PostgreSQL 통합 테스트는 전용 임시 스키마를 생성·정리하며 기존 사용자 데이터에 접근하지 않는다.
+`BIZPLAN_DOCUMENT_DB_TESTS=1 uv run python -m unittest discover -s tests -p 'test_bizplan_documents*.py'`
+(PowerShell에서는 먼저 `$env:BIZPLAN_DOCUMENT_DB_TESTS='1'` 설정).
+
 ### 정책
 
 | Method | Path | 인증 |

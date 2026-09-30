@@ -676,12 +676,72 @@ def get_bizplan_draft(user_id: int) -> dict | None:
     return db.fetchone("SELECT data, updated_at FROM bizplan_drafts WHERE user_id = ?", (user_id,))
 
 
+def get_bizplan_draft_summary(user_id: int) -> dict | None:
+    # 서류 목록에서는 양식·이미지 Base64가 들어 있는 작성 상태 전체를 읽지 않는다.
+    return db.fetchone(
+        "SELECT data #>> '{form,businessName}' AS title, updated_at"
+        " FROM bizplan_drafts WHERE user_id = ?", (user_id,),
+    )
+
+
 def upsert_bizplan_draft(user_id: int, data: dict) -> None:
     db.execute(
         "INSERT INTO bizplan_drafts(user_id,data,updated_at) VALUES (?,?,now()) "
         "ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
         (user_id, json.dumps(data, ensure_ascii=False)),
     )
+
+
+def count_bizplan_documents(user_id: int) -> int:
+    return int(db.scalar(
+        "SELECT COUNT(*) FROM bizplan_documents WHERE user_id = ?", (user_id,)
+    ))
+
+
+def insert_bizplan_document(
+    user_id: int, title: str, file_name: str, format: str, mime_type: str,
+    file_data: bytes, max_documents: int,
+) -> dict | None:
+    """사용자별 저장을 직렬화한다. 상한에 도달하면 None을 반환한다."""
+    with db.connection() as conn:
+        # 잠금 뒤 COUNT를 별도 문장으로 실행해야 앞선 저장의 커밋을 볼 수 있다.
+        conn.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        conn.execute("SELECT id FROM users WHERE id = %s FOR UPDATE", (user_id,))
+        count = conn.execute(
+            "SELECT COUNT(*) AS count FROM bizplan_documents WHERE user_id = %s",
+            (user_id,),
+        ).fetchone()["count"]
+        if count >= max_documents:
+            return None
+        return dict(conn.execute(
+            "INSERT INTO bizplan_documents"
+            " (user_id, title, file_name, format, mime_type, file_data, size_bytes)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            " RETURNING id, title, file_name, format, size_bytes, created_at",
+            (user_id, title, file_name, format, mime_type, file_data, len(file_data)),
+        ).fetchone())
+
+
+def list_bizplan_documents(user_id: int) -> list[dict]:
+    return db.fetchall(
+        "SELECT id, title, file_name, format, size_bytes, created_at"
+        " FROM bizplan_documents WHERE user_id = ? ORDER BY created_at DESC, id DESC",
+        (user_id,),
+    )
+
+
+def get_bizplan_document(user_id: int, document_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT file_name, mime_type, file_data FROM bizplan_documents"
+        " WHERE user_id = ? AND id = ?", (user_id, document_id),
+    )
+
+
+def delete_bizplan_document(user_id: int, document_id: int) -> bool:
+    return db.fetchone(
+        "DELETE FROM bizplan_documents WHERE user_id = ? AND id = ? RETURNING id",
+        (user_id, document_id),
+    ) is not None
 
 
 def insert_policy(admin_id: int, body: dict) -> int:

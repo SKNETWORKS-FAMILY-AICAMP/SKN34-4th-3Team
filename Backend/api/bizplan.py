@@ -1,9 +1,14 @@
+from django.http import HttpResponse
+from django.utils.http import content_disposition_header
 from ninja import Router
 
 from api.deps import user_auth
 from schemas.bizplan import (
     BizplanCoachRequest,
     BizplanCoachResponse,
+    BizplanDocumentDeleteResponse,
+    BizplanDocumentItem,
+    BizplanDocumentListResponse,
     BizplanDraftResponse,
     BizplanDraftSave,
     BusinessPlanEvaluateRequest,
@@ -74,3 +79,28 @@ def save_draft(request, body: BizplanDraftSave):
     """작성 화면 상태를 유저당 1건으로 덮어써 저장합니다."""
     bizplan_service.save_draft(request.auth["id"], body.data)
     return {"updated": True}
+
+
+@router.post("/documents", response=BizplanDocumentItem, summary="사업계획서 파일 저장")
+def save_document(request, body: BusinessPlanRenderRequest):
+    """서버에서 렌더링한 파일을 보관합니다. 사용자당 8개, 파일당 50MiB 이하입니다."""
+    return bizplan_service.save_document(request.auth["id"], body.model_dump())
+
+
+@router.get("/documents", response=BizplanDocumentListResponse, summary="내 사업계획서 서류 목록")
+def documents(request):
+    return bizplan_service.list_documents(request.auth["id"])
+
+
+@router.get("/documents/{document_id}/file", summary="사업계획서 원본 다운로드")
+def document_file(request, document_id: int):
+    data, mime_type, file_name = bizplan_service.get_document_file(request.auth["id"], document_id)
+    response = HttpResponse(content=data, content_type=mime_type)
+    response["Content-Disposition"] = content_disposition_header(True, file_name)
+    return response
+
+
+@router.delete("/documents/{document_id}", response=BizplanDocumentDeleteResponse, summary="사업계획서 서류 삭제")
+def delete_document(request, document_id: int):
+    bizplan_service.delete_document(request.auth["id"], document_id)
+    return {"deleted": True}

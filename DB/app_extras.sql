@@ -120,3 +120,18 @@ END $$;
 -- 사업계획서 임시저장 본문: 필드가 자주 늘어나 화면 상태 전체를 JSONB 한 덩어리로 둔다.
 -- 위 form/plan/eval_result 컬럼은 쓰지 않는다(삭제는 팀 합의 뒤).
 ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- '마이페이지에 저장'한 사업계획서 원본. 임시저장 상태와 별도로 보관한다.
+CREATE TABLE IF NOT EXISTS bizplan_documents (
+    id         SERIAL PRIMARY KEY,
+    user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title      VARCHAR(200) NOT NULL,
+    file_name  VARCHAR(255) NOT NULL,
+    format     VARCHAR(10) NOT NULL,
+    mime_type  VARCHAR(100) NOT NULL,
+    file_data  BYTEA NOT NULL,
+    size_bytes INT NOT NULL,
+    created_at TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
+    ON bizplan_documents(user_id, created_at DESC);
