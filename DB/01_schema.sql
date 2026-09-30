@@ -155,7 +155,7 @@ CREATE TABLE saved_policies (
 CREATE TABLE tax_documents (
     id         SERIAL PRIMARY KEY,
     admin_id   INT REFERENCES admin_users(id),
-    title      VARCHAR(255),
+    title      VARCHAR(500),
     law_name   VARCHAR(100),
     content    TEXT,
     source     VARCHAR(500),
@@ -187,3 +187,4 @@ CREATE INDEX ON rag_documents USING hnsw (embedding vector_cosine_ops);
 -- 8. policies 테이블의 지역 코드 담는 region 컬럼 크기 수정 (100에서 2000으로)
 -- 9. rag_documents 컬럼에 chunk_id, policy_id, content 컬럼 추가
 -- 10. rag_documents 테이블의 embedding 컬럼에 검색을 빠르게 해주는 인덱스를 하나 추가함. (hnsw 방식)
+-- 11. tax_documents의 title 컬럼 크기 수정 (255에서 500으로, 국세청 법령해석례 제목이 255자를 넘을 수 있음)

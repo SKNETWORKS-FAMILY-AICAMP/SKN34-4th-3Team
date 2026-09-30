@@ -120,3 +120,6 @@ END $$;
 -- 사업계획서 임시저장 본문: 필드가 자주 늘어나 화면 상태 전체를 JSONB 한 덩어리로 둔다.
 -- 위 form/plan/eval_result 컬럼은 쓰지 않는다(삭제는 팀 합의 뒤).
 ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- 국세청 법령해석례 제목("[국세청 법령해석] 안건명 (안건번호)")이 255자를 넘을 수 있다.
+ALTER TABLE tax_documents ALTER COLUMN title TYPE VARCHAR(500);

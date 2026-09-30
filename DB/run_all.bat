@@ -7,3 +7,4 @@ uv run python scripts\05_collect_bizinfo.py
 uv run python scripts\06_collect_ontong_youth.py
 uv run python scripts\07_generate_calendar_events.py
 docker exec -i startup_db psql -U admin -d startup_platform < scripts\08_link_policy_calendar.sql
+uv run python scripts\11_collect_nts_interpretation.py
