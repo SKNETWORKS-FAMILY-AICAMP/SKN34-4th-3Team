@@ -113,10 +113,13 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
 | GET | /bizplan/draft | 사업계획서 임시저장 조회 | 필요 | - | `{ data, updatedAt }` (없으면 둘 다 `null`) | FS-29 |
 | PUT | /bizplan/draft | 사업계획서 임시저장(유저당 1건 덮어쓰기) | 필요 | `{ data }` (작성 화면 상태 객체, 양식·이미지 Base64 포함 12 MiB 이하, 초과 `413`) | `{ updated: true }` | FS-29 |
-| POST | /bizplan/documents | 서버에서 렌더링 후 파일 보관 | 필요 | `/bizplan/render`와 동일 | `{ id, title, fileName, format, sizeBytes, createdAt }`, `200` | FS-29 |
-| GET | /bizplan/documents | 내 임시저장 요약·저장 파일 목록(파일 최신순, 본문 제외) | 필요 | - | `{ draft: { title, updatedAt } 또는 null, documents: [{ id, title, fileName, format, sizeBytes, createdAt }] }`, `200` | FS-29 |
-| GET | /bizplan/documents/{id}/file | 내 서류 원본 다운로드 | 필요 | - | 바이너리, 저장된 MIME 타입·한글 파일명 지원 `Content-Disposition`, `200` | FS-29 |
+| DELETE | /bizplan/draft | 내 임시저장 삭제(저장 문서는 유지) | 필요 | - | `{ deleted: true }`, `200` (이미 없어도 동일) | FS-29 |
+| POST | /bizplan/documents | 서버에서 렌더링 후 파일 보관 | 필요 | `/bizplan/render`와 동일 (`format` 생략 가능) | `{ id, title, fileName, format, sizeBytes, createdAt, files: [{ format, fileName, sizeBytes }] }`, `200` | FS-29 |
+| GET | /bizplan/documents | 내 임시저장 요약·저장 파일 목록(파일 최신순, 본문 제외) | 필요 | - | `{ draft: { title, updatedAt } 또는 null, documents: [{ id, title, fileName, format, sizeBytes, createdAt, files }] }`, `200` | FS-29 |
+| GET | /bizplan/documents/{id}/file | 내 서류 형식별 다운로드 | 필요 | `format=pdf` 또는 `hwpx` (생략하면 대표 파일) | 바이너리, 저장된 MIME 타입·한글 파일명 지원 `Content-Disposition`, `200` | FS-29 |
 | DELETE | /bizplan/documents/{id} | 내 저장 서류 삭제 | 필요 | - | `{ deleted: true }`, `200` | FS-29 |
+
+‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 보관한다. `files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이며 기존 단일 파일 문서는 원래 형식만 제공한다. 두 형식은 문서 1건으로 계산하고 한 트랜잭션에서 저장·삭제한다. 마이페이지에서 형식을 선택해 다운로드하며, 보관하지 않은 형식은 `404`이다.
 
 서류는 사용자당 최대 8개, 파일당 50MiB이다. 중복 저장은 허용하고 자동 삭제하지 않는다. 저장 전 개수 확인으로 불필요한 렌더링을 막고, 렌더링 후 사용자 행 잠금·개수 재확인·INSERT를 한 트랜잭션으로 수행해 동시 저장에서도 상한을 보장한다. 개수 초과는 `409`, 파일 크기 초과는 `413`, 미인증은 `401`, 없는 서류와 다른 사용자의 서류 조회·삭제는 모두 `404`이다. 목록·다운로드·삭제는 LLM을 호출하지 않는다.
 

@@ -330,7 +330,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
-  const [savingDocumentFormat, setSavingDocumentFormat] = useState('');
+  const [savingDocument, setSavingDocument] = useState(false);
   const fileOperationRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
@@ -979,7 +979,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     }
   };
 
-  const saveDocument = async (format) => {
+  const saveDocument = async () => {
     if (!finalPlan || fileOperationRef.current) return;
     if (!userId) {
       onRequireLogin && onRequireLogin();
@@ -988,10 +988,10 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     fileOperationRef.current = true;
     setErr('');
     setSavedNote('');
-    setSavingDocumentFormat(format);
+    setSavingDocument(true);
     try {
-      await api.saveBizplanDocument(buildRenderPayload(format));
-      setSavedNote(`${format.toUpperCase()} 파일을 마이페이지 서류 탭에 저장했어요`);
+      await api.saveBizplanDocument(buildRenderPayload(templateInfo?.kind || 'hwpx'));
+      setSavedNote('문서를 저장했어요. 마이페이지 서류 탭에서 다운로드할 수 있어요');
       setTimeout(() => setSavedNote(''), 4000);
     } catch (e2) {
       if (e2.status === 401) onRequireLogin && onRequireLogin();
@@ -1001,7 +1001,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
         : '파일을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
     } finally {
       fileOperationRef.current = false;
-      setSavingDocumentFormat('');
+      setSavingDocument(false);
     }
   };
 
@@ -1443,25 +1443,18 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
                         {(!templateInfo || templateInfo.kind === 'hwpx') && (
-                          <React.Fragment>
-                            <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat || !!savingDocumentFormat}>
-                              {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
-                            </button>
-                            <button type="button" className="exp-upload" onClick={() => saveDocument('hwpx')} disabled={!!renderingFormat || !!savingDocumentFormat}>
-                              {savingDocumentFormat === 'hwpx' ? 'HWPX 저장 중…' : 'HWPX 마이페이지에 저장'}
-                            </button>
-                          </React.Fragment>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat || savingDocument}>
+                            {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
+                          </button>
                         )}
                         {(!templateInfo || templateInfo.kind === 'pdf') && (
-                          <React.Fragment>
-                            <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat || !!savingDocumentFormat}>
-                              {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
-                            </button>
-                            <button type="button" className="exp-upload" onClick={() => saveDocument('pdf')} disabled={!!renderingFormat || !!savingDocumentFormat}>
-                              {savingDocumentFormat === 'pdf' ? 'PDF 저장 중…' : 'PDF 마이페이지에 저장'}
-                            </button>
-                          </React.Fragment>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat || savingDocument}>
+                            {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
+                          </button>
                         )}
+                        <button type="button" className="exp-upload" onClick={saveDocument} disabled={!!renderingFormat || savingDocument}>
+                          {savingDocument ? '문서 저장 중…' : '문서 저장'}
+                        </button>
                       </div>
                       <p className="bp-disclaimer">{templateInfo
                         ? '비어 있는 항목은 제출 전에 확인하고 채워 주세요.'

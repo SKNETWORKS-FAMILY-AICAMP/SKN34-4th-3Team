@@ -148,6 +148,10 @@ class BusinessPlanRenderResponse(BaseModel):
     contentBase64: str
 
 
+class BusinessPlanDocumentSaveRequest(BusinessPlanRenderRequest):
+    format: Literal["pdf", "hwpx"] = "hwpx"
+
+
 class BusinessPlanSectionScore(BaseModel):
     model_config = ConfigDict(title="항목별 예비진단")
     key: str
@@ -176,6 +180,12 @@ class BizplanDraftResponse(BaseModel):
     updatedAt: datetime | None = Field(default=None, description="마지막 저장 시각")
 
 
+class BizplanDocumentFileItem(BaseModel):
+    fileName: str
+    format: Literal["pdf", "hwpx"]
+    sizeBytes: int
+
+
 class BizplanDocumentItem(BaseModel):
     id: int
     title: str
@@ -183,6 +193,7 @@ class BizplanDocumentItem(BaseModel):
     format: Literal["pdf", "hwpx"]
     sizeBytes: int
     createdAt: datetime
+    files: list[BizplanDocumentFileItem]
 
 
 class BizplanDraftItem(BaseModel):

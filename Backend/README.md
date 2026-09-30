@@ -201,14 +201,18 @@ Content-Type: application/json
 
 ### 사업계획서 파일 보관
 
+`DELETE /bizplan/draft`는 인증된 사용자의 임시저장만 삭제하고 `{ deleted: true }`를 반환한다. 서류 탭의 임시저장 항목에서도 삭제할 수 있다. 저장된 문서는 유지한다.
+
 | Method | Path | 인증 | 응답 |
 |--------|------|------|------|
-| POST | `/bizplan/documents` | Bearer | 기존 `/bizplan/render` 요청 → `{ id, title, fileName, format, sizeBytes, createdAt }` |
+| POST | `/bizplan/documents` | Bearer | `/bizplan/render` 요청 (`format` 생략 가능) → `{ id, title, fileName, format, sizeBytes, createdAt, files }` |
 | GET | `/bizplan/documents` | Bearer | `{ draft: { title, updatedAt } 또는 null, documents: [...] }` (메타데이터만, 파일 최신순) |
-| GET | `/bizplan/documents/{id}/file` | Bearer | 원본 바이너리·저장된 MIME 타입·다운로드 파일명 |
+| GET | `/bizplan/documents/{id}/file?format=pdf` | Bearer | 선택한 형식의 원본 바이너리·MIME 타입·다운로드 파일명 (`pdf`/`hwpx`, 생략하면 대표 파일) |
 | DELETE | `/bizplan/documents/{id}` | Bearer | `{ deleted: true }` |
 
-정상 응답은 모두 `200`. 서버에서 렌더링한 PDF/HWPX만 `bizplan_documents.file_data`(BYTEA)에 저장한다.
+정상 응답은 모두 `200`. ‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 저장한다.
+대표 파일은 `bizplan_documents.file_data`, 추가 형식은 `bizplan_document_files.file_data`(BYTEA)에 저장한다. 두 형식은 한 문서로 계산하고 한 트랜잭션에서 저장·삭제한다.
+`files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이다. 기존 단일 파일은 해당 형식만 제공한다. 마이페이지에서 형식을 선택해 다운로드하며, 없는 형식은 `404`이다.
 사용자당 8개(초과 `409`), 파일당 50MiB(초과 `413`)이며 중복 저장은 허용한다.
 렌더링 전에 개수를 확인하고, 렌더링 후 한 DB 연결에서 사용자 행 잠금·개수 재확인·INSERT를 수행해 동시 요청에도 8개를 넘지 않는다.
 다른 사용자 또는 없는 파일의 조회·삭제는 `404`, 미인증은 `401`이다. 임시저장(`/bizplan/draft`)과는 별개다.

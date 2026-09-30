@@ -138,3 +138,14 @@ CREATE TABLE IF NOT EXISTS bizplan_documents (
 );
 CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
     ON bizplan_documents(user_id, created_at DESC);
+
+-- 같은 저장 문서의 추가 출력 형식. 두 형식을 보관해도 문서 수는 1건이다.
+CREATE TABLE IF NOT EXISTS bizplan_document_files (
+    document_id INT NOT NULL REFERENCES bizplan_documents(id) ON DELETE CASCADE,
+    format      VARCHAR(10) NOT NULL,
+    file_name   VARCHAR(255) NOT NULL,
+    mime_type   VARCHAR(100) NOT NULL,
+    file_data   BYTEA NOT NULL,
+    size_bytes  INT NOT NULL,
+    PRIMARY KEY (document_id, format)
+);

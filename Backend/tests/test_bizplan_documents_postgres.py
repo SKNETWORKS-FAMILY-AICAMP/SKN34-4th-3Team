@@ -114,6 +114,34 @@ class BizplanDocumentPostgresTest(unittest.TestCase):
         with db.connection() as conn:
             conn.execute("DELETE FROM users WHERE id = 1")
         self.assertEqual(repo.count_bizplan_documents(1), 0)
+        self.assertEqual(db.scalar("SELECT COUNT(*) FROM bizplan_document_files"), 0)
+
+    def test_pair_downloads_ownership_and_delete_are_atomic(self):
+        hwpx = b"PK-hwpx-original"
+        additional = [{
+            "format": "hwpx", "file_name": "한글.hwpx", "mime_type": "application/hwp+zip",
+            "file_data": hwpx, "size_bytes": len(hwpx),
+        }]
+        row = repo.insert_bizplan_document(
+            1, BODY["title"], RENDERED["fileName"], "pdf", "application/pdf", RAW, 8,
+            additional_files=additional,
+        )
+        self.assertEqual(repo.count_bizplan_documents(1), 1)
+        item = bizplan_service.list_documents(1)["documents"][0]
+        self.assertEqual([file["format"] for file in item["files"]], ["hwpx", "pdf"])
+        self.assertEqual(bizplan_service.get_document_file(1, row["id"], "pdf")[0], RAW)
+        self.assertEqual(bizplan_service.get_document_file(1, row["id"], "hwpx")[0], hwpx)
+        self.assertIsNone(repo.get_bizplan_document(2, row["id"], "hwpx"))
+        self.assertIsNone(repo.get_bizplan_document(1, row["id"], "txt"))
+        self.assertTrue(repo.delete_bizplan_document(1, row["id"]))
+        self.assertEqual(db.scalar("SELECT COUNT(*) FROM bizplan_document_files"), 0)
+        with self.assertRaises(StringDataRightTruncation):
+            repo.insert_bizplan_document(
+                1, BODY["title"], RENDERED["fileName"], "pdf", "application/pdf", RAW, 8,
+                additional_files=[{**additional[0], "file_name": "x" * 256}],
+            )
+        self.assertEqual(repo.count_bizplan_documents(1), 0)
+        self.assertEqual(db.scalar("SELECT COUNT(*) FROM bizplan_document_files"), 0)
 
     def test_draft_save_updates_one_summary_and_restores_full_content(self):
         client = TestClient(api)

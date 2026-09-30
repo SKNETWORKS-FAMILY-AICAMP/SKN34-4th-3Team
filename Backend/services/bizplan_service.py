@@ -164,18 +164,49 @@ def save_draft(user_id: int, data: dict) -> None:
     repo.upsert_bizplan_draft(user_id, data)
 
 
+def delete_draft(user_id: int) -> None:
+    repo.delete_bizplan_draft(user_id)
+
+
 def _document_item(row: dict) -> dict:
+    files = [row, *(row.get("files") or [])]
     return {
         "id": row["id"], "title": row["title"], "fileName": row["file_name"],
         "format": row["format"], "sizeBytes": row["size_bytes"],
         "createdAt": row["created_at"],
+        "files": [
+            {"format": file["format"], "fileName": file["file_name"], "sizeBytes": file["size_bytes"]}
+            for file in sorted(files, key=lambda file: file["format"])
+        ],
     }
 
 
 def save_document(user_id: int, body: dict) -> dict:
     if repo.count_bizplan_documents(user_id) >= MAX_DOCUMENTS_PER_USER:
         raise HttpError(409, DOCUMENT_LIMIT_MESSAGE)
-    rendered = render(body)
+    template = body.get("template")
+    if template:
+        _validate_template_file(template)
+        formats = [Path(template["fileName"]).suffix.lower().lstrip(".")]
+    else:
+        primary_format = body.get("format", "hwpx")
+        formats = [primary_format, "pdf" if primary_format == "hwpx" else "hwpx"]
+    files = []
+    for format in formats:
+        rendered = render({**body, "format": format})
+        files.append(_decode_document_file(rendered, format))
+    primary, *additional = files
+    row = repo.insert_bizplan_document(
+        user_id, body["title"], primary["file_name"], primary["format"],
+        primary["mime_type"], primary["file_data"], MAX_DOCUMENTS_PER_USER,
+        additional_files=additional,
+    )
+    if row is None:
+        raise HttpError(409, DOCUMENT_LIMIT_MESSAGE)
+    return _document_item(row)
+
+
+def _decode_document_file(rendered: dict, format: str) -> dict:
     try:
         raw = base64.b64decode(rendered["contentBase64"], validate=True)
     except (binascii.Error, ValueError, TypeError, KeyError) as exc:
@@ -184,13 +215,10 @@ def save_document(user_id: int, body: dict) -> dict:
         raise HttpError(503, "생성된 파일이 비어 있습니다.")
     if len(raw) > MAX_DOCUMENT_BYTES:
         raise HttpError(413, "파일이 50MiB를 넘어 저장하지 못했습니다.")
-    row = repo.insert_bizplan_document(
-        user_id, body["title"], rendered["fileName"], body["format"],
-        rendered["mimeType"], raw, MAX_DOCUMENTS_PER_USER,
-    )
-    if row is None:
-        raise HttpError(409, DOCUMENT_LIMIT_MESSAGE)
-    return _document_item(row)
+    return {
+        "format": format, "file_name": rendered["fileName"], "mime_type": rendered["mimeType"],
+        "file_data": raw, "size_bytes": len(raw),
+    }
 
 
 def list_documents(user_id: int) -> dict:
@@ -204,8 +232,8 @@ def list_documents(user_id: int) -> dict:
     }
 
 
-def get_document_file(user_id: int, document_id: int) -> tuple[bytes, str, str]:
-    row = repo.get_bizplan_document(user_id, document_id)
+def get_document_file(user_id: int, document_id: int, format: str | None = None) -> tuple[bytes, str, str]:
+    row = repo.get_bizplan_document(user_id, document_id, format)
     if row is None:
         raise HttpError(404, "서류를 찾을 수 없습니다.")
     return bytes(row["file_data"]), row["mime_type"], row["file_name"]

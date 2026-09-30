@@ -467,6 +467,7 @@ export function DocsList({ userId, onNavigate, onRequireLogin }) {
   const [actionError, setActionError] = useState('');
   const [reload, setReload] = useState(0);
   const [pendingActions, setPendingActions] = useState({});
+  const [downloadFormats, setDownloadFormats] = useState({});
   const pendingIds = useRef(new Set());
 
   useEffect(() => {
@@ -494,23 +495,33 @@ export function DocsList({ userId, onNavigate, onRequireLogin }) {
     };
   }, [userId, reload, onRequireLogin]);
 
-  const runAction = async (item, action) => {
+  const runAction = async (item, action, file) => {
     if (pendingIds.current.has(item.id)) return;
-    if (action === 'delete' && !window.confirm(`“${item.fileName}” 서류를 삭제할까요?`)) return;
+    const isDraft = item.id === 'draft';
+    if (action === 'delete' && !window.confirm(isDraft
+      ? `“${item.title}” 임시저장 내용을 삭제할까요?`
+      : `“${item.title}” 문서와 보관된 모든 형식을 삭제할까요?`)) return;
     pendingIds.current.add(item.id);
     setPendingActions((current) => ({ ...current, [item.id]: action }));
     setActionError('');
     try {
       if (action === 'delete') {
-        await api.deleteBizplanDocument(item.id);
-        setDocuments((current) => current.filter((doc) => doc.id !== item.id));
+        if (isDraft) {
+          await api.deleteBizplanDraft();
+          setDraft(null);
+          // 이전 브라우저 초안이 다음 방문에 다시 이관되지 않도록 정리한다.
+          try { localStorage.removeItem(`changeup:bizplan-draft:${userId}`); } catch { /* 저장소 접근 불가 */ }
+        } else {
+          await api.deleteBizplanDocument(item.id);
+          setDocuments((current) => current.filter((doc) => doc.id !== item.id));
+        }
       } else {
-        const blob = await api.bizplanDocumentFile(item.id);
+        const blob = await api.bizplanDocumentFile(item.id, file.format);
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         try {
           anchor.href = url;
-          anchor.download = item.fileName;
+          anchor.download = file.fileName;
           document.body.appendChild(anchor);
           anchor.click();
         } finally {
@@ -538,10 +549,10 @@ export function DocsList({ userId, onNavigate, onRequireLogin }) {
     <div className="tool">
       <div className="tool__panel">
         <div className="mp-card__head">
-          <h2 className="mp-card__title">서류 <span className="mp-card__tag">{loading || loadError ? '' : `저장 파일 ${documents.length}/8`}</span></h2>
+          <h2 className="mp-card__title">서류 <span className="mp-card__tag">{loading || loadError ? '' : `저장 문서 ${documents.length}/8`}</span></h2>
           <button type="button" className="mp-card__link" onClick={() => setReload((n) => n + 1)} disabled={loading || Object.keys(pendingActions).length > 0}>새로고침</button>
         </div>
-        <p className="mp-basis">임시저장한 내용은 이어서 작성할 수 있어요. 파일은 최대 8개, 파일당 50MiB까지 보관할 수 있어요.</p>
+        <p className="mp-basis">임시저장한 내용은 이어서 작성할 수 있어요. 문서는 최대 8개, 파일당 50MiB까지 보관할 수 있어요. 기본 문서는 PDF·HWPX를 선택하고, 제출 양식은 원본 형식으로 다운로드해요.</p>
       </div>
       {actionError && <p className="cal__err" role="alert">{actionError}</p>}
       {loading ? <p className="gov__empty" role="status">서류를 불러오는 중…</p>
@@ -562,24 +573,31 @@ export function DocsList({ userId, onNavigate, onRequireLogin }) {
                   <p className="mp-basis">작성 중인 사업계획서</p>
                   <p className="mg__meta">마지막 임시저장 · {new Date(draft.updatedAt).toLocaleString('ko-KR')}</p>
                   <div className="gov__actions">
-                    <button type="button" className="gov__action" onClick={() => onNavigate('bizplan')}>작성하기</button>
+                    <button type="button" className="gov__action" disabled={!!pendingActions.draft} onClick={() => onNavigate('bizplan')}>작성하기</button>
+                    <button type="button" className="gov__action" disabled={!!pendingActions.draft} onClick={() => runAction({ id: 'draft', title: draft.title }, 'delete')}>{pendingActions.draft ? '삭제 중…' : '삭제'}</button>
                   </div>
                 </li>
               )}
-              {documents.map((item) => (
+              {documents.map((item) => {
+                const file = item.files.find((file) => file.format === downloadFormats[item.id]) || item.files[0];
+                return (
                 <li className="mp-card" key={item.id}>
                   <div className="mp-card__head">
                     <h3 className="mp-card__title">{item.title}</h3>
                     <span className="mg__chip">저장된 문서</span>
                   </div>
-                  <p className="mp-basis" style={{ overflowWrap: 'anywhere', marginTop: 8 }}>{item.fileName}</p>
-                  <p className="mg__meta">{item.format.toUpperCase()} · {(item.sizeBytes / (1024 * 1024)).toLocaleString('ko-KR', { maximumFractionDigits: 2 })} MiB · {new Date(item.createdAt).toLocaleString('ko-KR')}</p>
+                  <p className="mp-basis" style={{ overflowWrap: 'anywhere', marginTop: 8 }}>{file.fileName}</p>
+                  <p className="mg__meta">{file.format.toUpperCase()} · {(file.sizeBytes / (1024 * 1024)).toLocaleString('ko-KR', { maximumFractionDigits: 2 })} MiB · {new Date(item.createdAt).toLocaleString('ko-KR')}</p>
                   <div className="gov__actions">
-                    <button type="button" className="gov__action" disabled={!!pendingActions[item.id]} onClick={() => runAction(item, 'download')}>{pendingActions[item.id] === 'download' ? '다운로드 중…' : '다운로드'}</button>
+                    <select aria-label={`${item.title} 다운로드 형식`} value={file.format} disabled={!!pendingActions[item.id]} onChange={(event) => setDownloadFormats((current) => ({ ...current, [item.id]: event.target.value }))}>
+                      {item.files.map((file) => <option key={file.format} value={file.format}>{file.format.toUpperCase()}</option>)}
+                    </select>
+                    <button type="button" className="gov__action" disabled={!!pendingActions[item.id]} onClick={() => runAction(item, 'download', file)}>{pendingActions[item.id] === 'download' ? '다운로드 중…' : '다운로드'}</button>
                     <button type="button" className="gov__action" disabled={!!pendingActions[item.id]} onClick={() => runAction(item, 'delete')}>{pendingActions[item.id] === 'delete' ? '삭제 중…' : '삭제'}</button>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
     </div>

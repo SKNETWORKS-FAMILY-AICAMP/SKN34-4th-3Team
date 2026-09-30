@@ -10,6 +10,8 @@
 
 ## 1. 배경과 목표
 
+> 저장 UX 변경: ‘문서 저장’ 버튼 하나로 기본 문서의 PDF·HWPX를 함께 보관하고 마이페이지에서 형식을 선택한다. 제출 양식은 원본 형식만 제공한다. 추가 형식은 `bizplan_document_files`에 저장하며, 두 형식은 1문서로 계산한다. 기존 단일 파일도 해당 형식으로 계속 다운로드할 수 있다.
+
 현황
 - 파일 출력: `renderPlan`(`Frontend/src/pages/BusinessPlanPage.jsx:946`) → `POST /bizplan/render` → `bizplan_service.render`(`Backend/services/bizplan_service.py:119`). 생성 파일을 base64로 반환만 하고 DB 기록 없음. 프론트는 `downloadBase64File`(`BusinessPlanPage.jsx:220`)로 브라우저 다운로드만 수행
 - 임시저장: `PUT /bizplan/draft` → `bizplan_drafts`(`DB/app_extras.sql:100`). 작성 화면 상태(JSON)를 유저당 1건 덮어쓰기. 파일 저장과 별개

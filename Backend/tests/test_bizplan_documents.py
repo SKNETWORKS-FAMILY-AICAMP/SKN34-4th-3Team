@@ -71,9 +71,13 @@ class BizplanDocumentRouteTest(unittest.TestCase):
         saved = self.client.post("/bizplan/documents", json=BODY, headers=headers(7))
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.json()["fileName"], RENDERED["fileName"])
-        self.assertEqual(set(saved.json()), {"id", "title", "fileName", "format", "sizeBytes", "createdAt"})
+        self.assertEqual(set(saved.json()), {"id", "title", "fileName", "format", "sizeBytes", "createdAt", "files"})
         self.repo.insert_bizplan_document.assert_called_once_with(
             7, BODY["title"], RENDERED["fileName"], "pdf", "application/pdf", RAW, 8,
+            additional_files=[{
+                "format": "hwpx", "file_name": RENDERED["fileName"], "mime_type": "application/pdf",
+                "file_data": RAW, "size_bytes": len(RAW),
+            }],
         )
         self.repo.list_bizplan_documents.return_value = [ROW]
         listed = self.client.get("/bizplan/documents", headers=headers(7))
@@ -91,7 +95,7 @@ class BizplanDocumentRouteTest(unittest.TestCase):
         self.assertEqual(downloaded["Content-Type"], "application/pdf")
         self.assertEqual(downloaded["Content-Disposition"],
                          "attachment; filename*=utf-8''" + quote(RENDERED["fileName"]))
-        self.repo.get_bizplan_document.assert_called_once_with(7, 3)
+        self.repo.get_bizplan_document.assert_called_once_with(7, 3, None)
 
         self.repo.delete_bizplan_document.return_value = True
         deleted = self.client.delete("/bizplan/documents/3", headers=headers(7))
@@ -137,7 +141,7 @@ class BizplanDocumentRouteTest(unittest.TestCase):
             with self.subTest(user_id=user_id):
                 self.assertEqual(self.client.get("/bizplan/documents/3/file", headers=headers(user_id)).status_code, 404)
                 self.assertEqual(self.client.delete("/bizplan/documents/3", headers=headers(user_id)).status_code, 404)
-                self.repo.get_bizplan_document.assert_called_with(user_id, 3)
+                self.repo.get_bizplan_document.assert_called_with(user_id, 3, None)
                 self.repo.delete_bizplan_document.assert_called_with(user_id, 3)
 
     def test_full_storage_rejects_before_render(self):
@@ -152,7 +156,7 @@ class BizplanDocumentRouteTest(unittest.TestCase):
         self.repo.insert_bizplan_document.return_value = None
         response = self.client.post("/bizplan/documents", json=BODY, headers=headers())
         self.assertEqual(response.status_code, 409)
-        self.render.assert_called_once()
+        self.assertEqual(self.render.call_count, 2)
 
     def test_duplicate_saves_create_distinct_documents(self):
         self.repo.insert_bizplan_document.side_effect = [ROW, {**ROW, "id": 4}]
@@ -160,7 +164,7 @@ class BizplanDocumentRouteTest(unittest.TestCase):
         second = self.client.post("/bizplan/documents", json=BODY, headers=headers())
         self.assertEqual((first.status_code, second.status_code), (200, 200))
         self.assertEqual((first.json()["id"], second.json()["id"]), (3, 4))
-        self.assertEqual(self.render.call_count, 2)
+        self.assertEqual(self.render.call_count, 4)
 
     def test_bad_or_empty_rendered_base64_is_not_saved(self):
         for content in ("not base64!", "", "한글", None):
@@ -192,6 +196,79 @@ class BizplanDocumentRouteTest(unittest.TestCase):
                     self.repo.insert_bizplan_document.assert_not_called()
                 else:
                     self.assertEqual(len(self.repo.insert_bizplan_document.call_args.args[5]), bizplan_service.MAX_DOCUMENT_BYTES)
+
+    def test_default_save_preserves_both_formats_in_one_document(self):
+        hwpx = b"PK-hwpx"
+        def render(body):
+            raw = RAW if body["format"] == "pdf" else hwpx
+            return {
+                "fileName": "사업계획서." + body["format"],
+                "mimeType": "application/pdf" if body["format"] == "pdf" else "application/hwp+zip",
+                "contentBase64": base64.b64encode(raw).decode(),
+            }
+        self.render.side_effect = render
+        self.repo.insert_bizplan_document.return_value = {
+            **ROW, "file_name": "사업계획서.pdf", "files": [
+                {"format": "hwpx", "file_name": "사업계획서.hwpx", "size_bytes": len(hwpx)},
+            ],
+        }
+        response = self.client.post("/bizplan/documents", json=BODY, headers=headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([file["format"] for file in response.json()["files"]], ["hwpx", "pdf"])
+        self.assertEqual(self.repo.insert_bizplan_document.call_count, 1)
+        additional = self.repo.insert_bizplan_document.call_args.kwargs["additional_files"]
+        self.assertEqual(additional[0]["file_data"], hwpx)
+        self.assertEqual(additional[0]["mime_type"], "application/hwp+zip")
+
+    def test_template_saves_only_its_original_format(self):
+        for format in ("pdf", "hwpx"):
+            with self.subTest(format=format):
+                self.render.reset_mock()
+                self.repo.insert_bizplan_document.reset_mock()
+                template = {"fileName": "양식." + format, "contentBase64": "YQ=="}
+                response = self.client.post("/bizplan/documents", json={**BODY, "template": template}, headers=headers())
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self.render.call_count, 1)
+                self.assertEqual(self.render.call_args.args[0]["format"], format)
+                self.assertEqual(self.render.call_args.args[0]["template"], template)
+                self.assertEqual(self.repo.insert_bizplan_document.call_args.kwargs["additional_files"], [])
+
+    def test_second_format_failure_leaves_no_partial_document(self):
+        for failure in (HttpError(504, "두 번째 출력 실패"), {**RENDERED, "contentBase64": "!"}):
+            with self.subTest(failure=failure):
+                self.render.side_effect = [RENDERED, failure]
+                response = self.client.post("/bizplan/documents", json=BODY, headers=headers())
+                self.assertIn(response.status_code, (503, 504))
+        self.repo.insert_bizplan_document.assert_not_called()
+
+    def test_second_file_size_limit_leaves_no_partial_document(self):
+        with patch.object(bizplan_service, "MAX_DOCUMENT_BYTES", len(RAW)):
+            self.render.side_effect = [RENDERED, {
+                **RENDERED, "contentBase64": base64.b64encode(RAW + b"x").decode(),
+            }]
+            response = self.client.post("/bizplan/documents", json=BODY, headers=headers())
+        self.assertEqual(response.status_code, 413)
+        self.repo.insert_bizplan_document.assert_not_called()
+
+    def test_save_does_not_require_a_format_choice(self):
+        body = {key: value for key, value in BODY.items() if key != "format"}
+        response = self.client.post("/bizplan/documents", json=body, headers=headers())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([call.args[0]["format"] for call in self.render.call_args_list], ["hwpx", "pdf"])
+
+    def test_download_selects_format_and_rejects_unavailable_format(self):
+        self.repo.get_bizplan_document.return_value = {
+            "file_data": b"PK-hwpx", "mime_type": "application/hwp+zip", "file_name": "한글.hwpx",
+        }
+        response = self.client.get("/bizplan/documents/3/file?format=hwpx", headers=headers(7))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"PK-hwpx")
+        self.assertEqual(response["Content-Type"], "application/hwp+zip")
+        self.assertIn(quote("한글.hwpx"), response["Content-Disposition"])
+        self.repo.get_bizplan_document.assert_called_with(7, 3, "hwpx")
+        self.repo.get_bizplan_document.return_value = None
+        self.assertEqual(self.client.get("/bizplan/documents/3/file?format=pdf", headers=headers()).status_code, 404)
+        self.assertEqual(self.client.get("/bizplan/documents/3/file?format=txt", headers=headers()).status_code, 422)
 
 
 class BizplanDocumentRenderValidationTest(unittest.TestCase):

@@ -684,6 +684,10 @@ def get_bizplan_draft_summary(user_id: int) -> dict | None:
     )
 
 
+def delete_bizplan_draft(user_id: int) -> None:
+    db.execute("DELETE FROM bizplan_drafts WHERE user_id = ?", (user_id,))
+
+
 def upsert_bizplan_draft(user_id: int, data: dict) -> None:
     db.execute(
         "INSERT INTO bizplan_drafts(user_id,data,updated_at) VALUES (?,?,now()) "
@@ -701,6 +705,7 @@ def count_bizplan_documents(user_id: int) -> int:
 def insert_bizplan_document(
     user_id: int, title: str, file_name: str, format: str, mime_type: str,
     file_data: bytes, max_documents: int,
+    additional_files: list[dict] | None = None,
 ) -> dict | None:
     """사용자별 저장을 직렬화한다. 상한에 도달하면 None을 반환한다."""
     with db.connection() as conn:
@@ -713,24 +718,50 @@ def insert_bizplan_document(
         ).fetchone()["count"]
         if count >= max_documents:
             return None
-        return dict(conn.execute(
+        row = dict(conn.execute(
             "INSERT INTO bizplan_documents"
             " (user_id, title, file_name, format, mime_type, file_data, size_bytes)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s)"
             " RETURNING id, title, file_name, format, size_bytes, created_at",
             (user_id, title, file_name, format, mime_type, file_data, len(file_data)),
         ).fetchone())
+        for file in additional_files or []:
+            conn.execute(
+                "INSERT INTO bizplan_document_files"
+                " (document_id, format, file_name, mime_type, file_data, size_bytes)"
+                " VALUES (%s, %s, %s, %s, %s, %s)",
+                (row["id"], file["format"], file["file_name"], file["mime_type"],
+                 file["file_data"], file["size_bytes"]),
+            )
+        row["files"] = [
+            {key: file[key] for key in ("format", "file_name", "size_bytes")}
+            for file in additional_files or []
+        ]
+        return row
 
 
 def list_bizplan_documents(user_id: int) -> list[dict]:
     return db.fetchall(
-        "SELECT id, title, file_name, format, size_bytes, created_at"
-        " FROM bizplan_documents WHERE user_id = ? ORDER BY created_at DESC, id DESC",
+        "SELECT id, title, file_name, format, size_bytes, created_at,"
+        " (SELECT COALESCE(jsonb_agg(jsonb_build_object("
+        " 'format', f.format, 'file_name', f.file_name, 'size_bytes', f.size_bytes)"
+        " ORDER BY f.format), '[]'::jsonb) FROM bizplan_document_files f"
+        " WHERE f.document_id = d.id) AS files"
+        " FROM bizplan_documents d WHERE user_id = ? ORDER BY created_at DESC, id DESC",
         (user_id,),
     )
 
 
-def get_bizplan_document(user_id: int, document_id: int) -> dict | None:
+def get_bizplan_document(user_id: int, document_id: int, format: str | None = None) -> dict | None:
+    if format is not None:
+        return db.fetchone(
+            "SELECT file_name, mime_type, file_data FROM bizplan_documents"
+            " WHERE user_id = ? AND id = ? AND format = ?"
+            " UNION ALL SELECT f.file_name, f.mime_type, f.file_data"
+            " FROM bizplan_document_files f JOIN bizplan_documents d ON d.id = f.document_id"
+            " WHERE d.user_id = ? AND d.id = ? AND f.format = ?",
+            (user_id, document_id, format, user_id, document_id, format),
+        )
     return db.fetchone(
         "SELECT file_name, mime_type, file_data FROM bizplan_documents"
         " WHERE user_id = ? AND id = ?", (user_id, document_id),
