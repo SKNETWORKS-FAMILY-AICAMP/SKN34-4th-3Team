@@ -101,7 +101,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## bizplan — 사업계획서
 
-사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)과 마이페이지 서류 탭이 부른다. 생성·예비진단·정리·양식 검사·출력은 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다. 임시저장은 작성 상태 JSON을, 서류 저장은 서버에서 출력한 파일 원본을 DB에 별도로 보관한다.
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)과 마이페이지 사업계획서 탭(보관함 `/bizplan/plans`)이 부른다. 생성·예비진단·정리·양식 검사·출력은 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다. 임시저장은 작성 상태 JSON을, 서류 저장은 서버에서 출력한 파일 원본을 DB에 별도로 보관한다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -125,7 +125,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 `templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
 
-임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. 서류 탭에서는 임시저장 요약을 파일 목록보다 먼저 표시하고 ‘임시저장’과 ‘저장된 문서’로 구분한다. 임시저장 항목의 ‘작성하기’는 기존 `/bizplan/draft` 복원 흐름으로 연결한다. 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
+임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. `/bizplan/documents` API는 현재 프론트에서 사용하지 않는다(파일은 사업계획서 페이지에서 바로 렌더링해 받는다). 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
 
 ## policies — 지원정책 탐색
 

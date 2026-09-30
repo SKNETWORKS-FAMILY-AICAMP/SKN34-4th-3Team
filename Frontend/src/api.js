@@ -318,6 +318,9 @@ export const api = {
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
   roadmapProgress: (opt) => apiGet('/users/me/roadmap-progress', opt),
   setRoadmapTask: (taskKey, done, opt) => apiPut('/users/me/roadmap-progress', { taskKey, done }, opt),
+  subscription: (opt) => apiGet('/users/me/subscription', opt),
+  // 목업 결제: 서버가 즉시 승인하고 갱신된 구독을 돌려준다.
+  changePlan: (plan, opt) => apiPut('/users/me/subscription', { plan }, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),
@@ -374,14 +377,18 @@ export const api = {
   refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
   inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
   renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
-  saveBizplanDocument: (body, opt) => apiPost('/bizplan/documents', body, { timeout: 140000, ...opt }),
-  bizplanDocuments: (opt) => apiGet('/bizplan/documents', opt),
-  bizplanDocumentFile: (id, format, opt) => apiGetBlob(`/bizplan/documents/${id}/file` + qs({ format }), opt),
-  deleteBizplanDocument: (id, opt) => apiDelete(`/bizplan/documents/${id}`, opt),
   // 임시저장에는 양식·이미지 Base64가 들어가 최대 10MB대라 전송 시간을 넉넉히 둔다.
   bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
   saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),
   deleteBizplanDraft: (opt) => apiDelete('/bizplan/draft', opt),
+  // 사업계획서 보관함(마이페이지 관리). 열기·새로 만들기는 작성 화면 임시저장을 바꾼 뒤 사업계획서 페이지로 이동한다.
+  bizplanPlans: (opt) => apiGet('/bizplan/plans', opt),
+  createBizplanPlan: (data, opt) => apiPost('/bizplan/plans', { data }, { timeout: 30000, ...opt }),
+  saveBizplanPlan: (planId, data, opt) => apiPut(`/bizplan/plans/${planId}`, { data }, { timeout: 30000, ...opt }),
+  renameBizplanPlan: (planId, title, opt) => apiPatch(`/bizplan/plans/${planId}`, { title }, opt),
+  deleteBizplanPlan: (planId, opt) => apiDelete(`/bizplan/plans/${planId}`, opt),
+  openBizplanPlan: (planId, opt) => apiPost(`/bizplan/plans/${planId}/open`, {}, opt),
+  newBizplanPlan: (opt) => apiPost('/bizplan/plans/new', {}, opt),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

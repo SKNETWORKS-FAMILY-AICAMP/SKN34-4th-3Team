@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { INDUSTRIES, REGIONS } from '../constants.js';
 import { linkBtn } from '../utils.js';
+import { GuideTour } from '../components/GuideTour.jsx';
 import { GovDetailModal, PolicySummaryCard } from './AnnouncementAnalyzer.jsx';
 import { paginateSupplementFields, reassessSupplementFields, templateContext } from '../businessPlanSupplement.js';
 
@@ -90,6 +91,160 @@ const STEP_SECTIONS = {
   setup: [
     { id: 'announcement', letter: 'A', tone: 'a', title: '제출할 공고 (선택)', menu: 'A · 제출할 공고' },
     { id: 'template', letter: 'B', tone: 'b', title: '사업계획서 양식 (선택 · PDF/HWPX)', menu: 'B · 사업계획서 양식' },
+  ],
+};
+
+// 단계별 화면 안내. 각 단계에 처음 들어왔을 때 한 번만 자동으로 띄우고, 이후에는 '사용 가이드' 버튼으로만 연다.
+// 대상 요소가 지금 화면에 없는 항목(예: 진단 전의 결과 목록)은 투어가 건너뛴다.
+const TOUR_KEY = (userId, step) => `changeup:bizplan-tour:v2:${userId}:${step}`;
+const LEGACY_TOUR_KEY = (userId) => `changeup:bizplan-tour:v1:${userId}`;
+const HELP_TOUR_STEP = {
+  target: '.tour-fab',
+  title: '가이드 다시 보기',
+  body: <p>사용법이 궁금하면 언제든 오른쪽 아래 이 버튼을 눌러 지금 단계의 안내를 다시 볼 수 있어요.</p>,
+};
+const REFINE_TOUR = [
+  {
+    target: null,
+    title: '사업계획서 초안, 이렇게 만들어요',
+    body: (
+      <React.Fragment>
+        <p>아이디어를 입력하면 AI가 사업계획서 초안을 쓰고, 평가와 수정까지 도와드려요.</p>
+        <ol className="gt__flow">
+          <li><b>계획 정리</b>기초 정보와 아이디어 입력</li>
+          <li><b>공고·양식 선택</b>제출할 공고와 양식 고르기(선택)</li>
+          <li><b>초안 평가</b>AI 예비진단 확인</li>
+          <li><b>초안 수정</b>평가를 보며 다듬기</li>
+          <li><b>재평가 및 저장</b>PDF·HWPX로 내려받기</li>
+        </ol>
+      </React.Fragment>
+    ),
+  },
+  {
+    target: '[data-tour="crumbs"]',
+    title: '진행 단계',
+    body: <p>지금 있는 단계가 파란색으로 표시돼요. 끝낸 단계는 눌러서 언제든 돌아갈 수 있어요.</p>,
+  },
+  {
+    target: '[data-tour="secnav"]',
+    title: '섹션 이동',
+    body: <p>누르면 해당 입력 카드로 바로 이동해요. 스크롤하면 지금 보고 있는 섹션이 표시돼요.</p>,
+  },
+  {
+    target: '#bp-sec-basic',
+    title: 'A. 기초 정보',
+    body: <p>사업명, 창업 상태·업종·지역·형태, 팀 구성을 입력해요. 카드 오른쪽 위 버튼으로 접고 펼칠 수 있어요.</p>,
+  },
+  {
+    target: '#bp-sec-idea',
+    title: 'B. 아이디어 정리',
+    body: <p>6개 항목을 편하게 적어 주세요. 칸은 글 길이에 맞춰 늘어나고, 거친 문장도 AI가 초안에 맞게 다듬어 줘요.</p>,
+  },
+  {
+    target: '#bp-sec-extra',
+    title: 'C. 추가 설명 (선택)',
+    body: <p>초안에 꼭 넣고 싶은 내용이 있다면 적어 주세요. 비워 둬도 괜찮아요.</p>,
+  },
+  {
+    target: '[data-tour="cta"]',
+    title: 'AI로 입력 정리하기',
+    body: <p>A·B의 필수 항목을 모두 채우면 버튼이 켜져요. 정리된 내용은 확인하고 직접 고칠 수 있어요.</p>,
+  },
+  {
+    target: '[data-tour="save"]',
+    title: '임시저장',
+    body: <p>작성 중인 내용을 계정에 저장해요. 다음에 들어오면 이어서 쓸 수 있어요.</p>,
+  },
+  HELP_TOUR_STEP,
+];
+
+const TOURS = {
+  refine: REFINE_TOUR,
+  setup: [
+    {
+      target: '#bp-sec-announcement',
+      title: 'A. 제출할 공고 (선택)',
+      body: <p>지원할 공고를 고르면 그 공고의 평가 기준에 맞춰 초안을 쓰고 진단해요. 정해진 공고가 없으면 '공고 선택 안 함'을 고르세요.</p>,
+    },
+    {
+      target: '#bp-sec-template',
+      title: 'B. 사업계획서 양식 (선택)',
+      body: <p>제출용 PDF·HWPX 양식을 끌어다 놓으면 양식의 칸에 맞춰 초안을 채워요. 양식이 없으면 기본 PSST 양식으로 만들어요.</p>,
+    },
+    {
+      target: '[data-tour="cta"]',
+      title: 'AI 초안 만들기',
+      body: <p>계획 정리를 마쳤다면 눌러 주세요. 양식을 올렸다면 먼저 양식을 분석하고, 초안 작성에는 1분 정도 걸려요.</p>,
+    },
+    {
+      target: '[data-tour="prev"]',
+      title: '이전 단계로',
+      body: <p>앞 단계의 내용을 고치고 싶으면 언제든 눌러 돌아갈 수 있어요. 입력한 내용은 그대로 남아요.</p>,
+    },
+    HELP_TOUR_STEP,
+  ],
+  supplement: [
+    {
+      target: '[data-tour="panel"]',
+      title: '계획 보완',
+      body: <p>선택한 양식에서 정보가 더 필요한 칸만 모았어요. 칸마다 내용을 입력하거나, 모르는 정보는 '현재 정보 없음'·'해당 사항 없음'을 골라 비워 둘 수 있어요.</p>,
+    },
+    {
+      target: '[data-tour="next"]',
+      title: '다음 단계로',
+      body: <p>입력을 마치면 다음 단계로 넘어가 초안 평가를 받아요. 입력한 내용은 임시저장으로 보관할 수 있어요.</p>,
+    },
+  ],
+  preview: [
+    {
+      target: '[data-tour="panel"]',
+      title: '초안 평가',
+      body: <p>AI가 선택한 공고·양식 기준으로 초안을 예비진단해요. 종합 점수와 총평을 먼저 확인하세요.</p>,
+    },
+    {
+      target: '.bp-eval__list',
+      title: '항목별 진단',
+      body: <p>항목마다 점수, 잘된 점(👍), 보완할 점(🔧)을 보여줘요. 점수가 낮은 항목부터 고치면 효과가 커요.</p>,
+    },
+    {
+      target: '[data-tour="next"]',
+      title: '초안 수정으로',
+      body: <p>진단 내용을 확인했다면 다음 단계에서 초안을 직접 고쳐요. 참고용 자체 점검이니 실제 심사와 다를 수 있어요.</p>,
+    },
+  ],
+  improve: [
+    {
+      target: '[data-tour="panel"]',
+      title: '초안 수정',
+      body: <p>항목별 초안을 직접 고칠 수 있어요. 평가에서 지적된 부분을 보완해 주세요.</p>,
+    },
+    {
+      target: '.bp-revise__score',
+      title: '평가 다시 보기',
+      body: <p>점수에 마우스를 올리거나 키보드로 선택하면 그 항목의 잘된 점과 보완할 점이 떠요.</p>,
+    },
+    {
+      target: '[data-tour="regen"]',
+      title: '초안 다시 생성하기',
+      body: <p>수정을 마치면 눌러 주세요. 고친 내용을 반영해 초안을 다시 만들고 재평가까지 이어서 진행해요.</p>,
+    },
+  ],
+  done: [
+    {
+      target: '[data-tour="panel"]',
+      title: '재평가 및 저장',
+      body: <p>수정한 초안의 재평가 점수와 총평을 확인하세요. 첫 진단과 비교해 얼마나 좋아졌는지 볼 수 있어요.</p>,
+    },
+    {
+      target: '.bp-actions',
+      title: '파일로 내려받기',
+      body: <p>완성된 초안을 HWPX·PDF로 내려받아요. 비어 있거나 '정보 부족'으로 표시된 항목은 제출 전에 꼭 채워 주세요.</p>,
+    },
+    {
+      target: '[data-tour="save"]',
+      title: '임시저장',
+      body: <p>지금까지의 작업을 계정에 저장해 두면 나중에 이어서 수정할 수 있어요.</p>,
+    },
   ],
 };
 
@@ -368,6 +523,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const mainRef = useRef(null);
   // 왼쪽 "섹션 이동" 메뉴에서 지금 보이는 섹션. 화면 상태일 뿐 작성 내용과는 무관하다.
   const [activeSection, setActiveSection] = useState('');
+  const [tourOpen, setTourOpen] = useState(false);
   const [collapsed, setCollapsed] = useState({});
   const toggleCard = (id) => setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
   const sectionLockRef = useRef(0);
@@ -418,11 +574,15 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
-  const [savingDocument, setSavingDocument] = useState(false);
   const fileOperationRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
   const savedDraftRef = useRef(null);
+  // 보관함(마이페이지 목록)에서 이 작성 화면이 가리키는 사업계획서. 처음 저장할 때 만들어진다.
+  // 저장이 겹칠 때 먼저 만든 ID를 바로 보도록 ref로 둔다.
+  const planIdRef = useRef(null);
+  // 저장은 한 번에 하나씩 순서대로 보낸다(보관함 중복 생성·늦게 끝난 옛 저장의 덮어쓰기 방지).
+  const saveQueueRef = useRef(Promise.resolve());
   const draftSnapshot = {
     form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
     selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
@@ -454,6 +614,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
 
   // 서버에서 받은 초안을 화면 상태로 되돌린다. 불러오는 동안 사용자가 고친 기초 정보는 유지한다.
   const applyDraft = (draft) => {
+    planIdRef.current = Number.isInteger(draft.planId) ? draft.planId : null;
     setForm((previous) => {
       const next = { ...EMPTY_FORM, ...(draft.form || {}) };
       editedFieldsRef.current.forEach((key) => { next[key] = previous[key]; });
@@ -1123,38 +1284,39 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     }
   };
 
-  const saveDocument = async () => {
-    if (!finalPlan || fileOperationRef.current) return;
-    if (!userId) {
-      onRequireLogin && onRequireLogin();
-      return;
-    }
-    fileOperationRef.current = true;
-    setErr('');
-    setSavedNote('');
-    setSavingDocument(true);
-    try {
-      await api.saveBizplanDocument(buildRenderPayload(templateInfo?.kind || 'hwpx'));
-      setSavedNote('문서를 저장했어요. 마이페이지 서류 탭에서 다운로드할 수 있어요');
-      setTimeout(() => setSavedNote(''), 4000);
-    } catch (e2) {
-      if (e2.status === 401) onRequireLogin && onRequireLogin();
-      else if (e2.status === 409) setErr('서류는 8개까지 저장할 수 있습니다. 마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요.');
-      // 응답 전에 끊겨도 서버가 저장을 마쳤을 수 있어 재시도 전 확인을 안내한다.
-      else if (e2.name === 'AbortError' || e2.status === 502 || e2.status === 504) setErr('저장 결과를 확인하지 못했어요. 마이페이지 서류 탭에서 저장 여부를 확인한 뒤 다시 시도해 주세요.');
-      else setErr(e2.detail || (e2.status === 413
-        ? '파일이 50MiB를 넘어 저장하지 못했습니다.'
-        : '파일을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
-    } finally {
-      fileOperationRef.current = false;
-      setSavingDocument(false);
-    }
-  };
-
   const goStep = (key) => {
     setErr('');
     setActive(key);
   };
+
+  // 각 단계에 처음 들어왔을 때 한 번만 자동으로 안내를 띄운다(브라우저별 기록).
+  // 띄우는 순간 본 것으로 기록하므로, 중간에 페이지를 나갔다 와도 다시 자동으로 뜨지 않는다.
+  const aiBusy = generating || analyzingFields || refining;
+  useEffect(() => {
+    if (!userId || !TOURS[active] || aiBusy) return undefined;
+    const key = TOUR_KEY(userId, active);
+    try {
+      if (localStorage.getItem(key) === 'done') return undefined;
+      if (active === 'refine' && localStorage.getItem(LEGACY_TOUR_KEY(userId)) === 'done') {
+        localStorage.setItem(key, 'done');
+        return undefined;
+      }
+    } catch (e) {
+      // 기록을 남길 수 없으면 들어올 때마다 뜨게 되므로 자동 안내를 하지 않는다.
+      return undefined;
+    }
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(key, 'done');
+      } catch (e) {
+        return;
+      }
+      setTourOpen(true);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [userId, active, aiBusy]);
+
+  const closeTour = () => setTourOpen(false);
 
   const goSection = (id) => {
     const el = document.getElementById('bp-sec-' + id);
@@ -1171,10 +1333,29 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
       onRequireLogin && onRequireLogin();
       return;
     }
-    let note = '임시저장했어요';
     const snapshotToSave = draftSnapshot;
+    const data = { ...snapshotToSave, supplementPage };
+    const hasContent = !!plan || Object.values(form).some((v) => String(v || '').trim());
+    const run = saveQueueRef.current.then(() => persistDraft(snapshotToSave, data, hasContent));
+    saveQueueRef.current = run.catch(() => {});
+    await run;
+  };
+
+  const persistDraft = async (snapshotToSave, data, hasContent) => {
+    let note = '임시저장했어요 · 마이페이지에서 관리할 수 있어요';
     try {
-      await api.saveBizplanDraft({ ...snapshotToSave, supplementPage });
+      // 내용이 있으면 보관함에도 저장한다(없으면 새로 만들고, 마이페이지에서 지웠으면 다시 만든다).
+      let id = planIdRef.current;
+      if (hasContent) {
+        try {
+          id = id ? (await api.saveBizplanPlan(id, data)).id : (await api.createBizplanPlan(data)).id;
+        } catch (e3) {
+          if (!(e3 && e3.status === 404)) throw e3;
+          id = (await api.createBizplanPlan(data)).id;
+        }
+        planIdRef.current = id;
+      }
+      await api.saveBizplanDraft({ ...data, ...(id ? { planId: id } : {}) });
       savedDraftRef.current = snapshotToSave;
       setEditedBeforeLoad(false);
     } catch (e2) {
@@ -1190,6 +1371,13 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     setTimeout(() => setSavedNote(''), 2000);
   };
 
+  // 초안·평가·재평가 결과가 새로 나오면 자동으로 저장해 마이페이지 목록에 바로 반영한다.
+  useEffect(() => {
+    if (!draftLoaded || !savedDraftRef.current || !plan || !hasUnsavedChanges) return;
+    saveNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, evalResult, finalPlan, finalEvalResult]);
+
   const needsSupplement = fieldAnalysis.some((field) =>
     field.status === 'partial' || field.status === 'missing' || field.status === 'unsupported'
     || field.type === 'image');
@@ -1203,6 +1391,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     ? VISIBLE_STEPS : VISIBLE_STEPS.filter((step) => step.key !== 'supplement');
   const activeIdx = visibleSteps.findIndex((step) => step.key === active);
   const nextStep = visibleSteps[activeIdx + 1];
+  const prevStep = activeIdx > 0 ? visibleSteps[activeIdx - 1] : null;
   const evaluationBasis = selectedAnnouncement
     ? `선택한 공고와 ${templateInfo ? '제출한 양식' : '기본 PSST 양식'}`
     : templateInfo ? '제출한 양식' : '기본 PSST 양식';
@@ -1252,17 +1441,24 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
 
   return (
     <div className="bp2">
-      {/* 진행 단계 브레드크럼: 완료 단계는 눌러서 돌아가고, 예정 단계는 누를 수 없다. */}
-      <nav className="bp2__crumbs" aria-label="진행 단계">
+      {/* 다른 페이지와 같은 자리(오른쪽 아래 다크모드 버튼 옆)의 가이드 다시 보기 버튼 */}
+      <button type="button" className="tour-fab" onClick={() => setTourOpen(true)}
+        aria-label={(currentStep ? currentStep.label : '사업계획서') + ' 가이드 보기'} title="사용 가이드">
+        ?
+      </button>
+      <GuideTour open={tourOpen} steps={TOURS[active] || REFINE_TOUR} onClose={closeTour}
+        label={(currentStep ? currentStep.label : '사업계획서') + ' 가이드'} />
+      {/* 진행 단계 브레드크럼: 지금 단계 말고는 모두 눌러서 이동할 수 있다(다음 단계 버튼과 같은 동작). */}
+      <nav className="bp2__crumbs" aria-label="진행 단계" data-tour="crumbs">
         <ol className="bp2__crumbs-in">
           {visibleSteps.map((step, i) => {
             const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo';
             return (
               <li key={step.key} className={'bp2__crumb is-' + state}
                 aria-current={state === 'current' ? 'step' : undefined}>
-                {state === 'done'
-                  ? <button type="button" onClick={() => goStep(step.key)}>{step.label}</button>
-                  : <span>{step.label}</span>}
+                {state === 'current'
+                  ? <span>{step.label}</span>
+                  : <button type="button" onClick={() => goStep(step.key)}>{step.label}</button>}
               </li>
             );
           })}
@@ -1278,7 +1474,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           </div>
 
           {stepSections && (
-            <nav className="bp2__secnav" aria-label="섹션 이동">
+            <nav className="bp2__secnav" aria-label="섹션 이동" data-tour="secnav">
               <ul>
                 {stepSections.map((sec) => (
                   <li key={sec.id}>
@@ -1295,13 +1491,13 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
 
           <div className="bp2__actions">
             {active === 'refine' && (
-              <button type="button" className="bp2__cta" onClick={runRefine}
+              <button type="button" className="bp2__cta" data-tour="cta" onClick={runRefine}
                 disabled={!basicReady || !ideaReady || refining}>
                 {refining ? '입력 정리 중…' : refinedDone ? 'AI로 다시 정리하기' : 'AI로 입력 정리하기'}
               </button>
             )}
             {active === 'setup' && (
-              <button type="button" className="bp2__cta"
+              <button type="button" className="bp2__cta" data-tour="cta"
                 onClick={() => templateInfo ? runTemplateAnalysis() : generatePlan()}
                 disabled={inspectingTemplate || analyzingFields || (!!templateFile && !templateInfo)
                   || !basicReady || !ideaReady || !refinedDone || generating}>
@@ -1310,11 +1506,20 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               </button>
             )}
             {nextStep && (
-              <button type="button" className="bp2__next" onClick={() => goStep(nextStep.key)}>
+              <button type="button" className="bp2__next" data-tour="next" onClick={() => goStep(nextStep.key)}>
                 다음 단계 · {nextStep.label} ›
               </button>
             )}
-            <button type="button" className="bp2__save" onClick={saveNow}>임시저장</button>
+            {/* 보조 버튼(이전 단계·임시저장)은 같은 모양으로 한 줄에 나란히 둔다. */}
+            <div className={'bp2__subactions' + (prevStep ? ' has-prev' : '')}>
+              {prevStep && (
+                <button type="button" className="bp2__prev" data-tour="prev" onClick={() => goStep(prevStep.key)}
+                  title={`이전 단계 · ${prevStep.label}`}>
+                  ‹ 이전 단계
+                </button>
+              )}
+              <button type="button" className="bp2__save" data-tour="save" onClick={saveNow}>임시저장</button>
+            </div>
             {savedNote && <span className="bp2__saved" role="status">{savedNote}</span>}
             {import.meta.env.DEV && (
               <button type="button" className="bp2__preset" onClick={applyTestPreset}>
@@ -1444,7 +1649,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'supplement' && (
-            <section className="bp2__panel">
+            <section className="bp2__panel" data-tour="panel">
               {!fieldAnalysis.length ? (
                 <div className="bp2__empty">
                   <p>공고 양식 선택에서 양식을 분석해 주세요.</p>
@@ -1552,7 +1757,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'preview' && (
-            <section className="bp2__panel bp-eval">
+            <section className="bp2__panel bp-eval" data-tour="panel">
 
               {!plan ? (
                 <div className="bp2__empty">
@@ -1597,7 +1802,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'improve' && (
-            <section className="bp2__panel">
+            <section className="bp2__panel" data-tour="panel">
               {!plan || !evalResult ? (
                 <div className="bp2__empty">
                   <p>초안을 평가한 뒤 계획을 보완할 수 있어요.</p>
@@ -1656,7 +1861,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       );
                     })}
                   </div>
-                  <button type="button" className="exp-upload" onMouseDown={(event) => event.preventDefault()}
+                  <button type="button" className="exp-upload" data-tour="regen" onMouseDown={(event) => event.preventDefault()}
                     onClick={regeneratePlan} disabled={generating}>
                     보완 내용으로 초안 다시 생성하기
                   </button>
@@ -1666,7 +1871,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           )}
 
           {active === 'done' && (
-            <section className="bp2__panel">
+            <section className="bp2__panel" data-tour="panel">
               {!finalPlan ? (
                 <div className="bp2__empty">
                   <p>초안 수정을 마치고 초안을 다시 생성해 주세요.</p>
@@ -1692,18 +1897,15 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
                         {(!templateInfo || templateInfo.kind === 'hwpx') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat || savingDocument}>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat}>
                             {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
                           </button>
                         )}
                         {(!templateInfo || templateInfo.kind === 'pdf') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat || savingDocument}>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat}>
                             {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
                           </button>
                         )}
-                        <button type="button" className="exp-upload" onClick={saveDocument} disabled={!!renderingFormat || savingDocument}>
-                          {savingDocument ? '문서 저장 중…' : '문서 저장'}
-                        </button>
                       </div>
                       <p className="bp-disclaimer">{templateInfo
                         ? '비어 있는 항목은 제출 전에 확인하고 채워 주세요.'

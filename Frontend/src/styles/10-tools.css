@@ -1442,6 +1442,7 @@
   }
   .bp2__cta,
   .bp2__next,
+  .bp2__prev,
   .bp2__save,
   .bp2__preset {
     width: 100%;
@@ -1464,23 +1465,35 @@
     background: var(--bp-disabled);
     cursor: not-allowed;
   }
+  /* 버튼 색은 파란 한 계열로 맞춘다: 주 버튼(채움) → 다음 단계(옅은 파랑) → 보조(흰 바탕 테두리) */
   .bp2__next {
     height: 46px;
-    border: 0;
-    background: var(--bp-dark-btn);
-    color: var(--bp-dark-btn-ink);
+    border: 1px solid color-mix(in srgb, var(--bp-primary) 28%, transparent);
+    background: color-mix(in srgb, var(--bp-primary) 10%, var(--bp-card));
+    color: var(--bp-primary);
   }
   .bp2__next:hover {
-    filter: brightness(1.18);
+    background: color-mix(in srgb, var(--bp-primary) 16%, var(--bp-card));
   }
+  .bp2__subactions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .bp2__subactions.has-prev {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bp2__prev,
   .bp2__save {
-    height: 44px;
+    height: 42px;
     border: 1px solid var(--bp-btn-border);
     background: var(--bp-card);
-    color: var(--bp-ink);
+    color: var(--bp-ink-2);
   }
+  .bp2__prev:hover,
   .bp2__save:hover {
-    border-color: var(--bp-muted-2);
+    border-color: color-mix(in srgb, var(--bp-primary) 45%, transparent);
+    color: var(--bp-primary);
   }
   .bp2__preset {
     height: 38px;
@@ -2259,5 +2272,224 @@
     }
     .bp2__ai-bar {
       display: none;
+    }
+  }
+
+  /* ---- 사업계획서: 사용 가이드(온보딩 투어) ---- */
+  /* 사업계획서 안에서는 그 화면 색(--bp-*)을, 다른 페이지에서는 사이트 공용 색을 쓴다. */
+  .gt {
+    --gt-card: var(--bp-card, var(--surface-solid));
+    --gt-border: var(--bp-card-border, var(--line-strong));
+    --gt-ink: var(--bp-ink, var(--ink));
+    --gt-ink2: var(--bp-ink-2, var(--ink));
+    --gt-muted: var(--bp-muted, var(--ink-soft));
+    --gt-faint: var(--bp-faint, var(--ink-faint));
+    --gt-primary: var(--bp-primary, var(--blue-deep));
+    --gt-field: var(--bp-field, var(--blue-wash));
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    font-family: inherit;
+  }
+  .gt__dim {
+    position: fixed;
+    inset: 0;
+    background: rgba(12, 17, 32, 0.55);
+    animation: gtFade 0.2s ease;
+  }
+  /* 강조 영역: 큰 그림자로 주변을 어둡게 덮고 대상만 뚫어 보이게 한다 */
+  .gt__spot {
+    position: fixed;
+    border-radius: 14px;
+    box-shadow: 0 0 0 9999px rgba(12, 17, 32, 0.55), 0 0 0 2px var(--gt-primary);
+    pointer-events: none;
+    transition: top 0.3s ease, left 0.3s ease, width 0.3s ease, height 0.3s ease;
+  }
+  .gt__card {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    padding: 20px 20px 16px;
+    border: 1px solid var(--gt-border);
+    border-radius: 16px;
+    background: var(--gt-card);
+    color: var(--gt-ink);
+    box-shadow: 0 18px 48px rgba(12, 17, 32, 0.28);
+    outline: none;
+    animation: gtIn 0.22s ease;
+    transition: top 0.3s ease, left 0.3s ease;
+  }
+  .gt__card.is-center {
+    top: 50%;
+    left: 50%;
+    width: 440px;
+    transform: translate(-50%, -50%);
+    animation: gtFade 0.22s ease;
+  }
+  .gt__card.is-sheet:not(.is-center) {
+    top: auto;
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    width: auto;
+  }
+  .gt__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .gt__label {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--gt-primary);
+  }
+  .gt__count {
+    font-size: 11.5px;
+    color: var(--gt-faint);
+  }
+  .gt__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .gt__body {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--gt-ink2);
+  }
+  .gt__body p {
+    margin: 0;
+  }
+  .gt__flow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: gt;
+  }
+  .gt__flow li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--gt-field);
+    font-size: 12.5px;
+    color: var(--gt-muted);
+    counter-increment: gt;
+  }
+  .gt__flow li::before {
+    content: counter(gt);
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--gt-primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    transform: translateY(3px);
+  }
+  .gt__flow b {
+    flex: none;
+    min-width: 92px;
+    font-weight: 700;
+    color: var(--gt-ink);
+  }
+  .gt__dots {
+    display: flex;
+    gap: 5px;
+    margin-top: 2px;
+  }
+  .gt__dots i {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--gt-border);
+    transition: width 0.2s, background 0.2s;
+  }
+  .gt__dots i.is-done {
+    background: color-mix(in srgb, var(--gt-primary) 45%, transparent);
+  }
+  .gt__dots i.is-on {
+    width: 18px;
+    background: var(--gt-primary);
+  }
+  .gt__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .gt__spacer {
+    flex: 1;
+  }
+  .gt__skip,
+  .gt__prev,
+  .gt__next {
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 9px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .gt__skip {
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--gt-muted);
+  }
+  .gt__skip:hover {
+    color: var(--gt-ink);
+  }
+  .gt__prev {
+    border: 1px solid var(--gt-border);
+    background: var(--gt-card);
+    color: var(--gt-ink2);
+  }
+  .gt__next {
+    min-width: 72px;
+    border: 1px solid var(--gt-primary);
+    background: var(--gt-primary);
+    color: #fff;
+  }
+  .gt__skip:focus-visible,
+  .gt__prev:focus-visible,
+  .gt__next:focus-visible {
+    outline: 2px solid var(--gt-primary);
+    outline-offset: 2px;
+  }
+  @keyframes gtFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes gtIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+  @media (max-width: 640px) {
+    .gt__card.is-center {
+      width: auto;
+      top: auto;
+      right: 16px;
+      bottom: 16px;
+      left: 16px;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gt__spot,
+    .gt__card {
+      transition: none;
+      animation: none;
     }
   }

@@ -367,6 +367,34 @@
     color: var(--ink);
     border-color: var(--blue);
   }
+  /* 페이지 사용 가이드 다시 보기: 다크모드 토글 바로 왼쪽(위에 두면 마이페이지 일정 추가 버튼을 가린다) */
+  .tour-fab {
+    position: fixed;
+    right: 70px;
+    bottom: 18px;
+    z-index: 70;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+  }
+  .tour-fab:hover {
+    color: var(--blue);
+    border-color: var(--blue);
+  }
+  .tour-fab:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 2px;
+  }
 
 
   /* ---- 지출관리·사업계획서 페이지: 다른 기능 페이지와 같은 .fp--wide 컨테이너

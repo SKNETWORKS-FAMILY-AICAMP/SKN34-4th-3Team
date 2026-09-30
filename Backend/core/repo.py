@@ -475,7 +475,7 @@ def update_extraction_items(receipt_id: int, items: list, read_meta: dict | None
     )
 
 
-def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | None) -> None:
+def update_extraction_vendor(receipt_id: int, vendor: str | None, read_meta: dict | None) -> None:
     """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고쳤을 때 상호와 읽음 여부를 갱신한다."""
     db.execute(
         "UPDATE receipt_extractions SET vendor=?, read_meta=? WHERE receipt_id=?",
@@ -484,6 +484,13 @@ def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | Non
             json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
             receipt_id,
         ),
+    )
+
+
+def update_missing_fields(expense_id: int, missing_fields: list) -> None:
+    db.execute(
+        "UPDATE expenses SET missing_fields=? WHERE id=?",
+        (db.dumps(missing_fields), expense_id),
     )
 
 
@@ -672,6 +679,34 @@ def set_roadmap_task(user_id: int, version: int, task_key: str, done: bool) -> N
         )
 
 
+def get_subscription(user_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT plan, started_at, renews_at FROM user_subscriptions WHERE user_id = ?", (user_id,)
+    )
+
+
+def upsert_subscription(user_id: int, plan: str, renews_at: datetime | None) -> None:
+    db.execute(
+        "INSERT INTO user_subscriptions(user_id,plan,started_at,renews_at) VALUES (?,?,now(),?) "
+        "ON CONFLICT (user_id) DO UPDATE SET plan = EXCLUDED.plan, "
+        "started_at = EXCLUDED.started_at, renews_at = EXCLUDED.renews_at",
+        (user_id, plan, renews_at),
+    )
+
+
+def count_chats_this_month(user_id: int, categories: list[str]) -> int:
+    """구독 사용량 표시용. 이번 달(서버 시간 기준) 질문 수."""
+    placeholders = ",".join("?" for _ in categories)
+    return int(
+        db.scalar(
+            "SELECT COUNT(*) FROM chat_messages WHERE user_id = ? "
+            f"AND category IN ({placeholders}) AND created_at >= date_trunc('month', now())",
+            (user_id, *categories),
+        )
+        or 0
+    )
+
+
 def get_bizplan_draft(user_id: int) -> dict | None:
     return db.fetchone("SELECT data, updated_at FROM bizplan_drafts WHERE user_id = ?", (user_id,))
 
@@ -752,6 +787,14 @@ def list_bizplan_documents(user_id: int) -> list[dict]:
     )
 
 
+def list_bizplans(user_id: int) -> list[dict]:
+    return db.fetchall(
+        "SELECT id, title, status, score, created_at, updated_at FROM bizplans "
+        "WHERE user_id = ? ORDER BY updated_at DESC, id DESC",
+        (user_id,),
+    )
+
+
 def get_bizplan_document(user_id: int, document_id: int, format: str | None = None) -> dict | None:
     if format is not None:
         return db.fetchone(
@@ -773,6 +816,56 @@ def delete_bizplan_document(user_id: int, document_id: int) -> bool:
         "DELETE FROM bizplan_documents WHERE user_id = ? AND id = ? RETURNING id",
         (user_id, document_id),
     ) is not None
+
+
+def get_bizplan(plan_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT id, user_id, title, status, score, data, created_at, updated_at FROM bizplans WHERE id = ?",
+        (plan_id,),
+    )
+
+
+def insert_bizplan(user_id: int, title: str, status: str, score: int | None, data: dict) -> int:
+    return db.insert(
+        "INSERT INTO bizplans(user_id,title,status,score,data,created_at,updated_at) "
+        "VALUES (?,?,?,?,?,now(),now())",
+        (user_id, title, status, score, json.dumps(data, ensure_ascii=False)),
+    )
+
+
+def import_legacy_bizplan_draft(user_id: int, title: str, status: str, score: int | None, data: dict) -> int | None:
+    """planId 없는 임시저장을 보관함 한 건으로 옮기고 연결한다. 동시 요청은 행 잠금으로 한 번만 옮긴다."""
+    with db.connection() as conn:
+        row = conn.execute(
+            "SELECT data FROM bizplan_drafts WHERE user_id = %s FOR UPDATE", (user_id,)
+        ).fetchone()
+        if not row or (row["data"] or {}).get("planId"):
+            return None
+        plan_id = conn.execute(
+            "INSERT INTO bizplans(user_id,title,status,score,data,created_at,updated_at)"
+            " VALUES (%s,%s,%s,%s,%s,now(),now()) RETURNING id",
+            (user_id, title, status, score, json.dumps(data, ensure_ascii=False)),
+        ).fetchone()["id"]
+        conn.execute(
+            "UPDATE bizplan_drafts SET data = %s, updated_at = now() WHERE user_id = %s",
+            (json.dumps({**data, "planId": plan_id}, ensure_ascii=False), user_id),
+        )
+        return plan_id
+
+
+def update_bizplan(plan_id: int, title: str, status: str, score: int | None, data: dict) -> None:
+    db.execute(
+        "UPDATE bizplans SET title=?, status=?, score=?, data=?, updated_at=now() WHERE id=?",
+        (title, status, score, json.dumps(data, ensure_ascii=False), plan_id),
+    )
+
+
+def rename_bizplan(plan_id: int, title: str) -> None:
+    db.execute("UPDATE bizplans SET title=?, updated_at=now() WHERE id=?", (title, plan_id))
+
+
+def delete_bizplan(plan_id: int) -> None:
+    db.execute("DELETE FROM bizplans WHERE id = ?", (plan_id,))
 
 
 def insert_policy(admin_id: int, body: dict) -> int:
