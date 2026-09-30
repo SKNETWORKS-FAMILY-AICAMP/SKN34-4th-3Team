@@ -380,3 +380,10 @@
   .exp-page .tool {
     max-width: none;
   }
+  /* 지출관리·사업계획서: .fp__body가 flex 컨테이너라 margin:0 auto만 있으면 폭이 내용 크기로
+     줄어든다(지출관리는 1116px 중 1011px만 썼고, 사업계획서는 단계마다 내용 폭이 달라 오른쪽
+     박스 폭이 867px↔359px로 바뀌었다). 폭을 명시해 본문 폭을 끝까지 쓴다. */
+  .exp-page--full {
+    width: 100%;
+    max-width: none;
+  }

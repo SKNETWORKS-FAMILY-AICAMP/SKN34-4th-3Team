@@ -107,7 +107,15 @@ export function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onL
             드립니다. 세액 감면 대상 여부와 신고 일정까지 함께요.
           </p>
           <div className="hero__actions">
-            <a className="btn btn--primary btn--lg" href="#onboarding">내 조건으로 찾기</a>
+            {/* 로그인 전에는 로그인 창을 연다. 로그인 후에는 조건에 맞는 공고를 찾는 공고지원 AI로 보낸다.
+                (onLoginClick은 로그인 상태에서 누르면 로그아웃하므로 로그인 상태에서는 부르지 않는다.) */}
+            <button
+              className="btn btn--primary btn--lg"
+              type="button"
+              onClick={() => (user ? onNavigate('gov') : onLoginClick && onLoginClick())}
+            >
+              내 조건으로 찾기
+            </button>
             <button className="btn btn--ghost btn--lg" type="button" onClick={() => onNavigate('roadmap')}>
               창업 로드맵 보기
             </button>

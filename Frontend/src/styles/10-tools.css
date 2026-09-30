@@ -1224,8 +1224,8 @@
     flex-direction: column;
     gap: 10px;
     align-self: start;
-    position: sticky;
-    top: 12px;
+    /* sticky + top:12px를 두면 스크롤하는 본문 안에서 왼쪽 박스가 12px 아래로 밀려 오른쪽 박스
+       상단과 어긋난다. 화면 높이에 맞춘 고정 레이아웃이라 따라다닐 필요가 없다. */
     min-width: 0;
   }
   @media (max-width: 1080px) {

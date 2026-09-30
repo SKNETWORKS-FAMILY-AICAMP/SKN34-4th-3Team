@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { LogoMark, BrandWord } from './LogoMark.jsx';
 import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { NAV_MENU } from '../constants.js';
@@ -23,7 +24,7 @@ export function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {
       <aside className="drawer" role="dialog" aria-modal="true" aria-label="전체 메뉴">
         <div className="drawer__top">
           <span className="drawer__brand">
-            <span className="brand__mark" aria-hidden="true">ON</span>창업ON
+            <LogoMark /><BrandWord />
           </span>
           <button className="drawer__close" type="button" onClick={onClose} aria-label="메뉴 닫기">×</button>
         </div>
