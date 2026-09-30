@@ -833,6 +833,26 @@ def insert_bizplan(user_id: int, title: str, status: str, score: int | None, dat
     )
 
 
+def import_legacy_bizplan_draft(user_id: int, title: str, status: str, score: int | None, data: dict) -> int | None:
+    """planId 없는 임시저장을 보관함 한 건으로 옮기고 연결한다. 동시 요청은 행 잠금으로 한 번만 옮긴다."""
+    with db.connection() as conn:
+        row = conn.execute(
+            "SELECT data FROM bizplan_drafts WHERE user_id = %s FOR UPDATE", (user_id,)
+        ).fetchone()
+        if not row or (row["data"] or {}).get("planId"):
+            return None
+        plan_id = conn.execute(
+            "INSERT INTO bizplans(user_id,title,status,score,data,created_at,updated_at)"
+            " VALUES (%s,%s,%s,%s,%s,now(),now()) RETURNING id",
+            (user_id, title, status, score, json.dumps(data, ensure_ascii=False)),
+        ).fetchone()["id"]
+        conn.execute(
+            "UPDATE bizplan_drafts SET data = %s, updated_at = now() WHERE user_id = %s",
+            (json.dumps({**data, "planId": plan_id}, ensure_ascii=False), user_id),
+        )
+        return plan_id
+
+
 def update_bizplan(plan_id: int, title: str, status: str, score: int | None, data: dict) -> None:
     db.execute(
         "UPDATE bizplans SET title=?, status=?, score=?, data=?, updated_at=now() WHERE id=?",

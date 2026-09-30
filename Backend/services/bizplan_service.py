@@ -299,8 +299,7 @@ def _import_legacy_draft(user_id: int) -> None:
     if not data or data.get("planId") or not _has_content(data):
         return
     title, status, score = plan_meta(data)
-    plan_id = repo.insert_bizplan(user_id, title, status, score, data)
-    repo.upsert_bizplan_draft(user_id, {**data, "planId": plan_id})
+    repo.import_legacy_bizplan_draft(user_id, title, status, score, data)
 
 
 def list_plans(user_id: int) -> dict:
@@ -331,7 +330,10 @@ def save_plan(user_id: int, plan_id: int | None, data: dict) -> dict:
     title, status, score = plan_meta(data)
     if plan_id is None:
         return {"id": repo.insert_bizplan(user_id, title, status, score, data)}
-    _owned_plan(user_id, plan_id)
+    row = _owned_plan(user_id, plan_id)
+    # 마이페이지에서 바꾼 이름은 유지한다(기존 제목이 자동 제목과 같을 때만 사업명을 따라간다).
+    if row["title"] != plan_meta(row.get("data") or {})[0]:
+        title = row["title"]
     repo.update_bizplan(plan_id, title, status, score, data)
     return {"id": plan_id}
 

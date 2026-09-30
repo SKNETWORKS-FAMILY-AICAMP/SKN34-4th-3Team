@@ -57,6 +57,24 @@ class SavePlanTest(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         repo.update_bizplan.assert_not_called()
 
+    def test_renamed_title_is_kept(self):
+        repo = MagicMock()
+        repo.get_bizplan.return_value = {
+            "id": 5, "user_id": 1, "title": "내가 바꾼 이름", "data": {"form": {"businessName": "A"}},
+        }
+        with patch.object(bizplan_service, "repo", repo):
+            bizplan_service.save_plan(1, 5, {"form": {"businessName": "A"}})
+        self.assertEqual(repo.update_bizplan.call_args[0][1], "내가 바꾼 이름")
+
+    def test_auto_title_follows_business_name(self):
+        repo = MagicMock()
+        repo.get_bizplan.return_value = {
+            "id": 5, "user_id": 1, "title": "A", "data": {"form": {"businessName": "A"}},
+        }
+        with patch.object(bizplan_service, "repo", repo):
+            bizplan_service.save_plan(1, 5, {"form": {"businessName": "B"}})
+        self.assertEqual(repo.update_bizplan.call_args[0][1], "B")
+
 
 class DeletePlanTest(unittest.TestCase):
     def test_clears_draft_when_deleting_open_plan(self):
@@ -82,13 +100,12 @@ class ListPlansTest(unittest.TestCase):
         repo = MagicMock()
         legacy = {"form": {"businessName": "예전 초안"}}
         repo.get_bizplan_draft.side_effect = [{"data": legacy}, {"data": {**legacy, "planId": 11}}]
-        repo.insert_bizplan.return_value = 11
         repo.list_bizplans.return_value = [
             {"id": 11, "title": "예전 초안", "status": "writing", "score": None, "created_at": None, "updated_at": None},
         ]
         with patch.object(bizplan_service, "repo", repo):
             result = bizplan_service.list_plans(1)
-        repo.upsert_bizplan_draft.assert_called_once_with(1, {**legacy, "planId": 11})
+        repo.import_legacy_bizplan_draft.assert_called_once_with(1, "예전 초안", "writing", None, legacy)
         self.assertTrue(result["plans"][0]["isCurrent"])
         self.assertEqual(result["plans"][0]["statusLabel"], "작성 중")
 
@@ -98,7 +115,7 @@ class ListPlansTest(unittest.TestCase):
         repo.list_bizplans.return_value = []
         with patch.object(bizplan_service, "repo", repo):
             bizplan_service.list_plans(1)
-        repo.insert_bizplan.assert_not_called()
+        repo.import_legacy_bizplan_draft.assert_not_called()
 
 
 if __name__ == "__main__":
