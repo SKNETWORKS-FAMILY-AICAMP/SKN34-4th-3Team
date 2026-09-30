@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from ninja.errors import HttpError
@@ -21,6 +22,12 @@ MAX_TEMPLATE_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 # 임시저장에는 양식(4 MiB)과 이미지(합계 4 MiB)가 Base64로 들어가 최대 약 10.7 MB가 된다.
 MAX_DRAFT_BYTES = 12 * 1024 * 1024
+MAX_DOCUMENTS_PER_USER = 8
+MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
+DOCUMENT_LIMIT_MESSAGE = (
+    "서류는 8개까지 저장할 수 있습니다. "
+    "마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요."
+)
 
 
 def _announcement_context(announcement_id: int | None) -> tuple[str, str]:
@@ -156,3 +163,83 @@ def save_draft(user_id: int, data: dict) -> None:
     if size > MAX_DRAFT_BYTES:
         raise HttpError(413, "임시저장 내용은 12 MiB 이하여야 합니다. 첨부 파일을 줄여 주세요.")
     repo.upsert_bizplan_draft(user_id, data)
+
+
+def delete_draft(user_id: int) -> None:
+    repo.delete_bizplan_draft(user_id)
+
+
+def _document_item(row: dict) -> dict:
+    files = [row, *(row.get("files") or [])]
+    return {
+        "id": row["id"], "title": row["title"], "fileName": row["file_name"],
+        "format": row["format"], "sizeBytes": row["size_bytes"],
+        "createdAt": row["created_at"],
+        "files": [
+            {"format": file["format"], "fileName": file["file_name"], "sizeBytes": file["size_bytes"]}
+            for file in sorted(files, key=lambda file: file["format"])
+        ],
+    }
+
+
+def save_document(user_id: int, body: dict) -> dict:
+    if repo.count_bizplan_documents(user_id) >= MAX_DOCUMENTS_PER_USER:
+        raise HttpError(409, DOCUMENT_LIMIT_MESSAGE)
+    template = body.get("template")
+    if template:
+        _validate_template_file(template)
+        formats = [Path(template["fileName"]).suffix.lower().lstrip(".")]
+    else:
+        primary_format = body.get("format", "hwpx")
+        formats = [primary_format, "pdf" if primary_format == "hwpx" else "hwpx"]
+    # 형식별 렌더를 동시에 실행해 최악 대기 시간을 렌더 1회(LLM_TIMEOUT_BIZPLAN) 수준으로 맞춘다.
+    with ThreadPoolExecutor(max_workers=len(formats)) as executor:
+        rendered_files = list(executor.map(lambda format: render({**body, "format": format}), formats))
+    files = [_decode_document_file(rendered, format) for rendered, format in zip(rendered_files, formats)]
+    primary, *additional = files
+    row = repo.insert_bizplan_document(
+        user_id, body["title"], primary["file_name"], primary["format"],
+        primary["mime_type"], primary["file_data"], MAX_DOCUMENTS_PER_USER,
+        additional_files=additional,
+    )
+    if row is None:
+        raise HttpError(409, DOCUMENT_LIMIT_MESSAGE)
+    return _document_item(row)
+
+
+def _decode_document_file(rendered: dict, format: str) -> dict:
+    try:
+        raw = base64.b64decode(rendered["contentBase64"], validate=True)
+    except (binascii.Error, ValueError, TypeError, KeyError) as exc:
+        raise HttpError(503, "생성된 파일 데이터가 올바르지 않습니다.") from exc
+    if not raw:
+        raise HttpError(503, "생성된 파일이 비어 있습니다.")
+    if len(raw) > MAX_DOCUMENT_BYTES:
+        raise HttpError(413, "파일이 50MiB를 넘어 저장하지 못했습니다.")
+    return {
+        "format": format, "file_name": rendered["fileName"], "mime_type": rendered["mimeType"],
+        "file_data": raw, "size_bytes": len(raw),
+    }
+
+
+def list_documents(user_id: int) -> dict:
+    draft = repo.get_bizplan_draft_summary(user_id)
+    return {
+        "draft": {
+            "title": (draft["title"] or "").strip() or "사업계획서",
+            "updatedAt": draft["updated_at"],
+        } if draft else None,
+        "documents": [_document_item(row) for row in repo.list_bizplan_documents(user_id)],
+    }
+
+
+def get_document_file(user_id: int, document_id: int, format: str | None = None) -> tuple[bytes, str, str]:
+    row = repo.get_bizplan_document(user_id, document_id, format)
+    if row is None:
+        raise HttpError(404, "서류를 찾을 수 없습니다.")
+    return bytes(row["file_data"]), row["mime_type"], row["file_name"]
+
+
+def delete_document(user_id: int, document_id: int) -> None:
+    if not repo.delete_bizplan_document(user_id, document_id):
+        raise HttpError(404, "서류를 찾을 수 없습니다.")

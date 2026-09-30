@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { LogoMark, BrandWord } from './LogoMark.jsx';
 import { MenuDrawer } from './MenuDrawer.jsx';
 
 export function Nav({ user, onLoginClick, onNavigate }) {
@@ -10,8 +11,8 @@ export function Nav({ user, onLoginClick, onNavigate }) {
       <header className="nav">
         <div className="wrap nav__row">
           <button className="brand" type="button" onClick={() => onNavigate('home')}>
-            <span className="brand__mark" aria-hidden="true">ON</span>
-            창업ON
+            <LogoMark />
+            <BrandWord />
           </button>
           <span className="nav__spacer" />
           {user && <span className="nav__user"><b>{user.name}</b>님</span>}

@@ -1,9 +1,16 @@
+from typing import Literal
+
+from django.http import HttpResponse
+from django.utils.http import content_disposition_header
 from ninja import Router
 
 from api.deps import user_auth
 from schemas.bizplan import (
     BizplanCoachRequest,
     BizplanCoachResponse,
+    BizplanDocumentDeleteResponse,
+    BizplanDocumentItem,
+    BizplanDocumentListResponse,
     BizplanDraftResponse,
     BizplanDraftSave,
     BusinessPlanEvaluateRequest,
@@ -11,6 +18,7 @@ from schemas.bizplan import (
     BusinessPlanRefineRequest,
     BusinessPlanRefineResponse,
     BusinessPlanRenderRequest,
+    BusinessPlanDocumentSaveRequest,
     BusinessPlanRenderResponse,
     BusinessPlanRequest,
     BusinessPlanResponse,
@@ -74,3 +82,34 @@ def save_draft(request, body: BizplanDraftSave):
     """작성 화면 상태를 유저당 1건으로 덮어써 저장합니다."""
     bizplan_service.save_draft(request.auth["id"], body.data)
     return {"updated": True}
+
+
+@router.delete("/draft", response=BizplanDocumentDeleteResponse, summary="사업계획서 임시저장 삭제")
+def delete_draft(request):
+    bizplan_service.delete_draft(request.auth["id"])
+    return {"deleted": True}
+
+
+@router.post("/documents", response=BizplanDocumentItem, summary="사업계획서 파일 저장")
+def save_document(request, body: BusinessPlanDocumentSaveRequest):
+    """기본 문서는 PDF·HWPX를 함께, 제출 양식은 원본 형식을 보관합니다. 최대 8문서입니다."""
+    return bizplan_service.save_document(request.auth["id"], body.model_dump())
+
+
+@router.get("/documents", response=BizplanDocumentListResponse, summary="내 사업계획서 서류 목록")
+def documents(request):
+    return bizplan_service.list_documents(request.auth["id"])
+
+
+@router.get("/documents/{document_id}/file", summary="사업계획서 원본 다운로드")
+def document_file(request, document_id: int, format: Literal["pdf", "hwpx"] | None = None):
+    data, mime_type, file_name = bizplan_service.get_document_file(request.auth["id"], document_id, format)
+    response = HttpResponse(content=data, content_type=mime_type)
+    response["Content-Disposition"] = content_disposition_header(True, file_name)
+    return response
+
+
+@router.delete("/documents/{document_id}", response=BizplanDocumentDeleteResponse, summary="사업계획서 서류 삭제")
+def delete_document(request, document_id: int):
+    bizplan_service.delete_document(request.auth["id"], document_id)
+    return {"deleted": True}

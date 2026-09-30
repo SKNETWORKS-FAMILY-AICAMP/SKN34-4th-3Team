@@ -163,6 +163,11 @@ export function App() {
     setAfterLogin(null);
   };
 
+  const requireMyPageLogin = useCallback(() => {
+    setAfterLogin('mypage');
+    setLoginOpen(true);
+  }, []);
+
   const modal = loginOpen && (
     <LoginModal onClose={() => setLoginOpen(false)} onSuccess={handleLoginSuccess} />
   );
@@ -181,6 +186,7 @@ export function App() {
           }}
           onNavigate={handleNavigate}
           onLoginClick={handleLoginClick}
+          onRequireLogin={requireMyPageLogin}
           roadmapDone={roadmapDone}
           savedPolicies={savedPolicies}
           onToggleSavedPolicy={toggleSavedPolicy}
@@ -189,6 +195,7 @@ export function App() {
           onOpenGov={() => handleNavigate('gov')}
         />
         <FloatingThemeToggle />
+        {modal}
       </React.Fragment>
     );
   }

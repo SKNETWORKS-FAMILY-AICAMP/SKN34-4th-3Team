@@ -199,6 +199,31 @@ Content-Type: application/json
 | DELETE | `/expenses/{expenseId}` | Bearer | 지출·영수증 삭제 |
 | GET | `/expenses/{expenseId}/deductibility` | Bearer | |
 
+### 사업계획서 파일 보관
+
+`DELETE /bizplan/draft`는 인증된 사용자의 임시저장만 삭제하고 `{ deleted: true }`를 반환한다. 서류 탭의 임시저장 항목에서도 삭제할 수 있다. 저장된 문서는 유지한다.
+
+| Method | Path | 인증 | 응답 |
+|--------|------|------|------|
+| POST | `/bizplan/documents` | Bearer | `/bizplan/render` 요청 (`format` 생략 가능) → `{ id, title, fileName, format, sizeBytes, createdAt, files }` |
+| GET | `/bizplan/documents` | Bearer | `{ draft: { title, updatedAt } 또는 null, documents: [...] }` (메타데이터만, 파일 최신순) |
+| GET | `/bizplan/documents/{id}/file?format=pdf` | Bearer | 선택한 형식의 원본 바이너리·MIME 타입·다운로드 파일명 (`pdf`/`hwpx`, 생략하면 대표 파일) |
+| DELETE | `/bizplan/documents/{id}` | Bearer | `{ deleted: true }` |
+
+정상 응답은 모두 `200`. ‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 저장한다.
+대표 파일은 `bizplan_documents.file_data`, 추가 형식은 `bizplan_document_files.file_data`(BYTEA)에 저장한다. 두 형식은 한 문서로 계산하고 한 트랜잭션에서 저장·삭제한다.
+`files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이다. 기존 단일 파일은 해당 형식만 제공한다. 마이페이지에서 형식을 선택해 다운로드하며, 없는 형식은 `404`이다.
+사용자당 8개(초과 `409`), 파일당 50MiB(초과 `413`)이며 중복 저장은 허용한다.
+렌더링 전에 개수를 확인하고, 렌더링 후 한 DB 연결에서 사용자 행 잠금·개수 재확인·INSERT를 수행해 동시 요청에도 8개를 넘지 않는다.
+다른 사용자 또는 없는 파일의 조회·삭제는 `404`, 미인증은 `401`이다. 임시저장(`/bizplan/draft`)과는 별개다.
+프론트엔드는 `/api` 접두사를 사용하며 Vite/배포 프록시가 이를 제거한다.
+
+임시저장 최신 1건도 서류 탭 상단에 별도 표시하고 ‘작성하기’로 기존 작성 상태를 복원한다. 임시저장은 파일 8개 제한에 포함하지 않으며, 목록에는 초안 본문·양식·이미지를 내려주지 않는다.
+
+실제 PostgreSQL 통합 테스트는 전용 임시 스키마를 생성·정리하며 기존 사용자 데이터에 접근하지 않는다.
+`BIZPLAN_DOCUMENT_DB_TESTS=1 uv run python -m unittest discover -s tests -p 'test_bizplan_documents*.py'`
+(PowerShell에서는 먼저 `$env:BIZPLAN_DOCUMENT_DB_TESTS='1'` 설정).
+
 ### 정책
 
 | Method | Path | 인증 |

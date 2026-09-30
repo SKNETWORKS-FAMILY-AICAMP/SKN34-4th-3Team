@@ -148,6 +148,10 @@ class BusinessPlanRenderResponse(BaseModel):
     contentBase64: str
 
 
+class BusinessPlanDocumentSaveRequest(BusinessPlanRenderRequest):
+    format: Literal["pdf", "hwpx"] = "hwpx"
+
+
 class BusinessPlanSectionScore(BaseModel):
     model_config = ConfigDict(title="항목별 예비진단")
     key: str
@@ -174,3 +178,33 @@ class BizplanDraftResponse(BaseModel):
     model_config = ConfigDict(title="사업계획서 임시저장 조회")
     data: dict | None = Field(default=None, description="저장된 작성 화면 상태. 없으면 null")
     updatedAt: datetime | None = Field(default=None, description="마지막 저장 시각")
+
+
+class BizplanDocumentFileItem(BaseModel):
+    fileName: str
+    format: Literal["pdf", "hwpx"]
+    sizeBytes: int
+
+
+class BizplanDocumentItem(BaseModel):
+    id: int
+    title: str
+    fileName: str
+    format: Literal["pdf", "hwpx"]
+    sizeBytes: int
+    createdAt: datetime
+    files: list[BizplanDocumentFileItem]
+
+
+class BizplanDraftItem(BaseModel):
+    title: str
+    updatedAt: datetime
+
+
+class BizplanDocumentListResponse(BaseModel):
+    draft: BizplanDraftItem | None = None
+    documents: list[BizplanDocumentItem]
+
+
+class BizplanDocumentDeleteResponse(BaseModel):
+    deleted: bool

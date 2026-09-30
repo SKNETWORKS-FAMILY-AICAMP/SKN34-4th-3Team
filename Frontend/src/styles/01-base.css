@@ -11,6 +11,7 @@
     --line: rgba(31, 45, 90, 0.09);
     --line-strong: rgba(31, 45, 90, 0.16);
     --ink: #182142;
+    --brand-ink: #111;
     --ink-soft: #59637f;
     --ink-faint: #8b93b2;
     --blue: #2f7bf0;
@@ -39,6 +40,7 @@
       --line: rgba(255, 255, 255, 0.09);
       --line-strong: rgba(255, 255, 255, 0.16);
       --ink: #edf0fb;
+      --brand-ink: #edf0fb;
       --ink-soft: #a2aacb;
       --ink-faint: #6d7599;
       --blue: #5c9dff;
@@ -65,6 +67,7 @@
     --line: rgba(255, 255, 255, 0.09);
     --line-strong: rgba(255, 255, 255, 0.16);
     --ink: #edf0fb;
+    --brand-ink: #edf0fb;
     --ink-soft: #a2aacb;
     --ink-faint: #6d7599;
     --blue: #5c9dff;
@@ -173,7 +176,7 @@
     top: 0;
     z-index: 30;
     backdrop-filter: blur(14px);
-    background: color-mix(in srgb, var(--ground) 78%, transparent);
+    background: color-mix(in srgb, var(--surface-solid) 94%, transparent);
     border-bottom: 1px solid var(--line);
   }
   .nav__row {
@@ -195,17 +198,30 @@
     border: 0;
     padding: 0;
   }
+  /* 로고(LogoMark.jsx의 SVG). 모양·색은 SVG 안에서 정하고, 여기서는 크기만 잡는다. */
   .brand__mark {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 9px;
-    background: linear-gradient(135deg, var(--blue), var(--violet));
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    font-family: 'Space Grotesk', sans-serif;
+    display: block;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    line-height: 0;
+  }
+  .brand__mark svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  /* 로고 옆 글씨 "CHANGUP ON". Pretendard의 영문 글자꼴(Inter 계열)을 쓴다(index.html에서 불러옴). */
+  .brand__word {
+    font-family: 'Pretendard Variable', Pretendard, Inter, system-ui, sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--brand-ink);
+    white-space: nowrap;
+  }
+  .brand__word b {
+    font-weight: 800;
   }
   .nav__spacer {
     flex: 1;
