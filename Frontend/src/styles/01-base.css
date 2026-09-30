@@ -290,11 +290,13 @@
     }
     /* 창 버튼과 한 줄에 맞도록 Nav를 타이틀바 높이로 줄이고 창 가장자리에 붙인다.
        Chrome이 그리는 창 버튼 배경이 titlebar-area 보다 조금 크므로 높이·우측 여백을 더 준다. */
-    .nav .wrap {
+    .nav .wrap,
+    .nav .rmhead__in {
       max-width: none;
       padding: 0 28px 0 14px;
     }
-    .nav__row {
+    .nav__row,
+    .nav .rmhead__in {
       height: calc(env(titlebar-area-height, 33px) + 3px);
       gap: 10px;
     }

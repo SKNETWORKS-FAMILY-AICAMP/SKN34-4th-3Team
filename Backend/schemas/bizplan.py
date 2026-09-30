@@ -174,6 +174,38 @@ class BizplanDraftSave(BaseModel):
     data: dict = Field(description="작성 화면 상태 전체(양식·이미지 Base64 포함, 12 MiB 이하)")
 
 
+class BizplanSummary(BaseModel):
+    model_config = ConfigDict(title="보관한 사업계획서 요약")
+    id: int = Field(description="사업계획서 ID")
+    title: str = Field(description="제목(사업/아이템명). 비어 있으면 '제목 없는 사업계획서'")
+    status: str = Field(description="진행 단계: writing / drafted / evaluated / done")
+    statusLabel: str = Field(description="진행 단계 표시 문구(작성 중·초안 완성·평가 완료·최종 완성)")
+    score: int | None = Field(default=None, description="가장 최근 평가 점수(재평가가 있으면 재평가 점수)")
+    createdAt: datetime | None = Field(default=None, description="처음 저장한 시각")
+    updatedAt: datetime | None = Field(default=None, description="마지막 저장 시각")
+    isCurrent: bool = Field(default=False, description="지금 작성 화면에 열려 있는 사업계획서인지")
+
+
+class BizplanListResponse(BaseModel):
+    model_config = ConfigDict(title="보관한 사업계획서 목록")
+    plans: list[BizplanSummary]
+
+
+class BizplanSaveRequest(BaseModel):
+    model_config = ConfigDict(title="사업계획서 보관 요청")
+    data: dict = Field(description="작성 화면 상태 전체(임시저장과 같은 형식, 12 MiB 이하)")
+
+
+class BizplanSaveResponse(BaseModel):
+    model_config = ConfigDict(title="사업계획서 보관 결과")
+    id: int = Field(description="저장된 사업계획서 ID")
+
+
+class BizplanRenameRequest(BaseModel):
+    model_config = ConfigDict(title="사업계획서 이름 변경")
+    title: str = Field(min_length=1, max_length=200, description="새 제목")
+
+
 class BizplanDraftResponse(BaseModel):
     model_config = ConfigDict(title="사업계획서 임시저장 조회")
     data: dict | None = Field(default=None, description="저장된 작성 화면 상태. 없으면 null")

@@ -475,7 +475,7 @@ def update_extraction_items(receipt_id: int, items: list, read_meta: dict | None
     )
 
 
-def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | None) -> None:
+def update_extraction_vendor(receipt_id: int, vendor: str | None, read_meta: dict | None) -> None:
     """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고쳤을 때 상호와 읽음 여부를 갱신한다."""
     db.execute(
         "UPDATE receipt_extractions SET vendor=?, read_meta=? WHERE receipt_id=?",
@@ -484,6 +484,13 @@ def update_extraction_vendor(receipt_id: int, vendor: str, read_meta: dict | Non
             json.dumps(read_meta, ensure_ascii=False) if read_meta else None,
             receipt_id,
         ),
+    )
+
+
+def update_missing_fields(expense_id: int, missing_fields: list) -> None:
+    db.execute(
+        "UPDATE expenses SET missing_fields=? WHERE id=?",
+        (db.dumps(missing_fields), expense_id),
     )
 
 
@@ -780,6 +787,14 @@ def list_bizplan_documents(user_id: int) -> list[dict]:
     )
 
 
+def list_bizplans(user_id: int) -> list[dict]:
+    return db.fetchall(
+        "SELECT id, title, status, score, created_at, updated_at FROM bizplans "
+        "WHERE user_id = ? ORDER BY updated_at DESC, id DESC",
+        (user_id,),
+    )
+
+
 def get_bizplan_document(user_id: int, document_id: int, format: str | None = None) -> dict | None:
     if format is not None:
         return db.fetchone(
@@ -801,6 +816,36 @@ def delete_bizplan_document(user_id: int, document_id: int) -> bool:
         "DELETE FROM bizplan_documents WHERE user_id = ? AND id = ? RETURNING id",
         (user_id, document_id),
     ) is not None
+
+
+def get_bizplan(plan_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT id, user_id, title, status, score, data, created_at, updated_at FROM bizplans WHERE id = ?",
+        (plan_id,),
+    )
+
+
+def insert_bizplan(user_id: int, title: str, status: str, score: int | None, data: dict) -> int:
+    return db.insert(
+        "INSERT INTO bizplans(user_id,title,status,score,data,created_at,updated_at) "
+        "VALUES (?,?,?,?,?,now(),now())",
+        (user_id, title, status, score, json.dumps(data, ensure_ascii=False)),
+    )
+
+
+def update_bizplan(plan_id: int, title: str, status: str, score: int | None, data: dict) -> None:
+    db.execute(
+        "UPDATE bizplans SET title=?, status=?, score=?, data=?, updated_at=now() WHERE id=?",
+        (title, status, score, json.dumps(data, ensure_ascii=False), plan_id),
+    )
+
+
+def rename_bizplan(plan_id: int, title: str) -> None:
+    db.execute("UPDATE bizplans SET title=?, updated_at=now() WHERE id=?", (title, plan_id))
+
+
+def delete_bizplan(plan_id: int) -> None:
+    db.execute("DELETE FROM bizplans WHERE id = ?", (plan_id,))
 
 
 def insert_policy(admin_id: int, body: dict) -> int:

@@ -121,6 +121,21 @@ END $$;
 -- 위 form/plan/eval_result 컬럼은 쓰지 않는다(삭제는 팀 합의 뒤).
 ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- 사업계획서 보관함: 사용자가 만든 사업계획서를 여러 건 보관한다(마이페이지에서 관리).
+-- 작성 화면(bizplan_drafts)은 지금 열어 둔 한 건이고, 임시저장할 때 여기에도 같은 내용을 저장한다.
+-- 제목·진행 단계·점수는 목록을 가볍게 보여주려고 data에서 뽑아 따로 둔다.
+CREATE TABLE IF NOT EXISTS bizplans (
+    id          SERIAL PRIMARY KEY,
+    user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title       VARCHAR(200) NOT NULL DEFAULT '',
+    status      VARCHAR(20) NOT NULL DEFAULT 'writing',
+    score       INT,
+    data        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at  TIMESTAMP DEFAULT now(),
+    updated_at  TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_bizplans_user ON bizplans(user_id, updated_at DESC);
+
 -- 국세청 법령해석례 제목("[국세청 법령해석] 안건명 (안건번호)")이 255자를 넘을 수 있다.
 ALTER TABLE tax_documents ALTER COLUMN title TYPE VARCHAR(500);
 

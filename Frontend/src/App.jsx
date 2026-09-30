@@ -3,6 +3,7 @@ import { api, getToken } from './api.js';
 import { loadRoadmapDone, clearLegacyRoadmapDone } from './utils.js';
 import { USER_STORE_KEY } from './constants.js';
 import { ScrollProgress, FloatingThemeToggle } from './components/common.jsx';
+import { PageTour } from './components/PageTour.jsx';
 import { Nav } from './components/Nav.jsx';
 import { LoginModal } from './components/LoginModal.jsx';
 import { SubPage } from './pages/SubPage.jsx';
@@ -195,6 +196,7 @@ export function App() {
           onOpenGov={() => handleNavigate('gov')}
         />
         <FloatingThemeToggle />
+        <PageTour page="mypage" userId={user.id} />
         {modal}
       </React.Fragment>
     );
@@ -217,6 +219,8 @@ export function App() {
           onToggleSavedPolicy={toggleSavedPolicy}
         />
         <FloatingThemeToggle />
+        {/* 사업계획서는 단계별 안내와 '사용 가이드' 버튼을 페이지 안에 따로 둔다. */}
+        {pageKey !== 'bizplan' && <PageTour key={pageKey} page={pageKey} userId={user && user.id} />}
         {modal}
       </React.Fragment>
     );
@@ -225,8 +229,9 @@ export function App() {
   return (
     <React.Fragment>
       <ScrollProgress />
+      {/* 머리글은 홈 본문 축소(.home-scale)의 영향을 받지 않게 밖에 두어 다른 페이지와 크기를 맞춘다. */}
+      <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
       <div className="home-scale">
-        <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
         <Home
           onNavigate={handleNavigate}
           user={user}

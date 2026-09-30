@@ -1618,7 +1618,7 @@
   .exp-fold {
     border: 1px solid var(--line);
     border-radius: 10px;
-    background: var(--card, #fff);
+    background: var(--surface-solid);
     margin-bottom: 8px;
     overflow: hidden;
   }
@@ -1738,7 +1738,7 @@
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--line);
-    background: var(--card, #fff);
+    background: var(--surface-solid);
   }
   .exp-ana__field.is-ok .exp-ana__mark {
     color: var(--exp-ok);
@@ -1868,121 +1868,161 @@
     border-color: var(--exp-accent);
     color: var(--exp-accent);
   }
-  /* 품목 추가: 이름·금액·버튼을 한 줄로 — 라벨 없이 placeholder로만 안내해 폼을 짧게 유지한다. */
-  .exp-ana__itemform {
+  /* 품목 추가: 이름·금액·버튼을 한 줄로. 공용 .tool input 스타일보다 우선하도록 .tool을 붙인다. */
+  .tool .exp-ana__itemform {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--ground);
+    margin-top: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
   }
-  .exp-ana__itemform input {
+  .tool .exp-ana__itemform input[type='text'],
+  .tool .exp-vform input[type='text'] {
+    width: 100%;
     min-width: 0;
-    padding: 6px 8px;
+    height: 32px;
+    padding: 0 10px;
     border: 1px solid var(--line-strong);
-    border-radius: 7px;
+    border-radius: 8px;
     background: var(--surface-solid);
     color: var(--ink);
     font: inherit;
-    font-size: 12px;
+    font-size: 12.5px;
+    box-shadow: none;
+  }
+  .tool .exp-ana__itemform input[type='text']:focus,
+  .tool .exp-vform input[type='text']:focus {
+    border-color: var(--exp-accent);
+    outline: 2px solid color-mix(in srgb, var(--exp-accent) 20%, transparent);
+    outline-offset: 0;
   }
   .exp-ana__itemform-name {
-    flex: 1.4;
+    flex: 1 1 auto;
   }
   .exp-ana__itemform-price {
-    flex: 1;
+    position: relative;
+    flex: 0 0 130px;
+  }
+  .tool .exp-ana__itemform-price input[type='text'] {
+    padding-right: 26px;
+    text-align: right;
+  }
+  .tool .exp-ana__itemform-price input[type='text']:placeholder-shown {
+    text-align: left;
+  }
+  .exp-ana__itemform-price > span {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: var(--ink-faint);
+    pointer-events: none;
   }
   .exp-ana__itemform-submit,
-  .exp-ana__itemform-cancel {
+  .exp-ana__itemform-cancel,
+  .exp-vform button {
     flex: none;
+    height: 32px;
+    padding: 0 12px;
     border: 1px solid var(--line-strong);
-    border-radius: 7px;
-    padding: 6px 10px;
+    border-radius: 8px;
     background: var(--surface-solid);
     color: var(--ink-soft);
     font: inherit;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
   }
-  .exp-ana__itemform-submit {
-    min-width: 40px;
+  .exp-ana__itemform-submit,
+  .exp-vform .exp-vform__save {
     border-color: var(--exp-accent);
-    color: #fff;
     background: var(--exp-accent);
+    color: #fff;
+  }
+  .exp-vform .exp-vform__clear:hover:not(:disabled) {
+    border-color: var(--exp-bad);
+    color: var(--exp-bad);
+  }
+  .exp-ana__itemform-cancel:hover:not(:disabled),
+  .exp-vform .exp-vform__cancel:hover:not(:disabled) {
+    color: var(--ink);
   }
   .exp-ana__itemform-submit:disabled,
-  .exp-ana__itemform-cancel:disabled {
-    opacity: 0.55;
+  .exp-ana__itemform-cancel:disabled,
+  .exp-vform button:disabled {
+    opacity: 0.5;
     cursor: default;
   }
-  @media (max-width: 420px) {
-    .exp-ana__itemform {
+  @media (max-width: 480px) {
+    .tool .exp-ana__itemform {
       flex-wrap: wrap;
     }
     .exp-ana__itemform-name {
       flex-basis: 100%;
     }
+    .exp-ana__itemform-price {
+      flex: 1 1 auto;
+    }
   }
 
   /* ---- 지출관리: 상호 수정 ---- */
   .exp-ana__editbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     margin-left: 8px;
+    padding: 0;
     border: none;
     background: transparent;
     color: var(--exp-accent);
     font: inherit;
-    font-size: 11px;
+    font-size: 11.5px;
     font-weight: 600;
     cursor: pointer;
   }
   .exp-ana__editbtn:hover {
     text-decoration: underline;
   }
-  .exp-ana__vendorform {
+  .exp-vform {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
   }
-  .exp-ana__vendorform input {
-    flex: 1;
-    min-width: 120px;
-    padding: 5px 8px;
-    border: 1px solid var(--line-strong);
-    border-radius: 7px;
-    background: var(--surface-solid);
-    color: var(--ink);
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
+  .exp-vform input[type='text'] {
+    flex: 1 1 140px;
   }
-  .exp-ana__vendorform button {
-    flex: none;
-    border: 1px solid var(--line-strong);
-    border-radius: 7px;
-    padding: 4px 9px;
-    background: var(--surface-solid);
-    color: var(--ink-soft);
-    font: inherit;
-    font-size: 11.5px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .exp-ana__vendorform button[type='submit'] {
-    border-color: var(--exp-accent);
-    color: #fff;
-    background: var(--exp-accent);
-  }
-  .exp-ana__vendorform button:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-  .exp-ana__vendorform .cal__err {
+  .exp-vform__err {
     flex-basis: 100%;
     margin: 2px 0 0;
+  }
+  /* 목록 행: 상호 옆 연필 버튼, 누르면 그 자리에서 수정 */
+  .exp-row__vedit {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-faint);
+    cursor: pointer;
+  }
+  .exp-row__vedit:hover {
+    background: var(--ground);
+    color: var(--exp-accent);
+  }
+  .exp-row__vedit:focus-visible {
+    outline: 2px solid var(--exp-accent);
+    outline-offset: 1px;
+  }
+  .exp-row__vform {
+    flex: 1;
   }
 
   .exp-ana__steps {
@@ -2155,4 +2195,196 @@
     .nav__user {
       display: none;
     }
+  }
+
+  /* ---- 마이페이지: 사업계획서 보관함 ---- */
+  .mp-bp__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .mp-bp__title {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .mp-bp__sub {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .mp-bp__new {
+    flex: none;
+    height: 38px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--blue-deep);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .mp-bp__new:hover:not(:disabled) { filter: brightness(1.08); }
+  .mp-bp__new:disabled { opacity: 0.6; cursor: default; }
+  .mp-bp__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 40px 0;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .mp-bp__empty p { margin: 0; }
+  .mp-bp__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .mp-bp__item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 18px;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--surface-solid);
+  }
+  .mp-bp__item.is-current {
+    border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+    box-shadow: 0 0 0 3px var(--blue-wash);
+  }
+  .mp-bp__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mp-bp__line1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .mp-bp__name {
+    margin: 0;
+    overflow: hidden;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mp-bp__current {
+    flex: none;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .mp-bp__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .mp-bp__status {
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+  }
+  .mp-bp__status--writing { background: color-mix(in srgb, var(--ink-faint) 16%, transparent); color: var(--ink-soft); }
+  .mp-bp__status--done { background: color-mix(in srgb, #22a06b 14%, transparent); color: #1e7a46; }
+  .mp-bp__score { font-weight: 700; color: var(--ink); }
+  .mp-bp__progress {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-width: 320px;
+  }
+  .mp-bp__progress li {
+    flex: 1;
+    padding-top: 6px;
+    border-top: 3px solid var(--line-strong);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  .mp-bp__progress li.is-on {
+    border-top-color: var(--blue);
+    color: var(--ink-soft);
+    font-weight: 600;
+  }
+  .mp-bp__actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+  }
+  .mp-bp__open,
+  .mp-bp__btn,
+  .mp-bp__rename button {
+    height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .mp-bp__open {
+    border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-weight: 700;
+  }
+  .mp-bp__btn:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-faint); }
+  .mp-bp__btn--danger:hover:not(:disabled) { color: #d92d20; border-color: #f0b4ae; }
+  .mp-bp__open:disabled,
+  .mp-bp__btn:disabled,
+  .mp-bp__rename button:disabled { opacity: 0.55; cursor: default; }
+  .mp-bp__rename {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .tool .mp-bp__rename input[type='text'] {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--blue);
+    border-radius: 8px;
+    background: var(--surface-solid);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+  }
+  @media (max-width: 720px) {
+    .mp-bp__item { flex-direction: column; align-items: stretch; }
+    .mp-bp__actions { flex-wrap: wrap; }
+    .mp-bp__head { flex-direction: column; }
   }
