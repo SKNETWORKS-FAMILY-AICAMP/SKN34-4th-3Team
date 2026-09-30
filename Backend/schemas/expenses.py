@@ -106,7 +106,7 @@ class ExpenseCategoryUpdate(BaseModel):
 
 class ExpenseVendorUpdate(BaseModel):
     model_config = ConfigDict(title="상호 수정")
-    vendor: str = Field(min_length=1, max_length=200, description="OCR이 잘못 읽었거나 놓친 상호를 직접 입력")
+    vendor: str = Field(max_length=200, description="OCR이 잘못 읽었거나 놓친 상호를 직접 입력. 빈 문자열이면 상호를 지움")
 
 
 class ExpenseItemCreate(BaseModel):

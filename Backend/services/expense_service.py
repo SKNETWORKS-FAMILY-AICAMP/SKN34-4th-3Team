@@ -651,24 +651,28 @@ def delete_item(expense_id: int, user_id: int, item_index: int) -> dict:
 
 
 def update_vendor(expense_id: int, user_id: int, vendor: str) -> dict:
-    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고치고, 갱신된 판독 결과를 돌려준다."""
+    """OCR이 잘못 읽었거나 놓친 상호를 사용자가 직접 고치고, 갱신된 판독 결과를 돌려준다.
+    빈 문자열이면 상호를 지워 '상호 미상'으로 되돌린다."""
     expense = repo.get_expense(expense_id)
     if not expense or expense["user_id"] != user_id:
         raise HttpError(404, "지출을 찾을 수 없습니다.")
-    text = (vendor or "").strip()
-    if not text:
-        raise HttpError(422, "상호를 입력해 주세요.")
+    text = (vendor or "").strip() or None
 
     extraction = repo.get_extraction(expense["receipt_id"]) or {}
     meta = dict(extraction.get("read_meta") or {})
     read = dict(meta.get("read") or {})
-    read["vendor"] = True
+    read["vendor"] = text is not None
     meta["read"] = read
     evidence = dict(meta.get("evidence") or {})
     evidence["vendor"] = None
     meta["evidence"] = evidence
 
     repo.update_extraction_vendor(expense["receipt_id"], text, meta)
+    # 목록의 '확인 필요' 사유(빠진 항목)도 새 상호 기준으로 맞춘다.
+    proof_type = extraction.get("proof_type") or "unknown"
+    repo.update_missing_fields(
+        expense_id, _missing_fields(text, extraction.get("date"), expense["amount"], proof_type)
+    )
     return analysis(expense_id, user_id)
 
 

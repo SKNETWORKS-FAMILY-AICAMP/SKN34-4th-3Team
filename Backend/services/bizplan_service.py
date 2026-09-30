@@ -158,10 +158,14 @@ def get_draft(user_id: int) -> dict:
     return {"data": row.get("data") or {}, "updatedAt": row.get("updated_at")}
 
 
-def save_draft(user_id: int, data: dict) -> None:
+def _check_size(data: dict) -> None:
     size = len(json.dumps(data, ensure_ascii=False).encode("utf-8"))
     if size > MAX_DRAFT_BYTES:
         raise HttpError(413, "임시저장 내용은 12 MiB 이하여야 합니다. 첨부 파일을 줄여 주세요.")
+
+
+def save_draft(user_id: int, data: dict) -> None:
+    _check_size(data)
     repo.upsert_bizplan_draft(user_id, data)
 
 
@@ -243,3 +247,116 @@ def get_document_file(user_id: int, document_id: int, format: str | None = None)
 def delete_document(user_id: int, document_id: int) -> None:
     if not repo.delete_bizplan_document(user_id, document_id):
         raise HttpError(404, "서류를 찾을 수 없습니다.")
+
+
+# ---- 사업계획서 보관함(마이페이지 관리) ----
+UNTITLED_PLAN = "제목 없는 사업계획서"
+PLAN_STATUS_LABELS = {
+    "writing": "작성 중",
+    "drafted": "초안 완성",
+    "evaluated": "평가 완료",
+    "done": "최종 완성",
+}
+
+
+def _has_content(data: dict) -> bool:
+    form = data.get("form") or {}
+    return bool(data.get("plan") or any(str(v).strip() for v in form.values() if v))
+
+
+def plan_meta(data: dict) -> tuple[str, str, int | None]:
+    """목록에 보여줄 제목·진행 단계·점수를 작성 화면 상태에서 뽑는다."""
+    form = data.get("form") or {}
+    title = str(form.get("businessName") or "").strip()[:200] or UNTITLED_PLAN
+    if data.get("finalPlan"):
+        status = "done"
+    elif data.get("evalResult"):
+        status = "evaluated"
+    elif data.get("plan"):
+        status = "drafted"
+    else:
+        status = "writing"
+    score = None
+    for key in ("finalEvalResult", "evalResult"):
+        value = (data.get(key) or {}).get("overallScore")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            score = int(value)
+            break
+    return title, status, score
+
+
+def _owned_plan(user_id: int, plan_id: int) -> dict:
+    row = repo.get_bizplan(plan_id)
+    if not row or row["user_id"] != user_id:
+        raise HttpError(404, "사업계획서를 찾을 수 없습니다.")
+    return row
+
+
+def _import_legacy_draft(user_id: int) -> None:
+    """보관함이 생기기 전의 임시저장(planId 없음)을 보관함 한 건으로 옮기고 작성 화면을 그 건에 연결한다."""
+    draft = repo.get_bizplan_draft(user_id)
+    data = (draft or {}).get("data") or {}
+    if not data or data.get("planId") or not _has_content(data):
+        return
+    title, status, score = plan_meta(data)
+    plan_id = repo.insert_bizplan(user_id, title, status, score, data)
+    repo.upsert_bizplan_draft(user_id, {**data, "planId": plan_id})
+
+
+def list_plans(user_id: int) -> dict:
+    _import_legacy_draft(user_id)
+    draft = repo.get_bizplan_draft(user_id)
+    current_id = ((draft or {}).get("data") or {}).get("planId")
+    return {
+        "plans": [
+            {
+                "id": row["id"],
+                "title": row["title"] or UNTITLED_PLAN,
+                "status": row["status"],
+                "statusLabel": PLAN_STATUS_LABELS.get(row["status"], row["status"]),
+                "score": row["score"],
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+                "isCurrent": row["id"] == current_id,
+            }
+            for row in repo.list_bizplans(user_id)
+        ]
+    }
+
+
+def save_plan(user_id: int, plan_id: int | None, data: dict) -> dict:
+    """작성 화면 상태를 보관함에 저장한다. plan_id가 없으면 새로 만들고 그 ID를 돌려준다."""
+    _check_size(data)
+    data = {k: v for k, v in data.items() if k != "planId"}
+    title, status, score = plan_meta(data)
+    if plan_id is None:
+        return {"id": repo.insert_bizplan(user_id, title, status, score, data)}
+    _owned_plan(user_id, plan_id)
+    repo.update_bizplan(plan_id, title, status, score, data)
+    return {"id": plan_id}
+
+
+def rename_plan(user_id: int, plan_id: int, title: str) -> None:
+    _owned_plan(user_id, plan_id)
+    repo.rename_bizplan(plan_id, title.strip()[:200] or UNTITLED_PLAN)
+
+
+def delete_plan(user_id: int, plan_id: int) -> None:
+    _owned_plan(user_id, plan_id)
+    repo.delete_bizplan(plan_id)
+    # 지운 건이 작성 화면에 열려 있으면 작성 화면도 비운다(지운 건이 다시 저장되지 않게).
+    # 빈 값으로 덮지 않고 행을 지워야 서류 탭에 빈 '임시저장' 항목이 남지 않는다.
+    draft = repo.get_bizplan_draft(user_id)
+    if ((draft or {}).get("data") or {}).get("planId") == plan_id:
+        repo.delete_bizplan_draft(user_id)
+
+
+def open_plan(user_id: int, plan_id: int) -> None:
+    """보관한 사업계획서를 작성 화면으로 불러온다(작성 화면 임시저장을 그 건으로 바꾼다)."""
+    row = _owned_plan(user_id, plan_id)
+    repo.upsert_bizplan_draft(user_id, {**(row.get("data") or {}), "planId": plan_id})
+
+
+def new_plan(user_id: int) -> None:
+    """작성 화면을 비워 새 사업계획서를 시작한다. 지금 열린 건은 보관함에 그대로 남는다."""
+    repo.delete_bizplan_draft(user_id)

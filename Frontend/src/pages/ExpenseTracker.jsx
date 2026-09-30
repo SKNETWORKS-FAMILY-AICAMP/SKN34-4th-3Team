@@ -2,59 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { linkBtn } from '../utils.js';
 
-const EXCEL_HEADERS = [
-  { header: '업로드일', key: 'uploadedAt', width: 20 },
-  { header: '거래일', key: 'date', width: 13 },
-  { header: '상호', key: 'vendor', width: 22 },
-  { header: '지출항목', key: 'category', width: 12 },
-  { header: '금액', key: 'amount', width: 12 },
-  { header: '경비 인정 판정', key: 'tierLabel', width: 14 },
-  { header: '증빙 유형', key: 'proofTypeLabel', width: 16 },
-  { header: '증빙 적격', key: 'proofValidLabel', width: 10 },
-  { header: '빠진 정보', key: 'missingFields', width: 26 },
-  { header: '품목', key: 'items', width: 30 },
-];
-
-// 지금 화면에 있는 지출 목록을 그대로 .xlsx 파일로 만든다. 서버를 거치지 않고 브라우저에서 바로 만든다.
+// 지출 목록을 요약·지출 내역·품목 상세 세 시트짜리 .xlsx로 만든다. 서버를 거치지 않고 브라우저에서 바로 만든다.
 // exceljs는 용량이 커서 누르기 전까지 불러오지 않는다(정적 import면 이 페이지를 열기만 해도
 // 전체 번들에 실려 모두가 받게 된다). 실제로 다운로드 버튼을 눌렀을 때만 그 조각을 받아온다.
-async function downloadExpensesExcel(items) {
-  const { default: ExcelJS } = await import('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = '창업ON';
-  workbook.created = new Date();
-
-  const sheet = workbook.addWorksheet('지출 내역');
-  sheet.columns = EXCEL_HEADERS;
-  sheet.getRow(1).font = { bold: true };
-  sheet.getRow(1).alignment = { vertical: 'middle' };
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
-
-  items.forEach((it) => {
-    sheet.addRow({
-      uploadedAt: it.uploadedAt ? new Date(it.uploadedAt) : null,
-      date: it.date,
-      vendor: it.vendor,
-      category: it.category,
-      amount: it.amount,
-      tierLabel: it.tierLabel,
-      proofTypeLabel: it.proofTypeLabel,
-      proofValidLabel: it.proofValid === true ? '적격' : it.proofValid === false ? '부적격' : '확인 필요',
-      missingFields: (it.missingFields || []).join(', '),
-      items: (it.items || []).map((i) => (i.price != null ? `${i.name}(${i.price.toLocaleString()}원)` : i.name)).join(', '),
-    });
-  });
-
-  const amountCol = sheet.getColumn('amount');
-  amountCol.numFmt = '#,##0"원"';
-  const uploadedCol = sheet.getColumn('uploadedAt');
-  uploadedCol.numFmt = 'yyyy-mm-dd hh:mm';
-
-  const total = items.reduce((s, x) => s + x.amount, 0);
-  const totalRow = sheet.addRow({ vendor: '합계', amount: total });
-  totalRow.font = { bold: true };
-  totalRow.getCell('amount').numFmt = '#,##0"원"';
-
+async function downloadExpensesExcel(items, filterLabel) {
+  const [{ default: ExcelJS }, { buildExpensesWorkbook }] = await Promise.all([
+    import('exceljs'),
+    import('../expenseExcel.js'),
+  ]);
+  const workbook = buildExpensesWorkbook(ExcelJS, items, { filterLabel, reasonOf: receiptReason });
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -63,7 +19,7 @@ async function downloadExpensesExcel(items) {
   const a = document.createElement('a');
   const today = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `지출내역_${today}.xlsx`;
+  a.download = `지출내역_${filterLabel && filterLabel !== '전체' ? filterLabel + '_' : ''}${today}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -180,9 +136,63 @@ function comboState(fields) {
 }
 const STATE_MARK = { miss: '✖', ok: '✔', unk: '?' };
 
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true" focusable="false">
+      <path d="M13.6 3.4a2 2 0 0 1 2.9 2.9l-8.9 8.9-3.8.9.9-3.8z" fill="none" stroke="currentColor"
+        strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// 상호 수정 폼(목록 행·읽은 내용 양쪽에서 쓴다). 지우기는 상호를 비워 '상호 미상'으로 되돌린다.
+function VendorForm({ expenseId, initial, onSaved, onCancel, className = '' }) {
+  const [draft, setDraft] = useState(initial || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async (text) => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const updated = await api.updateExpenseVendor(expenseId, text);
+      onSaved(updated, text.trim() || null);
+    } catch (e2) {
+      setError(text ? '상호를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.' : '상호를 지우지 못했어요. 잠시 후 다시 시도해 주세요.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className={'exp-vform ' + className}
+      onSubmit={(e) => { e.preventDefault(); if (draft.trim()) save(draft.trim()); }}
+      onKeyDown={(e) => e.key === 'Escape' && onCancel()}
+    >
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="상호 입력"
+        aria-label="상호"
+        maxLength={200}
+        autoFocus
+        disabled={busy}
+      />
+      <button type="submit" className="exp-vform__save" disabled={busy || !draft.trim()}>저장</button>
+      {initial && (
+        <button type="button" className="exp-vform__clear" onClick={() => save('')} disabled={busy}>지우기</button>
+      )}
+      <button type="button" className="exp-vform__cancel" onClick={onCancel} disabled={busy}>취소</button>
+      {error && <p className="cal__err exp-vform__err">{error}</p>}
+    </form>
+  );
+}
+
 // 영수증에서 읽은 항목(원문 인용 포함). 못 읽은 항목은 빨간색으로 드러낸다.
 // 상호·거래일은 한 줄로(상호는 수정 가능), 품목·금액은 표로 묶어서 보여준다.
-function ReceiptFields({ analysis, expenseId, onUpdated }) {
+function ReceiptFields({ analysis, expenseId, onUpdated, onVendorSaved }) {
   const [addOpen, setAddOpen] = useState(false);
   const [itemNameDraft, setItemNameDraft] = useState('');
   const [itemPriceDraft, setItemPriceDraft] = useState('');
@@ -192,9 +202,6 @@ function ReceiptFields({ analysis, expenseId, onUpdated }) {
   const [delErr, setDelErr] = useState('');
 
   const [vendorOpen, setVendorOpen] = useState(false);
-  const [vendorDraft, setVendorDraft] = useState('');
-  const [vendorBusy, setVendorBusy] = useState(false);
-  const [vendorErr, setVendorErr] = useState('');
 
   const byKey = {};
   analysis.fields.forEach((f) => { byKey[f.key] = f; });
@@ -203,28 +210,6 @@ function ReceiptFields({ analysis, expenseId, onUpdated }) {
   const amountField = byKey.amount;
   const restFields = analysis.fields.filter((f) => !['vendor', 'date', 'amount', 'items'].includes(f.key));
   const items = analysis.items || [];
-
-  const openVendorEdit = () => {
-    setVendorDraft((vendorField && vendorField.value) || '');
-    setVendorErr('');
-    setVendorOpen(true);
-  };
-  const submitVendor = async (e) => {
-    e.preventDefault();
-    const text = vendorDraft.trim();
-    if (!text || vendorBusy || !expenseId) return;
-    setVendorBusy(true);
-    setVendorErr('');
-    try {
-      const updated = await api.updateExpenseVendor(expenseId, text);
-      onUpdated && onUpdated(updated);
-      setVendorOpen(false);
-    } catch (e2) {
-      setVendorErr('상호를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
-    } finally {
-      setVendorBusy(false);
-    }
-  };
 
   const submitItem = async (e) => {
     e.preventDefault();
@@ -280,25 +265,20 @@ function ReceiptFields({ analysis, expenseId, onUpdated }) {
             <span className="exp-ana__mark" aria-hidden="true">{STATE_MARK[comboState([vendorField, dateField])]}</span>
             <span className="exp-ana__lbl">상호 · 거래일</span>
             {vendorOpen ? (
-              <form className="exp-ana__val exp-ana__vendorform" onSubmit={submitVendor}>
-                <input
-                  type="text"
-                  value={vendorDraft}
-                  onChange={(e) => setVendorDraft(e.target.value)}
-                  placeholder="상호 입력"
-                  aria-label="상호 수정"
-                  autoFocus
-                  disabled={vendorBusy}
-                />
-                <button type="submit" disabled={vendorBusy || !vendorDraft.trim()}>저장</button>
-                <button type="button" onClick={() => setVendorOpen(false)} disabled={vendorBusy}>취소</button>
-                {vendorErr && <p className="cal__err">{vendorErr}</p>}
-              </form>
+              <VendorForm
+                className="exp-ana__val"
+                expenseId={expenseId}
+                initial={vendorField.value || ''}
+                onSaved={(updated, vendor) => { onVendorSaved(updated, vendor); setVendorOpen(false); }}
+                onCancel={() => setVendorOpen(false)}
+              />
             ) : (
               <span className="exp-ana__val">
                 {vendorField.value || '상호 인식 못 함'} · {dateField.value || '거래일 인식 못 함'}
                 {expenseId && (
-                  <button type="button" className="exp-ana__editbtn" onClick={openVendorEdit}>✏️ 상호 수정</button>
+                  <button type="button" className="exp-ana__editbtn" onClick={() => setVendorOpen(true)}>
+                    <PencilIcon /> 상호 수정
+                  </button>
                 )}
               </span>
             )}
@@ -357,21 +337,23 @@ function ReceiptFields({ analysis, expenseId, onUpdated }) {
                     className="exp-ana__itemform-name"
                     value={itemNameDraft}
                     onChange={(e) => setItemNameDraft(e.target.value)}
-                    placeholder="OCR이 놓친 품목명"
+                    placeholder="빠진 품목명"
                     aria-label="빠진 품목명 입력"
                     autoFocus
                     disabled={addBusy}
                   />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className="exp-ana__itemform-price"
-                    value={itemPriceDraft}
-                    onChange={(e) => setItemPriceDraft(e.target.value)}
-                    placeholder="금액(선택)"
-                    aria-label="품목 금액 입력"
-                    disabled={addBusy}
-                  />
+                  <span className="exp-ana__itemform-price">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={itemPriceDraft}
+                      onChange={(e) => setItemPriceDraft(e.target.value)}
+                      placeholder="금액(선택)"
+                      aria-label="품목 금액 입력"
+                      disabled={addBusy}
+                    />
+                    <span aria-hidden="true">원</span>
+                  </span>
                   <button type="submit" className="exp-ana__itemform-submit" disabled={addBusy || !itemNameDraft.trim()} aria-label="품목 추가">
                     {addBusy ? '…' : '추가'}
                   </button>
@@ -457,7 +439,7 @@ function LawList({ laws, note }) {
 }
 
 // 카드를 펼치면 근거(RAG 출처 포함)를 그때 불러온다 — 목록 조회 때마다 매번 LLM을 부르지 않기 위해서다.
-function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
+function ReceiptCard({ item, onDeleted, onCategoryChanged, onVendorChanged }) {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -470,6 +452,7 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
   const [catErr, setCatErr] = useState('');
   const [catOpen, setCatOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [vendorEdit, setVendorEdit] = useState(false);
   // 카드를 접었다 펴도 "읽은 내용/판단/법령" 펼침 상태가 그대로 유지되도록 카드 레벨에서 들고 있는다.
   const [foldOpen, setFoldOpen] = useState({ read: false, judge: false, law: false });
   const catListRef = React.useRef(null);
@@ -558,6 +541,13 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
     }
   };
 
+  // 상호를 고치거나 지우면 읽은 내용과 목록 행을 함께 갱신한다.
+  const vendorSaved = (updated, vendor) => {
+    setAnalysis(updated);
+    setVendorEdit(false);
+    onVendorChanged(item.expenseId, vendor);
+  };
+
   const remove = async () => {
     if (!window.confirm('이 영수증과 지출 기록을 삭제할까요?')) return;
     try {
@@ -592,9 +582,31 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
 
         <div className="exp-row__info">
           <div className="exp-row__line1">
-            <span className={'exp-row__vendor' + (vendorUnknown ? ' is-unknown' : '')}>
-              {item.vendor || '상호 미상'}
-            </span>
+            {vendorEdit ? (
+              <VendorForm
+                className="exp-row__vform"
+                expenseId={item.expenseId}
+                initial={vendorUnknown ? '' : item.vendor}
+                onSaved={vendorSaved}
+                onCancel={() => setVendorEdit(false)}
+              />
+            ) : (
+              <React.Fragment>
+                <span className={'exp-row__vendor' + (vendorUnknown ? ' is-unknown' : '')}>
+                  {item.vendor || '상호 미상'}
+                </span>
+                <button
+                  type="button"
+                  className="exp-row__vedit"
+                  onClick={() => setVendorEdit(true)}
+                  aria-label={vendorUnknown ? '상호 입력' : '상호 수정'}
+                  title={vendorUnknown ? '상호 입력' : '상호 수정'}
+                >
+                  <PencilIcon />
+                </button>
+              </React.Fragment>
+            )}
+            {!vendorEdit && (
             <div className="exp-dd" ref={catWrapRef}>
               <button
                 type="button"
@@ -626,6 +638,7 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
                 </div>
               )}
             </div>
+            )}
           </div>
           <div className="exp-row__sub" title={uploadedLabel ? `${uploadedLabel} 업로드` : undefined}>
             {formatTxDate(item.date)} · {item.proofTypeLabel}
@@ -708,7 +721,7 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged }) {
                 open={foldOpen.read}
                 onToggle={(v) => setFoldOpen((f) => ({ ...f, read: v }))}
               >
-                <ReceiptFields analysis={analysis} expenseId={item.expenseId} onUpdated={setAnalysis} />
+                <ReceiptFields analysis={analysis} expenseId={item.expenseId} onUpdated={setAnalysis} onVendorSaved={vendorSaved} />
               </Fold>
               <Fold
                 title="🧭 이렇게 판단했어요"
@@ -873,6 +886,14 @@ export function ExpenseTracker({ user, onRequireLogin }) {
   };
 
   const onDeleted = (id) => setItems((cur) => cur.filter((x) => x.expenseId !== id));
+  const onVendorChanged = (id, vendor) =>
+    setItems((cur) =>
+      cur.map((x) => {
+        if (x.expenseId !== id) return x;
+        const rest = (x.missingFields || []).filter((f) => f !== '상호');
+        return { ...x, vendor: vendor || '상호 미상', missingFields: vendor ? rest : ['상호', ...rest] };
+      })
+    );
   const onCategoryChanged = (id, category, detail) =>
     setItems((cur) =>
       cur.map((x) =>
@@ -1037,7 +1058,7 @@ export function ExpenseTracker({ user, onRequireLogin }) {
                       ))}
                     </nav>
 
-                    <button type="button" className="exp-export" onClick={() => downloadExpensesExcel(filteredItems)}>
+                    <button type="button" className="exp-export" onClick={() => downloadExpensesExcel(filteredItems, (TIER_TABS.find((t) => t.key === tierFilter) || TIER_TABS[0]).label)}>
                       엑셀로 내보내기
                     </button>
                   </React.Fragment>
@@ -1080,6 +1101,7 @@ export function ExpenseTracker({ user, onRequireLogin }) {
                               item={it}
                               onDeleted={onDeleted}
                               onCategoryChanged={onCategoryChanged}
+                              onVendorChanged={onVendorChanged}
                             />
                           ))}
                         </ul>

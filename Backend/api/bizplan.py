@@ -2,7 +2,7 @@ from typing import Literal
 
 from django.http import HttpResponse
 from django.utils.http import content_disposition_header
-from ninja import Router
+from ninja import Path, Router
 
 from api.deps import user_auth
 from schemas.bizplan import (
@@ -13,6 +13,10 @@ from schemas.bizplan import (
     BizplanDocumentListResponse,
     BizplanDraftResponse,
     BizplanDraftSave,
+    BizplanListResponse,
+    BizplanRenameRequest,
+    BizplanSaveRequest,
+    BizplanSaveResponse,
     BusinessPlanEvaluateRequest,
     BusinessPlanEvaluateResponse,
     BusinessPlanRefineRequest,
@@ -113,3 +117,50 @@ def document_file(request, document_id: int, format: Literal["pdf", "hwpx"] | No
 def delete_document(request, document_id: int):
     bizplan_service.delete_document(request.auth["id"], document_id)
     return {"deleted": True}
+
+
+@router.get("/plans", response=BizplanListResponse, summary="보관한 사업계획서 목록")
+def plans(request):
+    """마이페이지에서 관리할 사업계획서 목록을 최근 저장 순으로 반환합니다."""
+    return bizplan_service.list_plans(request.auth["id"])
+
+
+@router.post("/plans", response=BizplanSaveResponse, summary="사업계획서 새로 보관")
+def create_plan(request, body: BizplanSaveRequest):
+    """작성 화면 상태를 보관함에 새 건으로 저장하고 ID를 돌려줍니다."""
+    return bizplan_service.save_plan(request.auth["id"], None, body.data)
+
+
+# 경로에 숫자가 아닌 'new'가 먼저 걸리도록 {plan_id} 경로보다 앞에 둔다.
+@router.post("/plans/new", response=UpdatedResponse, summary="새 사업계획서 시작")
+def new_plan(request):
+    """작성 화면을 비웁니다. 지금 열려 있던 사업계획서는 보관함에 남습니다."""
+    bizplan_service.new_plan(request.auth["id"])
+    return {"updated": True}
+
+
+@router.put("/plans/{plan_id}", response=BizplanSaveResponse, summary="보관한 사업계획서 저장")
+def save_plan(request, body: BizplanSaveRequest, plan_id: int = Path(description="사업계획서 ID")):
+    """작성 화면 상태로 보관한 사업계획서를 덮어씁니다."""
+    return bizplan_service.save_plan(request.auth["id"], plan_id, body.data)
+
+
+@router.patch("/plans/{plan_id}", response=UpdatedResponse, summary="사업계획서 이름 변경")
+def rename_plan(request, body: BizplanRenameRequest, plan_id: int = Path(description="사업계획서 ID")):
+    """보관함에 보이는 제목을 바꿉니다."""
+    bizplan_service.rename_plan(request.auth["id"], plan_id, body.title)
+    return {"updated": True}
+
+
+@router.delete("/plans/{plan_id}", response=UpdatedResponse, summary="보관한 사업계획서 삭제")
+def delete_plan(request, plan_id: int = Path(description="사업계획서 ID")):
+    """보관함에서 지웁니다. 작성 화면에 열려 있던 건이면 작성 화면도 비웁니다."""
+    bizplan_service.delete_plan(request.auth["id"], plan_id)
+    return {"updated": True}
+
+
+@router.post("/plans/{plan_id}/open", response=UpdatedResponse, summary="보관한 사업계획서 열기")
+def open_plan(request, plan_id: int = Path(description="사업계획서 ID")):
+    """보관한 사업계획서를 작성 화면으로 불러옵니다(작성 화면 임시저장을 그 건으로 바꿈)."""
+    bizplan_service.open_plan(request.auth["id"], plan_id)
+    return {"updated": True}

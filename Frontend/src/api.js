@@ -385,6 +385,14 @@ export const api = {
   bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
   saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),
   deleteBizplanDraft: (opt) => apiDelete('/bizplan/draft', opt),
+  // 사업계획서 보관함(마이페이지 관리). 열기·새로 만들기는 작성 화면 임시저장을 바꾼 뒤 사업계획서 페이지로 이동한다.
+  bizplanPlans: (opt) => apiGet('/bizplan/plans', opt),
+  createBizplanPlan: (data, opt) => apiPost('/bizplan/plans', { data }, { timeout: 30000, ...opt }),
+  saveBizplanPlan: (planId, data, opt) => apiPut(`/bizplan/plans/${planId}`, { data }, { timeout: 30000, ...opt }),
+  renameBizplanPlan: (planId, title, opt) => apiPatch(`/bizplan/plans/${planId}`, { title }, opt),
+  deleteBizplanPlan: (planId, opt) => apiDelete(`/bizplan/plans/${planId}`, opt),
+  openBizplanPlan: (planId, opt) => apiPost(`/bizplan/plans/${planId}/open`, {}, opt),
+  newBizplanPlan: (opt) => apiPost('/bizplan/plans/new', {}, opt),
   // RAG 근거를 새로 찾아오므로 채팅과 비슷하게 여유를 둔다.
   expenseDeductibility: (expenseId, opt) => apiGet(`/expenses/${expenseId}/deductibility`, { timeout: 60000, ...opt }),
 };

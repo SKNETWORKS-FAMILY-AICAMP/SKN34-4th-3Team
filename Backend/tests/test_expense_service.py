@@ -118,5 +118,32 @@ class DeleteItemTest(unittest.TestCase):
         repo.update_extraction_items.assert_not_called()
 
 
+class UpdateVendorTest(unittest.TestCase):
+    def _run(self, vendor: str, current: str | None):
+        repo = MagicMock()
+        repo.get_expense.return_value = _expense()
+        repo.get_extraction.return_value = {
+            "vendor": current, "date": date(2026, 9, 1), "proof_type": "card_slip", "read_meta": {},
+        }
+        with patch.object(expense_service, "repo", repo), \
+                patch.object(expense_service, "analysis", return_value={}):
+            expense_service.update_vendor(expense_id=1, user_id=1, vendor=vendor)
+        return repo
+
+    def test_sets_vendor_and_clears_missing_vendor(self):
+        repo = self._run("  예시상점 ", None)
+        receipt_id, vendor, meta = repo.update_extraction_vendor.call_args[0]
+        self.assertEqual((receipt_id, vendor), (10, "예시상점"))
+        self.assertTrue(meta["read"]["vendor"])
+        self.assertNotIn("상호", repo.update_missing_fields.call_args[0][1])
+
+    def test_blank_vendor_clears_it(self):
+        repo = self._run("   ", "예시상점")
+        _, vendor, meta = repo.update_extraction_vendor.call_args[0]
+        self.assertIsNone(vendor)
+        self.assertFalse(meta["read"]["vendor"])
+        self.assertIn("상호", repo.update_missing_fields.call_args[0][1])
+
+
 if __name__ == "__main__":
     unittest.main()

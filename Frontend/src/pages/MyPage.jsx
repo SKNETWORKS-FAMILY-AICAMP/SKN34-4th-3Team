@@ -942,6 +942,161 @@ export function ProfileSettings({ user, only, onSaved }) {
   );
 }
 
+// 사업계획서 보관함: 만든 사업계획서를 최근 저장 순으로 보여주고, 이어서 작성·이름 변경·삭제·새로 만들기를 한다.
+// 열기와 새로 만들기는 서버에서 작성 화면 임시저장을 바꾼 뒤 사업계획서 페이지로 이동한다.
+const BP_STATUS_STEPS = ['writing', 'drafted', 'evaluated', 'done'];
+
+function formatPlanDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+export function BizplanManager({ onOpenBizplan }) {
+  const [plans, setPlans] = useState(null);
+  const [err, setErr] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const [renameId, setRenameId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+
+  const load = () => {
+    setErr('');
+    api.bizplanPlans()
+      .then((r) => setPlans((r && r.plans) || []))
+      .catch(() => {
+        setPlans([]);
+        setErr('사업계획서 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+      });
+  };
+  useEffect(load, []);
+
+  const run = async (id, action, failMsg) => {
+    if (busyId !== null) return;
+    setBusyId(id);
+    setErr('');
+    try {
+      await action();
+    } catch (e) {
+      setErr(failMsg);
+      setBusyId(null);
+      return;
+    }
+    setBusyId(null);
+  };
+
+  const open = (p) => run(p.id, async () => {
+    await api.openBizplanPlan(p.id);
+    onOpenBizplan && onOpenBizplan();
+  }, '사업계획서를 열지 못했어요. 잠시 후 다시 시도해 주세요.');
+
+  const create = () => run('new', async () => {
+    await api.newBizplanPlan();
+    onOpenBizplan && onOpenBizplan();
+  }, '새 사업계획서를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.');
+
+  const remove = (p) => {
+    if (!window.confirm(`'${p.title}'을(를) 삭제할까요? 삭제하면 되돌릴 수 없어요.`)) return;
+    run(p.id, async () => {
+      await api.deleteBizplanPlan(p.id);
+      setPlans((cur) => cur.filter((x) => x.id !== p.id));
+    }, '삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  };
+
+  const saveRename = (p) => {
+    const title = renameDraft.trim();
+    if (!title || title === p.title) {
+      setRenameId(null);
+      return;
+    }
+    run(p.id, async () => {
+      await api.renameBizplanPlan(p.id, title);
+      setPlans((cur) => cur.map((x) => (x.id === p.id ? { ...x, title } : x)));
+      setRenameId(null);
+    }, '이름을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.');
+  };
+
+  return (
+    <div className="tool mp-bp">
+      <div className="tool__panel">
+        <div className="mp-bp__head">
+          <div>
+            <h2 className="mp-bp__title">내 사업계획서</h2>
+            <p className="mp-bp__sub">
+              사업계획서 페이지에서 임시저장하거나 초안·평가가 나오면 여기에 자동으로 모여요.
+            </p>
+          </div>
+          <button type="button" className="mp-bp__new" onClick={create} disabled={busyId !== null}>
+            + 새 사업계획서
+          </button>
+        </div>
+        {err && <p className="cal__err">{err}</p>}
+
+        {plans === null ? (
+          <p className="ai__hint">불러오는 중…</p>
+        ) : plans.length === 0 ? (
+          <div className="mp-bp__empty">
+            <p>아직 만든 사업계획서가 없어요.</p>
+            <button type="button" className="mp-bp__new" onClick={create} disabled={busyId !== null}>
+              첫 사업계획서 만들기
+            </button>
+          </div>
+        ) : (
+          <ul className="mp-bp__list">
+            {plans.map((p) => {
+              const stepIdx = Math.max(0, BP_STATUS_STEPS.indexOf(p.status));
+              const busy = busyId === p.id;
+              return (
+                <li key={p.id} className={'mp-bp__item' + (p.isCurrent ? ' is-current' : '')}>
+                  <div className="mp-bp__main">
+                    <div className="mp-bp__line1">
+                      {renameId === p.id ? (
+                        <form className="mp-bp__rename" onSubmit={(e) => { e.preventDefault(); saveRename(p); }}>
+                          <input type="text" value={renameDraft} maxLength={200} autoFocus aria-label="사업계획서 이름"
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Escape' && setRenameId(null)} />
+                          <button type="submit" disabled={busy || !renameDraft.trim()}>저장</button>
+                          <button type="button" onClick={() => setRenameId(null)} disabled={busy}>취소</button>
+                        </form>
+                      ) : (
+                        <h3 className="mp-bp__name" title={p.title}>{p.title}</h3>
+                      )}
+                      {p.isCurrent && <span className="mp-bp__current">작성 화면에 열려 있음</span>}
+                    </div>
+                    <div className="mp-bp__meta">
+                      <span className={'mp-bp__status mp-bp__status--' + p.status}>{p.statusLabel}</span>
+                      {p.score != null && <span className="mp-bp__score u-num">평가 {p.score}점</span>}
+                      <span className="mp-bp__date">마지막 저장 {formatPlanDate(p.updatedAt)}</span>
+                    </div>
+                    <ol className="mp-bp__progress" aria-label={`진행 단계: ${p.statusLabel}`}>
+                      {['작성', '초안', '평가', '완성'].map((label, i) => (
+                        <li key={label} className={i <= stepIdx ? 'is-on' : ''}>{label}</li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div className="mp-bp__actions">
+                    <button type="button" className="mp-bp__open" onClick={() => open(p)} disabled={busyId !== null}>
+                      {busy ? '여는 중…' : p.status === 'done' ? '열기 · 다운로드' : '이어서 작성'}
+                    </button>
+                    <button type="button" className="mp-bp__btn" disabled={busyId !== null}
+                      onClick={() => { setRenameId(p.id); setRenameDraft(p.title); }}>
+                      이름 변경
+                    </button>
+                    <button type="button" className="mp-bp__btn mp-bp__btn--danger" onClick={() => remove(p)}
+                      disabled={busyId !== null}>
+                      삭제
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onRequireLogin, roadmapDone = {}, savedPolicies = [], onToggleSavedPolicy, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
   const [siteMenuOpen, setSiteMenuOpen] = useState(false);
   const [menu, setMenu] = useState('home');
@@ -1141,6 +1296,8 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
           <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
         ) : menu === 'docs' ? (
           <DocsList key={mpUserId} userId={mpUserId} onNavigate={onNavigate} onRequireLogin={onRequireLogin} />
+        ) : menu === 'bizplans' ? (
+          <BizplanManager onOpenBizplan={() => onNavigate && onNavigate('bizplan')} />
         ) : menu === 'settings' ? (
           <ProfileSettings user={user} only="notif" />
         ) : (
