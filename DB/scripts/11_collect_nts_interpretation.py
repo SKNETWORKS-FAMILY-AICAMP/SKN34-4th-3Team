@@ -31,7 +31,7 @@ DETAIL_URL = "https://taxlaw.nts.go.kr/action.do"
 
 KEYWORDS = ["창업", "벤처기업", "세액감면", "감면세액"]
 
-REQUEST_DELAY_SECONDS = 1.0
+REQUEST_DELAY_SECONDS = 0.8  # 다른 수집 스크립트(06·10번)와 같은 간격
 PROGRESS_LOG_EVERY = 50  # 처리 건수 기준 로그 주기
 
 HEADERS = {
@@ -39,7 +39,7 @@ HEADERS = {
 }
 
 
-def fetch_list(keyword, page=1, display=100):
+def fetch_list(keyword, page=1, display=100, max_retries=3):
     params = {
         "OC": OC,
         "target": "ntsCgmExpc",
@@ -51,6 +51,31 @@ def fetch_list(keyword, page=1, display=100):
     response = requests.get(LIST_URL, params=params, headers=HEADERS)
     response.raise_for_status()
     return response.json()
+    retry_statuses = {403, 429, 500, 502, 503, 504}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.get(LIST_URL, params=params, headers=HEADERS, timeout=30)
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries:
+                raise
+            wait = 5 * attempt
+            print(f"  [{keyword}] page={page} 요청 오류({type(e).__name__}), {wait}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait)
+            continue
+
+        if response.status_code == 200:
+            return response.json()
+
+        if response.status_code in retry_statuses and attempt < max_retries:
+            wait = 5 * attempt
+            print(f"  [{keyword}] page={page} status={response.status_code}, {wait}초 후 재시도 ({attempt}/{max_retries})")
+            time.sleep(wait)
+            continue
+
+        raise requests.exceptions.HTTPError(
+            f"국세청 법령해석 목록 API 요청 실패 (keyword={keyword}, page={page}, status={response.status_code})"
+        )
 
 
 def fetch_all_list(keyword):

@@ -80,3 +80,23 @@ services:
     volumes:
       - ./DB/app_extras.sql:/app_extras.sql:ro
     command: ["psql", "-h", "${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}", "-p", "${COMPOSE_DB_PORT:-5432}", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/app_extras.sql"]
+
+  # 수집 스크립트(DB/run_collection.py)를 Data EC2 의 DB 에 실행한다.
+  # up 으로는 뜨지 않고 run --rm collector 로만 실행한다(.github/workflows/collect.yml).
+  collector:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    profiles: ["collector"]
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: ${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}
+      DB_PORT: ${COMPOSE_DB_PORT:-5432}
+      # 바인드 마운트한 DB/ 안에 .venv 를 만들지 않는다.
+      UV_PROJECT_ENVIRONMENT: /opt/db-venv
+      # 터미널 없이(Actions SSH) 실행해도 print 가 바로 로그에 찍히게 한다.
+      PYTHONUNBUFFERED: "1"
+    working_dir: /app
+    volumes:
+      - ./DB:/app:ro
+    command: ["uv", "run", "--frozen", "python", "run_collection.py"]
