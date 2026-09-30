@@ -121,6 +121,9 @@ END $$;
 -- 위 form/plan/eval_result 컬럼은 쓰지 않는다(삭제는 팀 합의 뒤).
 ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- 국세청 법령해석례 제목("[국세청 법령해석] 안건명 (안건번호)")이 255자를 넘을 수 있다.
+ALTER TABLE tax_documents ALTER COLUMN title TYPE VARCHAR(500);
+
 -- '마이페이지에 저장'한 사업계획서 원본. 임시저장 상태와 별도로 보관한다.
 CREATE TABLE IF NOT EXISTS bizplan_documents (
     id         SERIAL PRIMARY KEY,
