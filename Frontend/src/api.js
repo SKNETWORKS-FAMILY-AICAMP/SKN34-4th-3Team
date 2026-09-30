@@ -318,6 +318,9 @@ export const api = {
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
   roadmapProgress: (opt) => apiGet('/users/me/roadmap-progress', opt),
   setRoadmapTask: (taskKey, done, opt) => apiPut('/users/me/roadmap-progress', { taskKey, done }, opt),
+  subscription: (opt) => apiGet('/users/me/subscription', opt),
+  // 목업 결제: 서버가 즉시 승인하고 갱신된 구독을 돌려준다.
+  changePlan: (plan, opt) => apiPut('/users/me/subscription', { plan }, opt),
   stats: (opt) => apiGet('/stats', opt),
   announcements: (params, opt) => apiGet('/announcements' + qs(params), opt),
   policies: (params, opt) => apiGet('/policies' + qs(params), opt),

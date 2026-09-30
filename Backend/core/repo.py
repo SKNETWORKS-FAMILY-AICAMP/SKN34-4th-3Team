@@ -672,6 +672,34 @@ def set_roadmap_task(user_id: int, version: int, task_key: str, done: bool) -> N
         )
 
 
+def get_subscription(user_id: int) -> dict | None:
+    return db.fetchone(
+        "SELECT plan, started_at, renews_at FROM user_subscriptions WHERE user_id = ?", (user_id,)
+    )
+
+
+def upsert_subscription(user_id: int, plan: str, renews_at: datetime | None) -> None:
+    db.execute(
+        "INSERT INTO user_subscriptions(user_id,plan,started_at,renews_at) VALUES (?,?,now(),?) "
+        "ON CONFLICT (user_id) DO UPDATE SET plan = EXCLUDED.plan, "
+        "started_at = EXCLUDED.started_at, renews_at = EXCLUDED.renews_at",
+        (user_id, plan, renews_at),
+    )
+
+
+def count_chats_this_month(user_id: int, categories: list[str]) -> int:
+    """구독 사용량 표시용. 이번 달(서버 시간 기준) 질문 수."""
+    placeholders = ",".join("?" for _ in categories)
+    return int(
+        db.scalar(
+            "SELECT COUNT(*) FROM chat_messages WHERE user_id = ? "
+            f"AND category IN ({placeholders}) AND created_at >= date_trunc('month', now())",
+            (user_id, *categories),
+        )
+        or 0
+    )
+
+
 def get_bizplan_draft(user_id: int) -> dict | None:
     return db.fetchone("SELECT data, updated_at FROM bizplan_drafts WHERE user_id = ?", (user_id,))
 

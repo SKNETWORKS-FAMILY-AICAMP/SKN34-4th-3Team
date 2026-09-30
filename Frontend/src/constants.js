@@ -274,6 +274,7 @@ export const MP_MENU = [
   { key: 'home', label: '마이페이지' },
   { group: '내 정보' },
   { key: 'profile', label: '사업자 정보', sub: true },
+  { key: 'billing', label: '구독 · 결제', sub: true },
   { group: '저장한 것' },
   { key: 'saved', label: '공고 · 정책', sub: true },
   { key: 'docs', label: '서류', sub: true },
