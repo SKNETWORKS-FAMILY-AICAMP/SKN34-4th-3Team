@@ -28,11 +28,11 @@ jobs:
             set -e
             cd ~/SKN34-4th-3Team
             git pull --ff-only origin main
-            docker compose -f docker-compose.app.yml run --rm collector
-            # run_collection.py 에 없는 생활법령정보도 수집한다.
-            docker compose -f docker-compose.app.yml run --rm collector \
-              uv run --frozen python scripts/13_collect_life_law.py
+            # 일부 수집이 실패해도 성공한 데이터는 임베딩·ES 에 반영하고, 실패는 마지막에 알린다.
+            collect_rc=0
+            docker compose -f docker-compose.app.yml run --rm collector || collect_rc=$?
             # 신규·변경 청크만 임베딩해 pgvector 에 저장한 뒤 ES 를 재색인한다.
             docker compose -f docker-compose.app.yml exec -T llm \
               curl -fsS --max-time 1800 -X POST localhost:8001/rag/reindex \
               -H 'Content-Type: application/json' -d '{"documentIds":[],"force":false}'
+            exit $collect_rc
