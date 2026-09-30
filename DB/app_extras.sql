@@ -123,3 +123,29 @@ ALTER TABLE bizplan_drafts ADD COLUMN IF NOT EXISTS data JSONB NOT NULL DEFAULT 
 
 -- 국세청 법령해석례 제목("[국세청 법령해석] 안건명 (안건번호)")이 255자를 넘을 수 있다.
 ALTER TABLE tax_documents ALTER COLUMN title TYPE VARCHAR(500);
+
+-- '마이페이지에 저장'한 사업계획서 원본. 임시저장 상태와 별도로 보관한다.
+CREATE TABLE IF NOT EXISTS bizplan_documents (
+    id         SERIAL PRIMARY KEY,
+    user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title      VARCHAR(200) NOT NULL,
+    file_name  VARCHAR(255) NOT NULL,
+    format     VARCHAR(10) NOT NULL,
+    mime_type  VARCHAR(100) NOT NULL,
+    file_data  BYTEA NOT NULL,
+    size_bytes INT NOT NULL,
+    created_at TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_bizplan_documents_user
+    ON bizplan_documents(user_id, created_at DESC);
+
+-- 같은 저장 문서의 추가 출력 형식. 두 형식을 보관해도 문서 수는 1건이다.
+CREATE TABLE IF NOT EXISTS bizplan_document_files (
+    document_id INT NOT NULL REFERENCES bizplan_documents(id) ON DELETE CASCADE,
+    format      VARCHAR(10) NOT NULL,
+    file_name   VARCHAR(255) NOT NULL,
+    mime_type   VARCHAR(100) NOT NULL,
+    file_data   BYTEA NOT NULL,
+    size_bytes  INT NOT NULL,
+    PRIMARY KEY (document_id, format)
+);

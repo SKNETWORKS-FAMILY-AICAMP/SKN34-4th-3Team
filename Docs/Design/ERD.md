@@ -298,6 +298,8 @@ erDiagram
     users ||--o{ chat_messages : sends
     users ||--o{ user_roadmap_progress : checks
     users ||--o| bizplan_drafts : drafts
+    users ||--o{ bizplan_documents : stores
+    bizplan_documents ||--o{ bizplan_document_files : formats
 
     chat_rooms {
         int id PK
@@ -334,8 +336,30 @@ erDiagram
         jsonb eval_result "미사용"
         datetime updated_at
     }
+
+    bizplan_documents {
+        int id PK
+        int user_id FK "ON DELETE CASCADE"
+        string title
+        string file_name
+        string format "hwpx / pdf"
+        string mime_type
+        bytea file_data "파일 원본"
+        int size_bytes
+        datetime created_at
+    }
+
+    bizplan_document_files {
+        int document_id PK "FK, ON DELETE CASCADE"
+        string format PK "추가 출력 형식"
+        string file_name
+        string mime_type
+        bytea file_data
+        int size_bytes
+    }
 ```
 
 - **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
 - **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
 - **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 저장 필드가 자주 늘어나 작성 화면 상태 전체(양식·이미지 Base64 포함)를 `data` JSONB 하나에 둔다. `form`·`plan`·`eval_result`는 쓰지 않으며 삭제는 팀 합의 뒤 진행한다.
+- **User – BizplanDocument – BizplanDocumentFile**: ‘문서 저장’으로 기본 문서는 PDF·HWPX를 함께 보관한다. 대표 파일은 `bizplan_documents`, 추가 형식은 `bizplan_document_files`에 두고 같은 트랜잭션에서 저장·삭제한다. 제출 양식과 기존 단일 파일은 원본 형식만 제공한다. 사용자당 8문서, 파일당 50MiB, 중복 저장 허용. 두 형식은 1문서로 계산한다. 임시저장과 별도로 마이페이지에서 형식 선택·다운로드·삭제한다. `user_id, created_at DESC` 인덱스를 사용하고, 저장 직전 사용자 행을 잠근 트랜잭션에서 개수를 재확인해 동시 요청에도 상한을 보장한다.

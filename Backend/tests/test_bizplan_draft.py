@@ -37,6 +37,18 @@ class BizplanDraftRouteTest(unittest.TestCase):
     def test_requires_login(self):
         self.assertEqual(client.get("/bizplan/draft").status_code, 401)
         self.assertEqual(client.put("/bizplan/draft", json={"data": {}}).status_code, 401)
+        self.assertEqual(client.delete("/bizplan/draft").status_code, 401)
+
+    def test_delete_uses_authenticated_user_and_is_idempotent(self):
+        repo = MagicMock()
+        with patch.object(deps, "repo", _active_user_repo(7)), patch.object(bizplan_service, "repo", repo):
+            for _ in range(2):
+                response = client.delete("/bizplan/draft", headers=_headers(7))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"deleted": True})
+        self.assertEqual(repo.delete_bizplan_draft.call_count, 2)
+        repo.delete_bizplan_draft.assert_called_with(7)
+        repo.delete_bizplan_document.assert_not_called()
 
     def test_missing_draft_returns_null(self):
         repo = MagicMock()
