@@ -20,6 +20,11 @@ const getConfirmationNotice = ({ status, guardrailReason } = {}) => {
 // 응답 대기·화면 전환에서 방을 구분하는 키. 서버 저장 전인 새 대화는 id가 없어 따로 표시한다.
 const NEW_ROOM = 'new';
 const roomKey = (id) => (id == null ? NEW_ROOM : id);
+// 페이지 이동으로 컴포넌트가 사라져도 진행 중인 요청은 브라우저 탭에서 유지한다.
+const pendingChats = new Map();
+const pendingChatKey = (userId, category) => `${userId}:${category}`;
+const ANSWER_REVEAL_MS = 12;
+const ANSWER_REVEAL_CHARS = 1;
 
 export function AiConsult({
   user,
@@ -80,7 +85,6 @@ export function AiConsult({
     })();
     return () => {
       alive = false;
-      if (ctlRef.current) ctlRef.current.abort();
     };
   }, []);
 
@@ -95,31 +99,70 @@ export function AiConsult({
       return;
     }
     let alive = true;
-    setHistBusy(true);
-    setErr('');
+    let loadVersion = 0;
+    const task = pendingChats.get(pendingChatKey(userId, category));
+    setHistLoaded(false);
     setTurns([]);
-    Promise.all([api.chatRooms(category), api.chatHistory(category)])
-      .then(([r, h]) => {
+    setBusy(Boolean(task));
+    setPendingKey(task ? roomKey(task.roomId) : null);
+    if (task) {
+      ctlRef.current = task.controller;
+      setProgress('답변을 기다리고 있어요…');
+    }
+    setErr('');
+    const loadHistory = (initial) => {
+      const version = ++loadVersion;
+      setHistBusy(true);
+      return Promise.all([api.chatRooms(category), api.chatHistory(category)])
+        .then(([r, h]) => {
+          if (!alive || version !== loadVersion) return;
+          const list = (r && r.rooms) || [];
+          const fetched = (h && h.messages) || [];
+          setRoomList(list);
+          setRows(fetched);
+          const selected = initial
+            ? (task ? task.roomId : list.length ? list[0].id : null)
+            : (roomKeyRef.current === NEW_ROOM && task?.resultRoomId != null
+              ? task.resultRoomId : roomKeyRef.current === NEW_ROOM ? null : roomKeyRef.current);
+          roomKeyRef.current = roomKey(selected);
+          setRoomId(selected);
+          const loadedTurns = selected == null ? [] : turnsOf(selected, fetched);
+          if (initial && task && !task.done && roomKey(selected) === roomKey(task.roomId)) {
+            pendingTurnsRef.current = [...loadedTurns, { role: 'user', content: task.question }];
+            setTurns(pendingTurnsRef.current);
+          } else {
+            setTurns(loadedTurns);
+          }
+          setHistLoaded(true);
+        })
+        .catch(() => {
+          if (!alive || version !== loadVersion) return;
+          setErr('이전 대화 기록을 불러오지 못했어요.');
+          setHistLoaded(true);
+        })
+        .finally(() => {
+          if (alive && version === loadVersion) setHistBusy(false);
+        });
+    };
+    let onComplete;
+    if (task) {
+      onComplete = () => {
         if (!alive) return;
-        const list = (r && r.rooms) || [];
-        const fetched = (h && h.messages) || [];
-        setRoomList(list);
-        setRows(fetched);
-        const first = list.length ? list[0].id : null;
-        setRoomId(first);
-        setTurns(first == null ? [] : turnsOf(first, fetched));
-        setHistLoaded(true);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setErr('이전 대화 기록을 불러오지 못했어요.');
-        setHistLoaded(true);
-      })
-      .finally(() => {
-        if (alive) setHistBusy(false);
-      });
+        setBusy(false);
+        setPendingKey(null);
+        setProgress('');
+        setStream('');
+        pendingTurnsRef.current = null;
+        ctlRef.current = null;
+        if (task.resultRoomId == null) setErr('답변을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        loadHistory(false);
+      };
+      task.listeners.add(onComplete);
+    }
+    loadHistory(true);
     return () => {
       alive = false;
+      if (task) task.listeners.delete(onComplete);
     };
   }, [userId, category]);
 
@@ -149,7 +192,8 @@ export function AiConsult({
 
   const ask = async (text) => {
     const q = (text || '').trim();
-    if (!q || busy) return;
+    const taskKey = userId && category ? pendingChatKey(userId, category) : null;
+    if (!q || busy || (taskKey && pendingChats.has(taskKey))) return;
     setErr('');
     setNeedsLogin(false);
     // 지금 보고 있는 방에 이어 쓴다. 새 대화면 첫 답변과 함께 서버가 방을 만든다.
@@ -183,15 +227,55 @@ export function AiConsult({
     }, 5000);
     const ctl = new AbortController();
     ctlRef.current = ctl;
+    const task = taskKey ? {
+      roomId: askedRoomId, question: q, controller: ctl, listeners: new Set(), done: false,
+      resultRoomId: null,
+    } : null;
+    if (task) pendingChats.set(taskKey, task);
 
     // 1) Backend RAG — DB(세법 4,459조문 / 정책)에서 근거 문서 검색
     let rag = null;
+    let targetAnswer = '';
+    let visibleAnswer = '';
+    let revealTask = null;
+    let revealStopped = false;
+    const revealAnswer = (answer) => {
+      targetAnswer = answer || '';
+      if (!isViewingAsked() || revealStopped) return Promise.resolve();
+      if (!revealTask) {
+        revealTask = Promise.resolve().then(async () => {
+          while (!revealStopped && isViewingAsked() && visibleAnswer !== targetAnswer) {
+            if (document.visibilityState !== 'visible') {
+              visibleAnswer = targetAnswer;
+            } else if (!targetAnswer.startsWith(visibleAnswer)) {
+              let shared = 0;
+              while (visibleAnswer[shared] && visibleAnswer[shared] === targetAnswer[shared]) shared += 1;
+              visibleAnswer = visibleAnswer.slice(0, shared);
+            } else {
+              let end = visibleAnswer.length;
+              for (let i = 0; i < ANSWER_REVEAL_CHARS && end < targetAnswer.length; i += 1) {
+                end += targetAnswer.codePointAt(end) > 0xffff ? 2 : 1;
+              }
+              visibleAnswer = targetAnswer.slice(0, end);
+            }
+            setStream(visibleAnswer);
+            if (document.visibilityState === 'visible') {
+              await new Promise((resolve) => setTimeout(resolve, ANSWER_REVEAL_MS));
+            }
+          }
+        }).finally(() => { revealTask = null; });
+      }
+      return revealTask;
+    };
     let needLogin = false;
     try {
       const chatBody = { question: q, category: category || 'tax' };
       if (category === 'roadmap' && roadmapStep) chatBody.roadmapStep = roadmapStep;
       if (askedRoomId != null) chatBody.roomId = askedRoomId;
-      rag = await api.chat(chatBody, { signal: ctl.signal });
+      rag = await api.chatStream(chatBody, {
+        signal: ctl.signal,
+        onDraft: (answer) => { revealAnswer(answer); },
+      });
     } catch (e) {
       // 401은 "Backend가 안 떴다"가 아니라 "로그인이 필요하다"이다. 구분해서 안내한다.
       needLogin = e && e.status === 401;
@@ -208,6 +292,7 @@ export function AiConsult({
     }
     // 서버에 저장된 메시지와 방을 목록에도 반영한다.
     if (rag && rag.messageId != null && rag.roomId != null) {
+      if (task) task.resultRoomId = rag.roomId;
       const now = new Date().toISOString();
       // created_at 을 빼면 사이드바에서 날짜를 못 읽어 '날짜 미상'으로 빠진다.
       setRows((cur) => [
@@ -223,11 +308,13 @@ export function AiConsult({
       });
       if (askedRoomId == null) {
         // 새 대화가 방금 서버 방이 됐다. 계속 보고 있었다면 그 방으로 전환한다.
-        if (isViewingAsked()) {
-          roomKeyRef.current = roomKey(rag.roomId);
+        const stillViewing = isViewingAsked();
+        askedKey = roomKey(rag.roomId);
+        setPendingKey(askedKey);
+        if (stillViewing) {
+          roomKeyRef.current = askedKey;
           setRoomId(rag.roomId);
         }
-        askedKey = roomKey(rag.roomId);
       }
     }
 
@@ -238,9 +325,11 @@ export function AiConsult({
     try {
       if (ragUsable) {
         // 2) 설계 경로 — LLM 서비스(OpenAI)가 근거를 읽고 만든 답변을 그대로 쓴다.
+        await revealAnswer(rag.answer);
         appendTurn({
           role: 'assistant',
           content: rag.answer,
+          streamed: true,
           sources,
           needsConfirmation: rag.needsConfirmation,
           status: rag.status,
@@ -268,9 +357,11 @@ export function AiConsult({
         appendTurn({ role: 'assistant', content: res.text, sources });
       } else if (rag) {
         // 4) 둘 다 안 되면 Backend의 목업 안내라도 보여준다.
+        await revealAnswer(rag.answer);
         appendTurn({
           role: 'assistant',
           content: rag.answer,
+          streamed: true,
           sources,
           needsConfirmation: rag.needsConfirmation,
           status: rag.status,
@@ -306,6 +397,7 @@ export function AiConsult({
         }
       }
     } finally {
+      revealStopped = true;
       clearInterval(progressTimer);
       setBusy(false);
       setStream('');
@@ -313,6 +405,11 @@ export function AiConsult({
       setPendingKey(null);
       pendingTurnsRef.current = null;
       ctlRef.current = null;
+      if (task) {
+        task.done = true;
+        pendingChats.delete(taskKey);
+        task.listeners.forEach((listener) => listener());
+      }
     }
   };
 
@@ -471,16 +568,16 @@ export function AiConsult({
         )}
         {turns.map((m, i) => (
           <React.Fragment key={i}>
-            <div className={`msg msg-in msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
+            <div className={`msg ${m.streamed ? '' : 'msg-in'} msg--${m.role === 'assistant' ? 'ai' : 'user'}`}>
               {m.role === 'assistant' ? <Markdown text={m.content} /> : m.content}
             </div>
             {m.needsConfirmation && (
-              <div className="msg-src">
+              <div className={`msg-src${m.streamed ? ' msg-src--enter' : ''}`}>
                 <b>{getConfirmationNotice(m)}</b>
               </div>
             )}
             {m.sources && m.sources.length > 0 && (
-              <div className="msg-src">
+              <div className={`msg-src${m.streamed ? ' msg-src--enter' : ''}`}>
                 <b>확인한 자료 {m.sources.length}건</b>
                 {m.sources.map((s, si) => (
                   <a key={si} href={s.url || '#'} target="_blank" rel="noreferrer">
@@ -493,7 +590,7 @@ export function AiConsult({
         ))}
         {pendingKey === roomKey(roomId) &&
           (stream ? (
-            <div className="msg msg--ai"><Markdown text={stream} /></div>
+            <div className="msg msg--ai"><Markdown text={stream} /><small>답변 작성 중…</small></div>
           ) : (
             <div className="ai__progress" role="status" aria-live="polite">
               <span className="typing" aria-hidden="true"><i /><i /><i /></span>

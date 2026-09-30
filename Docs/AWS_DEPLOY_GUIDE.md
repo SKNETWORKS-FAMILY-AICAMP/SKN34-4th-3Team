@@ -1,6 +1,6 @@
 # AWS 배포 가이드 (1차: HTTP)
 
-> 설계 근거는 `Docs/reports/AWS_MIGRATION_PLAN.md`. 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 도메인이 없어 1차는 Elastic IP + HTTP로 배포하고, HTTPS는 11단계에서 도메인 확보 후 적용.
+> 설계 근거는 `Docs/reports/AWS_MIGRATION_PLAN.md`. 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 도메인이 없어 1차는 Elastic IP + HTTP로 배포하고, HTTPS는 12절에서 도메인 확보 후 적용.
 
 ## 구성 요약
 
@@ -33,6 +33,7 @@ EC2 콘솔 → 보안 그룹 → 생성 (VPC는 `startup-on-vpc`)
 | 이름 | 인바운드 | 비고 |
 |---|---|---|
 | `sg-app` | TCP 80 ← `0.0.0.0/0` | 서비스 접속 |
+| | TCP 443 ← `0.0.0.0/0` | HTTPS. 도메인 확보 후 추가 (12절) |
 | | TCP 22 ← `0.0.0.0/0` | GitHub Actions 배포용. IP가 고정되지 않아 전체 허용, 키 인증만 사용 |
 | `sg-data` | TCP 5432 ← `sg-app` | Postgres |
 | | TCP 9200 ← `sg-app` | Elasticsearch |
@@ -247,10 +248,81 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 
 ## 12. HTTPS (도메인 확보 후)
 
-1. Route 53(또는 외부 등록 기관)에서 도메인 확보 → A 레코드 → `<APP_EIP>`
-2. `sg-app`에 TCP 443 ← `0.0.0.0/0` 추가
-3. certbot으로 인증서 발급, `Frontend/nginx.conf`에 443 server 블록과 80 → 443 리다이렉트 추가, 인증서 경로를 frontend 컨테이너에 마운트
-4. 이후 PWA 적용 (`Docs/reports/AWS_MIGRATION_PLAN.md` 2절)
+> 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 코드 변경은 `feature/pwa`에서 PWA와 함께 진행(`Docs/reports/PWA_PLAN.md` 2절).
+
+아래 `<DOMAIN>`은 구매한 도메인.
+
+### 12-1. DNS 연결
+
+1. 도메인 등록 기관(또는 Route 53 호스팅 영역) DNS 설정에 레코드 추가
+
+   | 유형 | 이름 | 값 |
+   |---|---|---|
+   | A | `@` (루트) | `<APP_EIP>` |
+   | A | `www` (선택) | `<APP_EIP>` |
+
+2. 전파 확인. 결과가 `<APP_EIP>`가 될 때까지 대기(수 분~수 시간)
+   ```bash
+   nslookup <DOMAIN>
+   ```
+3. `http://<DOMAIN>/` 접속 시 기존 화면 표시 확인
+
+### 12-2. 보안그룹
+
+`sg-app` 인바운드에 TCP 443 ← `0.0.0.0/0` 추가
+
+### 12-3. 인증서 최초 발급 (App EC2, 1회)
+
+최초 발급은 certbot이 80 포트를 직접 사용(standalone)하므로 frontend를 잠시 중지(수십 초 중단).
+
+```bash
+sudo snap install --classic certbot
+sudo ln -sf /snap/bin/certbot /usr/bin/certbot
+cd ~/SKN34-4th-3Team
+docker compose -f docker-compose.app.yml stop frontend
+sudo certbot certonly --standalone --cert-name changeup -d <DOMAIN>   # www 사용 시 -d www.<DOMAIN> 추가
+docker compose -f docker-compose.app.yml start frontend
+sudo mkdir -p /var/www/certbot   # 이후 갱신용 webroot
+```
+
+- `--cert-name changeup` → 인증서 경로를 `/etc/letsencrypt/live/changeup/`로 고정. 저장소에 도메인 하드코딩 불필요
+- **HTTPS 설정이 포함된 코드를 main에 병합하기 전에 완료 필수.** 인증서 없이 443 설정이 배포되면 frontend(nginx) 기동 실패
+
+### 12-4. nginx·compose 구성 (코드 변경)
+
+로컬 `docker-compose.yml`도 같은 `Frontend/nginx.conf`를 사용 → 이 파일에 443 블록을 넣으면 인증서가 없는 로컬 환경이 깨짐. 공통 location을 분리하고 AWS 전용 설정 파일을 compose에서 덮어쓰는 방식.
+
+| 파일 | 내용 |
+|---|---|
+| `Frontend/nginx-locations.conf` (신규) | 공통 location(`/api/`, `/ppt`, `/ppt/`, `/`, PWA 캐시 헤더). 이미지 내 `/etc/nginx/snippets/app-locations.conf`로 복사 |
+| `Frontend/nginx.conf` | 로컬용. `listen 80` + `include /etc/nginx/snippets/app-locations.conf;` (기존 동작 동일) |
+| `Frontend/nginx.https.conf` (신규) | AWS용. 80: `/.well-known/acme-challenge/` → `/var/www/certbot`, 그 외 `301 https://$host$request_uri` / 443: `ssl_certificate /etc/letsencrypt/live/changeup/fullchain.pem`, `ssl_certificate_key /etc/letsencrypt/live/changeup/privkey.pem` + 같은 include |
+| `Frontend/Dockerfile` | `nginx-locations.conf` 복사 1줄 추가 |
+| `docker-compose.app.yml` frontend | `ports`에 `"443:443"`, `volumes`에 `./Frontend/nginx.https.conf:/etc/nginx/conf.d/default.conf:ro`, `/etc/letsencrypt:/etc/letsencrypt:ro`, `/var/www/certbot:/var/www/certbot:ro` |
+
+- Backend 변경 불필요: `ALLOWED_HOSTS=["*"]`, `CORS_ALLOW_ALL_ORIGINS=True`, 프론트는 같은 출처 상대 경로 `/api` 사용
+- `.github/workflows/deploy.yml` 변경 불필요. `EC2_HOST`는 Elastic IP 그대로 사용 가능
+
+### 12-5. 인증서 자동 갱신 전환 (HTTPS 배포 직후, 1회)
+
+최초 발급 방식(standalone)은 갱신 때도 80 포트를 요구 → 실행 중인 nginx가 challenge 파일을 서빙하는 webroot 방식으로 전환. 갱신 후 nginx reload.
+
+```bash
+sudo certbot reconfigure --cert-name changeup --webroot -w /var/www/certbot \
+  --deploy-hook "docker compose -f /home/ubuntu/SKN34-4th-3Team/docker-compose.app.yml exec -T frontend nginx -s reload"
+sudo certbot renew --dry-run   # 성공 확인
+```
+
+- 갱신은 snap certbot 타이머가 자동 수행(만료 30일 전). 무중단
+
+### 12-6. 검증
+
+- [ ] `curl -I http://<DOMAIN>` → `301`, `Location: https://<DOMAIN>/`
+- [ ] `curl -fsS https://<DOMAIN>/api/health` → `ragReady=true`
+- [ ] 브라우저 `https://<DOMAIN>/` 자물쇠 표시, 로그인·정책 검색 정상
+- [ ] `https://<DOMAIN>/ppt/` 발표자료 표시 (presentation 프로필 사용 시)
+- [ ] `sudo certbot renew --dry-run` 성공
+- [ ] PWA 항목은 `Docs/reports/PWA_PLAN.md` 11절 AWS(HTTPS) 체크리스트
 
 ## 비용 주의
 

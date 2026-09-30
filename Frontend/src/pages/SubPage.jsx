@@ -8,7 +8,7 @@ import { ExpenseTracker } from './ExpenseTracker.jsx';
 import { BusinessPlanPage } from './BusinessPlanPage.jsx';
 import { AnnouncementAnalyzer } from './AnnouncementAnalyzer.jsx';
 
-export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadmapDone, setRoadmapDone, savedPolicies = [], onToggleSavedPolicy }) {
+export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, onBizplanUnsavedChange, roadmapDone, setRoadmapDone, savedPolicies = [], onToggleSavedPolicy }) {
   const meta =
     {
       roadmap: { title: '창업 로드맵' },
@@ -58,7 +58,8 @@ export function SubPage({ pageKey, user, onHome, onLoginClick, onNavigate, roadm
           {pageKey === 'bizplan' && (
             <div className="exp-page exp-page--full">
               <BusinessPlanPage user={user} onRequireLogin={onLoginClick}
-                savedPolicies={savedPolicies} onToggleSavedPolicy={onToggleSavedPolicy} />
+                savedPolicies={savedPolicies} onToggleSavedPolicy={onToggleSavedPolicy}
+                onUnsavedChange={onBizplanUnsavedChange} />
             </div>
           )}
         </div>

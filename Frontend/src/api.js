@@ -108,6 +108,52 @@ export async function apiPost(path, body, { signal, timeout = 30000 } = {}) {
   }
 }
 
+export async function apiPostStream(path, body, { signal, timeout = 30000, onDraft } = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeout);
+  const relay = () => ctl.abort();
+  if (signal?.aborted) ctl.abort();
+  if (signal) signal.addEventListener('abort', relay);
+  try {
+    const res = await fetch(BASE + path, {
+      method: 'POST',
+      signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...authHeaders() },
+      body: JSON.stringify(body || {}),
+    });
+    handleStatus(res, path);
+    if (!res.body) throw new Error('스트리밍 응답을 읽을 수 없습니다.');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result = null;
+    const consume = async (line) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line);
+      if (event.type === 'draft') await onDraft?.(event.answer);
+      if (event.type === 'done') result = event.result;
+      if (event.type === 'error') throw new Error('답변 생성 중 오류가 발생했습니다.');
+    };
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      let end;
+      while ((end = buffer.indexOf('\n')) !== -1) {
+        await consume(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+      }
+      if (done) break;
+    }
+    if (buffer) await consume(buffer);
+    if (!result) throw new Error('답변 전송이 완료되지 않았습니다.');
+    return result;
+  } finally {
+    ctl.abort();
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener('abort', relay);
+  }
+}
+
 /** PUT(JSON). 실패하면 throw. */
 export async function apiPut(path, body, { signal, timeout = 10000 } = {}) {
   const ctl = new AbortController();
@@ -246,11 +292,27 @@ export async function me() {
   }
 }
 
+/** 인증된 사용자의 개인정보와 사업자 정보를 DB에서 다시 읽는다. */
+export async function currentUser() {
+  const user = await me();
+  if (!user) return null;
+  const business = await apiGet('/users/me/business-profile');
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    age: user.age,
+    region: user.region || '',
+    biz: business.industry || '',
+  };
+}
+
 export const api = {
   login,
   signup,
   logout,
   me,
+  currentUser,
   updateMe: (body, opt) => apiPut('/users/me', body, opt),
   businessProfile: (opt) => apiGet('/users/me/business-profile', opt),
   updateBusinessProfile: (body, opt) => apiPut('/users/me/business-profile', body, opt),
@@ -274,6 +336,10 @@ export const api = {
   // 세무 멀티홉은 Backend가 LLM 응답을 최대 120초 기다린다.
   // 공통 POST 기본 제한(30초)으로 먼저 중단하지 않도록 채팅에만 여유를 둔다.
   chat: (body, opt) => apiPost('/chat/messages', body, {
+    timeout: ['tax', 'expense', 'saving'].includes(body?.category) ? 135000 : 60000,
+    ...opt,
+  }),
+  chatStream: (body, opt) => apiPostStream('/chat/messages/stream', body, {
     timeout: ['tax', 'expense', 'saving'].includes(body?.category) ? 135000 : 60000,
     ...opt,
   }),

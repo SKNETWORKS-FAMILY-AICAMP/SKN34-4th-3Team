@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApi, api } from '../api.js';
 import { DEADLINES, HERO_TITLE, METRICS, CHAT, ROADMAP, WEEKDAYS } from '../constants.js';
 import { pad2, dayKey, CAL_EVENTS, eventsByDate } from '../utils.js';
-import { useInView, useCountUp, prefersReducedMotion } from '../hooks.js';
+import { useInView, useCountUp, prefersReducedMotion, useInstallPrompt } from '../hooks.js';
 import { Reveal, Metric } from '../components/common.jsx';
 import { rmIcon, rmDoneIcon } from '../components/roadmapIcons.jsx';
 
@@ -74,6 +74,7 @@ export function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onL
   const { data: stats, source: statsSrc } = useApi('/stats', null, (raw) => raw);
   const total = (stats && stats.openAnnouncements) || 1842;
   const count = useCountUp(total, true);
+  const { installed, install } = useInstallPrompt();
   let wi = 0;
   return (
     <section className="hero" id="top">
@@ -116,6 +117,11 @@ export function Hero({ onNavigate, user, savedPolicies, onToggleSavedPolicy, onL
             >
               내 조건으로 찾기
             </button>
+            {!installed && (
+              <button className="btn btn--primary btn--lg" type="button" onClick={install}>
+                앱 다운로드
+              </button>
+            )}
             <button className="btn btn--ghost btn--lg" type="button" onClick={() => onNavigate('roadmap')}>
               창업 로드맵 보기
             </button>

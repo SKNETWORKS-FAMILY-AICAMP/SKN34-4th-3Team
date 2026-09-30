@@ -1,6 +1,7 @@
 """검색 없이 한 번의 모델 호출로 동작하는 창업 로드맵 코치."""
 
 import json
+from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -186,6 +187,7 @@ async def generate_roadmap_coach_response(
     roadmap_step: RoadmapStep | None,
     user_context: UserProfile | None,
     conversation_history: list[dict[str, str]],
+    on_answer_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> RoadmapCoachResult:
     """범위 판정과 답변을 단일 구조화 모델 호출로 수행한다."""
     limited_llm = configure_chat_model(
@@ -193,24 +195,37 @@ async def generate_roadmap_coach_response(
         max_completion_tokens=ROADMAP_MAX_COMPLETION_TOKENS,
         reasoning_effort=ROADMAP_REASONING_EFFORT,
     )
+    inputs = {
+        "roadmap_context": ROADMAP_CONTEXT,
+        "roadmap_step": roadmap_step or "미선택",
+        "user_context": compact_user_context(user_context),
+        "conversation_history": json.dumps(
+            compact_roadmap_history(conversation_history),
+            ensure_ascii=False,
+        ),
+        "query": query,
+    }
+    config = {"run_name": "langgraph_roadmap_coach"}
+    if on_answer_update is None:
+        chain = ROADMAP_PROMPT | limited_llm.with_structured_output(RoadmapCoachResult)
+        return RoadmapCoachResult.model_validate(await chain.ainvoke(inputs, config=config))
+
     chain = ROADMAP_PROMPT | limited_llm.with_structured_output(
-        RoadmapCoachResult
+        RoadmapCoachResult.model_json_schema(), strict=True
     )
-    return RoadmapCoachResult.model_validate(
-        await chain.ainvoke(
-            {
-                "roadmap_context": ROADMAP_CONTEXT,
-                "roadmap_step": roadmap_step or "미선택",
-                "user_context": compact_user_context(user_context),
-                "conversation_history": json.dumps(
-                    compact_roadmap_history(conversation_history),
-                    ensure_ascii=False,
-                ),
-                "query": query,
-            },
-            config={"run_name": "langgraph_roadmap_coach"},
-        )
-    )
+    result = None
+    shown = ""
+    async for partial in chain.astream(inputs, config=config):
+        answer = partial.get("answer")
+        if partial.get("in_scope") is True and isinstance(answer, str):
+            preview = answer[:ROADMAP_MAX_ANSWER_CHARACTERS]
+            if preview and preview != shown:
+                shown = preview
+                await on_answer_update(preview)
+        result = partial
+    if result is None or not {"in_scope", "redirect", "answer"}.issubset(result):
+        raise ValueError("Roadmap answer stream ended before all fields arrived")
+    return RoadmapCoachResult.model_validate(result)
 
 
 def roadmap_rejection_answer(redirect: RoadmapRedirect) -> str:
