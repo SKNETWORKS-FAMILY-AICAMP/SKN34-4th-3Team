@@ -26,7 +26,7 @@ MAX_DOCUMENTS_PER_USER = 8
 MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 DOCUMENT_LIMIT_MESSAGE = (
     "서류는 8개까지 저장할 수 있습니다. "
-    "마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요."
+    "마이페이지 사업계획서 탭에서 삭제한 뒤 다시 시도해 주세요."
 )
 
 
@@ -299,8 +299,7 @@ def _import_legacy_draft(user_id: int) -> None:
     if not data or data.get("planId") or not _has_content(data):
         return
     title, status, score = plan_meta(data)
-    plan_id = repo.insert_bizplan(user_id, title, status, score, data)
-    repo.upsert_bizplan_draft(user_id, {**data, "planId": plan_id})
+    repo.import_legacy_bizplan_draft(user_id, title, status, score, data)
 
 
 def list_plans(user_id: int) -> dict:
@@ -331,7 +330,10 @@ def save_plan(user_id: int, plan_id: int | None, data: dict) -> dict:
     title, status, score = plan_meta(data)
     if plan_id is None:
         return {"id": repo.insert_bizplan(user_id, title, status, score, data)}
-    _owned_plan(user_id, plan_id)
+    row = _owned_plan(user_id, plan_id)
+    # 마이페이지에서 바꾼 이름은 유지한다(기존 제목이 자동 제목과 같을 때만 사업명을 따라간다).
+    if row["title"] != plan_meta(row.get("data") or {})[0]:
+        title = row["title"]
     repo.update_bizplan(plan_id, title, status, score, data)
     return {"id": plan_id}
 
@@ -345,7 +347,7 @@ def delete_plan(user_id: int, plan_id: int) -> None:
     _owned_plan(user_id, plan_id)
     repo.delete_bizplan(plan_id)
     # 지운 건이 작성 화면에 열려 있으면 작성 화면도 비운다(지운 건이 다시 저장되지 않게).
-    # 빈 값으로 덮지 않고 행을 지워야 서류 탭에 빈 '임시저장' 항목이 남지 않는다.
+    # 빈 값으로 덮지 않고 행을 지워 임시저장이 없는 상태로 되돌린다.
     draft = repo.get_bizplan_draft(user_id)
     if ((draft or {}).get("data") or {}).get("planId") == plan_id:
         repo.delete_bizplan_draft(user_id)

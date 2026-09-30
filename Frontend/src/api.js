@@ -377,10 +377,6 @@ export const api = {
   refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
   inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
   renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
-  saveBizplanDocument: (body, opt) => apiPost('/bizplan/documents', body, { timeout: 140000, ...opt }),
-  bizplanDocuments: (opt) => apiGet('/bizplan/documents', opt),
-  bizplanDocumentFile: (id, format, opt) => apiGetBlob(`/bizplan/documents/${id}/file` + qs({ format }), opt),
-  deleteBizplanDocument: (id, opt) => apiDelete(`/bizplan/documents/${id}`, opt),
   // 임시저장에는 양식·이미지 Base64가 들어가 최대 10MB대라 전송 시간을 넉넉히 둔다.
   bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
   saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),

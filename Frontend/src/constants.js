@@ -278,7 +278,6 @@ export const MP_MENU = [
   { group: '저장한 것' },
   { key: 'saved', label: '공고 · 정책', sub: true },
   { key: 'bizplans', label: '사업계획서', sub: true },
-  { key: 'docs', label: '서류', sub: true },
   { divider: true },
   { key: 'settings', label: '설정' },
 ];
