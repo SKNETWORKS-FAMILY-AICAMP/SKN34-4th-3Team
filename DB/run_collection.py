@@ -59,7 +59,6 @@ def run_python_script(script_name: str) -> bool:
     print(f"[실행] {script_name}")
     result = subprocess.run(
         [sys.executable, str(script_path)],
-        capture_output=True,
         text=True,
     )
     if result.returncode != 0:
