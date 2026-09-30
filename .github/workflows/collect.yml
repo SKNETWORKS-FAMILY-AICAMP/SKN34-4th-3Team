@@ -27,8 +27,12 @@ jobs:
           script: |
             set -e
             cd ~/SKN34-4th-3Team
+            git pull --ff-only origin main
             docker compose -f docker-compose.app.yml run --rm collector
-            # 수집은 원본 테이블만 갱신한다. 임베딩·ES 반영은 reindex 가 맡는다.
+            # run_collection.py 에 없는 생활법령정보도 수집한다.
+            docker compose -f docker-compose.app.yml run --rm collector \
+              uv run --frozen python scripts/13_collect_life_law.py
+            # 신규·변경 청크만 임베딩해 pgvector 에 저장한 뒤 ES 를 재색인한다.
             docker compose -f docker-compose.app.yml exec -T llm \
               curl -fsS --max-time 1800 -X POST localhost:8001/rag/reindex \
-              -H 'Content-Type: application/json' -d '{"documentIds":[]}'
+              -H 'Content-Type: application/json' -d '{"documentIds":[],"force":false}'
