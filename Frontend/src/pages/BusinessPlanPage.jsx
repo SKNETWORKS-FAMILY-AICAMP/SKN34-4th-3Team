@@ -574,7 +574,6 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
-  const [savingDocument, setSavingDocument] = useState(false);
   const fileOperationRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
@@ -1282,34 +1281,6 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     }
   };
 
-  const saveDocument = async () => {
-    if (!finalPlan || fileOperationRef.current) return;
-    if (!userId) {
-      onRequireLogin && onRequireLogin();
-      return;
-    }
-    fileOperationRef.current = true;
-    setErr('');
-    setSavedNote('');
-    setSavingDocument(true);
-    try {
-      await api.saveBizplanDocument(buildRenderPayload(templateInfo?.kind || 'hwpx'));
-      setSavedNote('문서를 저장했어요. 마이페이지 서류 탭에서 다운로드할 수 있어요');
-      setTimeout(() => setSavedNote(''), 4000);
-    } catch (e2) {
-      if (e2.status === 401) onRequireLogin && onRequireLogin();
-      else if (e2.status === 409) setErr('서류는 8개까지 저장할 수 있습니다. 마이페이지 서류 탭에서 삭제한 뒤 다시 시도해 주세요.');
-      // 응답 전에 끊겨도 서버가 저장을 마쳤을 수 있어 재시도 전 확인을 안내한다.
-      else if (e2.name === 'AbortError' || e2.status === 502 || e2.status === 504) setErr('저장 결과를 확인하지 못했어요. 마이페이지 서류 탭에서 저장 여부를 확인한 뒤 다시 시도해 주세요.');
-      else setErr(e2.detail || (e2.status === 413
-        ? '파일이 50MiB를 넘어 저장하지 못했습니다.'
-        : '파일을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'));
-    } finally {
-      fileOperationRef.current = false;
-      setSavingDocument(false);
-    }
-  };
-
   const goStep = (key) => {
     setErr('');
     setActive(key);
@@ -1917,18 +1888,15 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       <p className="bp-summary">{finalPlan.summary}</p>
                       <div className="bp-actions">
                         {(!templateInfo || templateInfo.kind === 'hwpx') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat || savingDocument}>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('hwpx')} disabled={!!renderingFormat}>
                             {renderingFormat === 'hwpx' ? 'HWPX 생성 중…' : 'HWPX 다운로드'}
                           </button>
                         )}
                         {(!templateInfo || templateInfo.kind === 'pdf') && (
-                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat || savingDocument}>
+                          <button type="button" className="exp-upload" onClick={() => renderPlan('pdf')} disabled={!!renderingFormat}>
                             {renderingFormat === 'pdf' ? 'PDF 생성 중…' : 'PDF 다운로드'}
                           </button>
                         )}
-                        <button type="button" className="exp-upload" onClick={saveDocument} disabled={!!renderingFormat || savingDocument}>
-                          {savingDocument ? '문서 저장 중…' : '문서 저장'}
-                        </button>
                       </div>
                       <p className="bp-disclaimer">{templateInfo
                         ? '비어 있는 항목은 제출 전에 확인하고 채워 주세요.'

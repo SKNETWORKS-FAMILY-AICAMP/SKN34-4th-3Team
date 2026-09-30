@@ -201,7 +201,7 @@ Content-Type: application/json
 
 ### 사업계획서 파일 보관
 
-`DELETE /bizplan/draft`는 인증된 사용자의 임시저장만 삭제하고 `{ deleted: true }`를 반환한다. 서류 탭의 임시저장 항목에서도 삭제할 수 있다. 저장된 문서는 유지한다.
+`DELETE /bizplan/draft`는 인증된 사용자의 임시저장만 삭제하고 `{ deleted: true }`를 반환한다. 저장된 문서는 유지한다.
 
 | Method | Path | 인증 | 응답 |
 |--------|------|------|------|
@@ -218,7 +218,7 @@ Content-Type: application/json
 다른 사용자 또는 없는 파일의 조회·삭제는 `404`, 미인증은 `401`이다. 임시저장(`/bizplan/draft`)과는 별개다.
 프론트엔드는 `/api` 접두사를 사용하며 Vite/배포 프록시가 이를 제거한다.
 
-임시저장 최신 1건도 서류 탭 상단에 별도 표시하고 ‘작성하기’로 기존 작성 상태를 복원한다. 임시저장은 파일 8개 제한에 포함하지 않으며, 목록에는 초안 본문·양식·이미지를 내려주지 않는다.
+`/bizplan/documents` API는 현재 프론트에서 사용하지 않는다(마이페이지는 보관함 `/bizplan/plans`만 사용하고, 파일은 사업계획서 페이지에서 바로 렌더링해 받는다). 임시저장은 파일 8개 제한에 포함하지 않으며, 목록에는 초안 본문·양식·이미지를 내려주지 않는다.
 
 실제 PostgreSQL 통합 테스트는 전용 임시 스키마를 생성·정리하며 기존 사용자 데이터에 접근하지 않는다.
 `BIZPLAN_DOCUMENT_DB_TESTS=1 uv run python -m unittest discover -s tests -p 'test_bizplan_documents*.py'`
