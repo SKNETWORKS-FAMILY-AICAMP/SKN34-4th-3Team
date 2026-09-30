@@ -1,0 +1,135 @@
+/* 마이페이지 › 구독 · 결제 (BillingPanel). 기존 mp-card·mp-bar·btn 위에 배치만 더한다. */
+
+  .bill {
+    display: grid;
+    gap: 18px;
+    max-width: 920px;
+  }
+  .bill__notice {
+    margin: 0;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--blue-wash);
+    color: var(--blue-deep);
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .bill__top {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+  .bill__meta {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+  }
+  .bill__meta > div,
+  .bill__usage,
+  .bill__features li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .bill__meta dt,
+  .bill__usage span {
+    color: var(--ink-soft);
+  }
+  .bill__meta dd {
+    margin: 0;
+    font-weight: 600;
+  }
+  .bill__usage {
+    margin: 14px 0 8px;
+    font-size: 13.5px;
+  }
+  .mp-bar > i.is-full {
+    background: var(--red);
+  }
+
+  .bill__plans {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .bill__plan {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .bill__plan.is-current {
+    border-color: var(--blue);
+    background: var(--blue-wash);
+  }
+  .bill__plan .btn {
+    margin-top: auto;
+    cursor: pointer;
+  }
+  .bill__plan .btn:disabled {
+    cursor: default;
+    transform: none;
+  }
+  .bill__price {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .bill__price b {
+    color: var(--ink);
+    font-size: 24px;
+  }
+  .bill__features {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 12.5px;
+  }
+  .bill__features b {
+    flex-shrink: 0;
+    color: var(--blue-deep);
+  }
+  .bill__features li.is-off {
+    color: var(--ink-faint);
+  }
+  .bill__features li.is-off b {
+    color: var(--ink-faint);
+  }
+
+  .bill__overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(12, 16, 30, 0.46);
+    backdrop-filter: blur(3px);
+  }
+  .bill__dialog {
+    width: 100%;
+    max-width: 380px;
+    padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow);
+  }
+  .bill__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .bill__actions .btn {
+    cursor: pointer;
+  }
+
+  @media (max-width: 860px) {
+    .bill__top,
+    .bill__plans {
+      grid-template-columns: 1fr;
+    }
+  }

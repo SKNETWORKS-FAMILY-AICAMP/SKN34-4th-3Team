@@ -5,7 +5,7 @@
 
 이 문서는 **LLM API 원가(변동비)** 만 다룬다. 서버·Postgres·인건비·마케팅은 포함하지 않는다.
 
-> **검증 메모 (2026-09-29)**: 현재 저장소에는 `billing_limits.py`·`plan_access.py`·`Backend/api/billing.py`·`TaxAssistantPage.jsx`의 `PLANS`·`risk_benchmarks` 테이블이 **없다.** §3·§4의 가격·한도·기능 플래그는 코드 근거가 아니라 **요금제 설계안**으로 읽는다. LLM 호출 근거는 `Backend/core/llm_client.py`, 모델·리랭커 설정은 `LLM/src/core/config.py`에서 확인했다.
+> **검증 메모 (2026-09-30)**: §3·§4의 가격·한도·기능표는 `Backend/services/subscription_service.py`의 `PLANS`로 구현. 유저별 플랜은 `user_subscriptions` 테이블(`DB/app_extras.sql`), API는 `GET/PUT /users/me/subscription`, 화면은 마이페이지 › 구독 · 결제(`Frontend/src/pages/MyPage.jsx` `BillingPanel`). **결제는 목업**(즉시 승인)이며 **한도는 표시만** 하고 기능을 차단하지 않는다. 기능 플래그(`plan_access.py`)·`risk_benchmarks` 테이블은 여전히 없다. LLM 호출 근거는 `Backend/core/llm_client.py`, 모델·리랭커 설정은 `LLM/src/core/config.py`에서 확인했다.
 
 ---
 
@@ -116,7 +116,7 @@
 
 ## 4. 플랜별 기능
 
-설계안 한도: 리포트 `PLAN_LIMITS`, 공고 AI `PLAN_CHAT_*`, 이력 `PLAN_REPORT_HISTORY`, 플래그 `feature_flags()` (모두 현재 저장소 미구현).
+구현: 가격·기능표·공고 AI 월 한도(`policyChatLimit`)는 `subscription_service.PLANS`. 사용량은 이번 달 `chat_messages` 건수로 집계(공고 AI = `policy`, 세무 = `tax`·`expense`·`saving`). 한도 초과 시 차단·리포트 한도·기능 플래그는 미구현.
 
 | 기능 | 무료 | 베이직 (9,900원) | 프로 (29,000원) |
 |---|---|---|---|
@@ -132,7 +132,7 @@
 | 전체 업종 리스크 비교 | X | X | O |
 | 지원서 초안 생성 | X | X | O |
 
-작성 당시 화면 문구는 `Frontend/src/pages/TaxAssistantPage.jsx`의 `PLANS`와 같았으나, 현재 해당 상수는 없다. `market_evidence.md` §9.1은 알림을 전 플랜 O로 적었으므로 요금제 확정 시 맞춘다.
+화면 플랜 표는 API가 내려주는 `PLANS`를 그대로 그린다(`MyPage.jsx` `BillingPanel`). `market_evidence.md` §9.1은 알림을 전 플랜 O로 적었으므로 요금제 확정 시 맞춘다.
 
 ---
 
@@ -150,13 +150,14 @@
 
 ## 6. 근거 코드
 
-- 가격·한도: `Backend/core/billing_limits.py` (현재 없음)
-- 기능 플래그: `Backend/core/plan_access.py` (현재 없음)
+- 가격·한도·기능표: `Backend/services/subscription_service.py` (`PLANS`)
+- 유저별 플랜: `DB/app_extras.sql` `user_subscriptions`, `Backend/core/repo.py` `get_subscription`·`upsert_subscription`·`count_chats_this_month`
+- 기능 플래그: 미구현 (한도는 표시만)
 - LLM 호출: `Backend/core/llm_client.py`, `LLM/src/core/config.py` (`tax_max_hops=3`, `cohere_rerank_model="rerank-v4.0-fast"`, `cohere_rerank_candidate_k=20`, `chunk_size=1000`, `default_top_k=5`, `tax_cache_enabled=True`)
 - 리랭크 호출 위치: `LLM/src/rag/graph.py` (정책 검색 1회, 세무 홉마다 1회), `LLM/src/serving/rag_routes.py` `_retrieve_tax_evidence` (법령 설명·공제 판정)
 - 영수증 OCR·Vision 분기: `LLM/src/serving/rag_routes.py` `adapter_receipt_ocr`, `LLM/src/features/receipt_ocr.py`
 - 단가 출처: [OpenAI API Pricing](https://developers.openai.com/api/docs/pricing), [GPT-5.6 Luna 모델 문서](https://developers.openai.com/api/docs/models/gpt-5.6-luna), [Cohere Rerank](https://cohere.com/rerank)
-- 화면 플랜 표: `Frontend/src/pages/TaxAssistantPage.jsx` (`PLANS` 현재 없음)
+- 화면 플랜 표: `Frontend/src/pages/MyPage.jsx` `BillingPanel` (마이페이지 › 구독 · 결제)
 
 ---
 

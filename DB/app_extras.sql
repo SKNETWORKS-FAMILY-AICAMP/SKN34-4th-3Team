@@ -149,3 +149,11 @@ CREATE TABLE IF NOT EXISTS bizplan_document_files (
     size_bytes  INT NOT NULL,
     PRIMARY KEY (document_id, format)
 );
+
+-- 유저별 구독 플랜. 행이 없으면 무료 플랜. 결제는 목업이라 결제 내역은 두지 않는다.
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+    user_id    INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    plan       VARCHAR(20) NOT NULL DEFAULT 'free' CHECK (plan IN ('free','basic','pro')),
+    started_at TIMESTAMP NOT NULL DEFAULT now(),
+    renews_at  TIMESTAMP
+);

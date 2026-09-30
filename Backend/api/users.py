@@ -4,13 +4,15 @@ from api.deps import user_auth
 from schemas.users import (
     BusinessProfileResponse,
     BusinessProfileUpdate,
+    PlanChangeRequest,
     RoadmapProgressResponse,
     RoadmapTaskUpdate,
+    SubscriptionResponse,
     UpdatedResponse,
     UserMeResponse,
     UserMeUpdate,
 )
-from services import user_service
+from services import subscription_service, user_service
 
 router = Router(tags=["사용자"], auth=user_auth)
 
@@ -71,3 +73,15 @@ def update_roadmap_task(request, body: RoadmapTaskUpdate):
     """항목 하나의 완료 여부를 저장합니다."""
     user_service.set_roadmap_task(request.auth["id"], body.taskKey, body.done)
     return {"updated": True}
+
+
+@router.get("/me/subscription", response=SubscriptionResponse, summary="내 구독 플랜·사용량 조회")
+def subscription(request):
+    """현재 플랜, 다음 결제일, 이번 달 사용량과 플랜 목록을 반환합니다."""
+    return subscription_service.get_subscription(request.auth["id"])
+
+
+@router.put("/me/subscription", response=SubscriptionResponse, summary="구독 플랜 변경(목업 결제)")
+def change_subscription(request, body: PlanChangeRequest):
+    """실제 결제 없이 즉시 승인합니다. free로 바꾸면 해지됩니다."""
+    return subscription_service.change_plan(request.auth["id"], body.plan)

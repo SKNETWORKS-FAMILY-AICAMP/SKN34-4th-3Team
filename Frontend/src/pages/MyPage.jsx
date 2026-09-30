@@ -605,6 +605,162 @@ export function DocsList({ userId, onNavigate, onRequireLogin }) {
   );
 }
 
+/* ===== 구독 · 결제: 결제는 목업(서버가 즉시 승인), 한도는 표시만 한다 ===== */
+const won = (n) => `${n.toLocaleString('ko-KR')}원`;
+const fmtDate = (v) => (v ? new Date(v).toLocaleDateString('ko-KR') : '—');
+
+export function BillingPanel({ onRequireLogin }) {
+  const [sub, setSub] = useState(null);
+  const [loadError, setLoadError] = useState('');
+  const [confirmPlan, setConfirmPlan] = useState(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    const controller = new AbortController();
+    api.subscription({ signal: controller.signal }).then((result) => {
+      if (alive) setSub(result);
+    }).catch((error) => {
+      if (!alive) return;
+      setLoadError(error.status === 401
+        ? '구독 정보를 보려면 다시 로그인해 주세요.'
+        : '구독 정보를 불러오지 못했습니다. 다시 시도해 주세요.');
+      if (error.status === 401) onRequireLogin?.();
+    });
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+  }, [onRequireLogin]);
+
+  useEffect(() => {
+    if (!confirmPlan) return undefined;
+    const onKey = (e) => e.key === 'Escape' && !paying && setConfirmPlan(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmPlan, paying]);
+
+  const pay = async () => {
+    setPaying(true);
+    setPayError('');
+    try {
+      const result = await api.changePlan(confirmPlan.key);
+      setSub(result);
+      setNotice(confirmPlan.price > 0
+        ? `${confirmPlan.name} 플랜 결제가 완료되었어요.`
+        : '구독이 해지되어 무료 플랜으로 변경되었어요.');
+      setConfirmPlan(null);
+    } catch (error) {
+      setPayError(error.status === 401
+        ? '다시 로그인해 주세요.'
+        : '결제를 처리하지 못했습니다. 다시 시도해 주세요.');
+      if (error.status === 401) onRequireLogin?.();
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  if (loadError) return <p className="cal__err" role="alert">{loadError}</p>;
+  if (!sub) return <p className="gov__empty" role="status">구독 정보를 불러오는 중…</p>;
+
+  const current = sub.plans.find((p) => p.key === sub.current.plan) || sub.plans[0];
+  const { policyChat, policyChatLimit, taxChat } = sub.usage;
+  const policyPct = policyChatLimit ? Math.min(100, Math.round((policyChat / policyChatLimit) * 100)) : 0;
+  const isPaid = current.price > 0;
+
+  return (
+    <div className="bill">
+      {notice && <p className="bill__notice" role="status">{notice}</p>}
+      <div className="bill__top">
+        <section className="mp-card">
+          <div className="mp-card__head">
+            <h2 className="mp-card__title">현재 플랜</h2>
+            <span className="mg__chip">{isPaid ? '구독 중' : '무료'}</span>
+          </div>
+          <p className="mp-pct">{current.name}</p>
+          <dl className="bill__meta">
+            <div><dt>월 요금</dt><dd className="u-num">{won(current.price)}</dd></div>
+            <div><dt>이용 시작</dt><dd className="u-num">{fmtDate(sub.current.startedAt)}</dd></div>
+            <div><dt>다음 결제일</dt><dd className="u-num">{fmtDate(sub.current.renewsAt)}</dd></div>
+          </dl>
+        </section>
+        <section className="mp-card">
+          <div className="mp-card__head">
+            <h2 className="mp-card__title">이번 달 사용량</h2>
+          </div>
+          <div className="bill__usage">
+            <span>공고지원 AI 상담</span>
+            <b className="u-num">{policyChat}{policyChatLimit ? ` / ${policyChatLimit}회` : '회 · 무제한'}</b>
+          </div>
+          {policyChatLimit && (
+            <div className="mp-bar"><i className={policyChat >= policyChatLimit ? 'is-full' : ''} style={{ width: policyPct + '%' }} /></div>
+          )}
+          <div className="bill__usage">
+            <span>세무 Assistant 상담</span>
+            <b className="u-num">{taxChat}회 · 무제한</b>
+          </div>
+        </section>
+      </div>
+
+      <div className="bill__plans">
+        {sub.plans.map((plan) => {
+          const isCurrent = plan.key === current.key;
+          return (
+            <section key={plan.key} className={'mp-card bill__plan' + (isCurrent ? ' is-current' : '')}>
+              <h3 className="mp-card__title">{plan.name}</h3>
+              <p className="bill__price"><b className="u-num">{won(plan.price)}</b><span> / 월</span></p>
+              <ul className="bill__features">
+                {plan.features.map((f) => (
+                  <li key={f.label} className={f.value === false ? 'is-off' : ''}>
+                    <span>{f.label}</span>
+                    <b>{f.value === true ? 'O' : f.value === false ? '—' : f.value}</b>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className={'btn ' + (isCurrent ? 'btn--ghost' : 'btn--primary')}
+                disabled={isCurrent}
+                onClick={() => { setPayError(''); setNotice(''); setConfirmPlan(plan); }}
+              >
+                {isCurrent ? '이용 중' : plan.price === 0 ? '무료로 변경' : `${plan.name} 결제하기`}
+              </button>
+            </section>
+          );
+        })}
+      </div>
+      <p className="mp-basis">결제는 모의 결제로 실제 청구가 발생하지 않아요. 한도는 안내용이며 기능 이용을 제한하지 않아요.</p>
+
+      {confirmPlan && (
+        <div className="bill__overlay" onMouseDown={(e) => e.target === e.currentTarget && !paying && setConfirmPlan(null)}>
+          <div className="bill__dialog" role="dialog" aria-modal="true" aria-labelledby="bill-dialog-title">
+            <h2 id="bill-dialog-title" className="mp-card__title">
+              {confirmPlan.price > 0 ? `${confirmPlan.name} 플랜 결제` : '구독 해지'}
+            </h2>
+            {confirmPlan.price > 0 ? (
+              <p className="mp-basis">
+                매월 <b>{won(confirmPlan.price)}</b>이 결제되고, 다음 결제일은 한 달 뒤예요.
+                <br />모의 결제로 실제 청구는 발생하지 않아요.
+              </p>
+            ) : (
+              <p className="mp-basis">{current.name} 구독을 해지하고 무료 플랜으로 바로 변경할까요?</p>
+            )}
+            {payError && <p className="cal__err" role="alert">{payError}</p>}
+            <div className="bill__actions">
+              <button type="button" className="btn btn--ghost" disabled={paying} onClick={() => setConfirmPlan(null)}>취소</button>
+              <button type="button" className="btn btn--primary" disabled={paying} onClick={pay}>
+                {paying ? '처리 중…' : confirmPlan.price > 0 ? `${won(confirmPlan.price)} 결제` : '해지하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ===== 상담 기록: 화면(카테고리)별로 나눠 보여 준다 ===== */
 // 각 상담 화면이 대화를 저장할 때 쓰는 category 와 같아야 한다
 
@@ -979,6 +1135,8 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
           </div>
         ) : menu === 'profile' ? (
           <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />
+        ) : menu === 'billing' ? (
+          <BillingPanel key={mpUserId} onRequireLogin={onRequireLogin} />
         ) : menu === 'saved' ? (
           <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
         ) : menu === 'docs' ? (
