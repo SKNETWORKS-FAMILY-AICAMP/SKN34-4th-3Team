@@ -27,12 +27,16 @@ jobs:
           script: |
             set -e
             cd ~/SKN34-4th-3Team
-            git pull --ff-only origin main
+            git pull --ff-only origin main || { echo "::error::git pull 실패"; exit 1; }
             # 일부 수집이 실패해도 성공한 데이터는 임베딩·ES 에 반영하고, 실패는 마지막에 알린다.
             collect_rc=0
             docker compose -f docker-compose.app.yml run --rm collector || collect_rc=$?
             # 신규·변경 청크만 임베딩해 pgvector 에 저장한 뒤 ES 를 재색인한다.
+            # reindex 가 실패해도 수집 결과(collect_rc)를 잃지 않도록 따로 받는다.
+            reindex_rc=0
             docker compose -f docker-compose.app.yml exec -T llm \
               curl -fsS --max-time 1800 -X POST localhost:8001/rag/reindex \
-              -H 'Content-Type: application/json' -d '{"documentIds":[],"force":false}'
-            exit $collect_rc
+              -H 'Content-Type: application/json' -d '{"documentIds":[],"force":false}' || reindex_rc=$?
+            [ "$collect_rc" -ne 0 ] && echo "::error::수집 실패(rc=$collect_rc)"
+            [ "$reindex_rc" -ne 0 ] && echo "::error::reindex 실패(rc=$reindex_rc)"
+            [ "$collect_rc" -eq 0 ] && [ "$reindex_rc" -eq 0 ]
