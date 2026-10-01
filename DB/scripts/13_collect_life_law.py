@@ -136,6 +136,17 @@ def fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no):
     return title, body
 
 
+def is_already_saved_by_source(conn, source_url):
+    """source(URL) 기준으로 이미 수집됐는지 빠르게 확인.
+    ...
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM tax_documents WHERE source = %s", (source_url,))
+    exists = cur.fetchone() is not None
+    cur.close()
+    return exists
+
+
 def insert_content(conn, category_name, title, body, source_url):
     """tax_documents에 적재. title 기준 중복 방지."""
     cur = conn.cursor()
@@ -187,6 +198,12 @@ if __name__ == "__main__":
                 f"{BASE}/CnpClsMain.laf?popMenu=ov&csmSeq={csm_seq}"
                 f"&ccfNo={ccf_no}&cciNo={cci_no}&cnpClsNo={cnp_cls_no}"
             )
+            
+            if is_already_saved_by_source(conn, source_url):
+                total_skipped += 1
+                if total_processed % 30 == 0:
+                    print(f"  {total_processed}건 처리, 누적 저장 {total_inserted}건 (건너뜀 {total_skipped}건)")
+                continue
             try:
                 title, body = fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no)
                 if body is None:
@@ -202,10 +219,10 @@ if __name__ == "__main__":
                 continue
 
             if total_processed % 30 == 0:
-                print(f"  {total_processed}건 처리, 누적 저장 {total_inserted}건")
-
+                print(f"  {total_processed}건 처리, 누적 저장 {total_inserted}건 (건너뜀 {total_skipped}건)")
+ 
             time.sleep(REQUEST_DELAY_SECONDS)
-
+ 
     conn.close()
 
     print()
