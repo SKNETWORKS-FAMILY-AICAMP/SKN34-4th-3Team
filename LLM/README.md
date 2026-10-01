@@ -603,13 +603,7 @@ uv run pytest
 ```
 
 테스트는 Fake Embedding과 Fake Chat Model을 사용하며 OpenAI, LangSmith 또는
-실제 DB에 접속하지 않는다.
-
-> **알려진 문제(2026-10-01):** `tests/test_judge_ml_pipeline.py`, `test_judge_text_features.py`,
-> `test_tfidf_judge_experiment.py`, `test_tune_judge_models.py`는 저장소에 없는 `ML` 패키지를
-> import해 수집 단계에서 실패한다(ML Judge 실험은 채택하지 않음,
-> `Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md`). 정리 전까지는
-> `uv run pytest --ignore=tests/test_judge_ml_pipeline.py --ignore=tests/test_judge_text_features.py --ignore=tests/test_tfidf_judge_experiment.py --ignore=tests/test_tune_judge_models.py`로 실행한다. 저장소에 없는 초기 `src/data/RAG_data` PDF 20개를
+실제 DB에 접속하지 않는다. 저장소에 없는 초기 `src/data/RAG_data` PDF 20개를
 전제로 한 테스트는 2026-09-22에 제거했다.
 
 ## Docker

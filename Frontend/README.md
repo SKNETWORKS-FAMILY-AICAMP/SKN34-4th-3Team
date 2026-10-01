@@ -20,7 +20,7 @@ npm run dev        # → http://localhost:5173  (브라우저 자동 실행)
 
 ## 스택
 
-- React 18 + Vite 5, PWA(`vite-plugin-pwa`, 설정 근거 `Docs/reports/PWA_PLAN.md`)
+- React 18 + Vite 5, PWA(`vite-plugin-pwa`)
 - 런타임 의존성: `react`, `react-dom`, `exceljs`(지출 엑셀 보고서)
 - 라우팅: `App.jsx` 내부 상태 기반 뷰 전환 (`home` / `page` / `mypage`) — 라우터 라이브러리 미사용. `page` 안의 화면(`roadmap` / `tax` / `expenses` / `bizplan` / `gov`)은 `pages/SubPage.jsx`가 고른다
 - 스타일: `src/styles.css`가 `src/styles/01-base.css` ~ `13-billing.css` 13개를 순서대로 `@import`. CSS 변수 기반 라이트·다크 토큰 + 반응형. **import 순서가 캐스케이드에 영향을 주므로 바꾸지 않는다**

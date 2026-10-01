@@ -291,7 +291,7 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 
 ## 유저 개인화 저장 이관 (대화방·로드맵·사업계획서·구독 적용)
 
-브라우저 localStorage에만 있던 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 둔다. 스키마는 `DB/app_extras.sql`에 있고, 코드는 세 기능 모두 전환했다(로드맵·사업계획서는 `feature/personalize`, 기존 localStorage 값은 로그인 때 한 번 서버로 옮긴다). 로드맵·사업계획서 연결 내용은 `Docs/reports/USER_PERSONALIZATION_PLAN.md`에 있다. 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
+브라우저 localStorage에만 있던 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 둔다. 스키마는 `DB/app_extras.sql`에 있고, 코드는 세 기능 모두 전환했다(로드맵·사업계획서는 `feature/personalize`, 기존 localStorage 값은 로그인 때 한 번 서버로 옮긴다). 위 다이어그램에는 넣지 않았다.
 
 ```mermaid
 erDiagram

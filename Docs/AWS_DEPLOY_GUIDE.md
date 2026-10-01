@@ -1,6 +1,6 @@
 # AWS 배포 가이드
 
-> 설계 근거는 `Docs/reports/AWS_MIGRATION_PLAN.md`. 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 처음에는 도메인 없이 Elastic IP + HTTP로 배포하고 HTTPS는 12절에서 적용하는 순서로 작성했다.
+> 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 구성 개요는 `Docs/Design/ARCHITECTURE.md` 4절. 처음에는 도메인 없이 Elastic IP + HTTP로 배포하고 HTTPS는 12절에서 적용하는 순서로 작성했다.
 >
 > **현재 코드 상태(2026-10-01):** 12-4절의 HTTPS 구성(`Frontend/nginx.https.conf`, `docker-compose.app.yml` frontend의 `443`·`/etc/letsencrypt` 마운트)과 PWA는 이미 `main`에 반영돼 있다. 따라서 App EC2를 새로 띄울 때는 **8절 `up` 전에 12-1~12-3절(도메인·443 보안그룹·인증서 발급)을 먼저 끝내야 한다.** 인증서가 없으면 frontend(nginx)가 기동하지 못한다.
 
@@ -268,7 +268,7 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 
 ## 12. HTTPS (도메인 확보 후)
 
-> 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 12-4절 코드 변경과 PWA(`Frontend/vite.config.js`, `Docs/reports/PWA_PLAN.md`)는 이미 `main`에 반영됐다.
+> 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 12-4절 코드 변경과 PWA(`Frontend/vite.config.js`의 `VitePWA`)는 이미 `main`에 반영됐다.
 
 아래 `<DOMAIN>`은 구매한 도메인.
 
@@ -344,7 +344,10 @@ sudo certbot renew --dry-run   # 성공 확인
 - [ ] 브라우저 `https://<DOMAIN>/` 자물쇠 표시, 로그인·정책 검색 정상
 - [ ] `https://<DOMAIN>/ppt/` 발표자료 표시 (presentation 프로필 사용 시)
 - [ ] `sudo certbot renew --dry-run` 성공
-- [ ] PWA 항목은 `Docs/reports/PWA_PLAN.md` 11절 AWS(HTTPS) 체크리스트
+- [ ] PWA: Android Chrome 설치 프롬프트 표시·설치 후 `standalone` 실행, iOS Safari 홈 화면 추가 후 실행
+- [ ] `curl -I https://<DOMAIN>/sw.js` 응답에 `Cache-Control: no-cache`
+- [ ] `http://` 접속 시 `https://` 리다이렉트 후 Service Worker 정상 등록, `/ppt/`를 Service Worker가 가로채지 않음
+- [ ] 화면 변경을 `main`에 병합 → deploy 성공 → 설치된 앱 재실행 시 변경 반영
 
 ## 비용 주의
 

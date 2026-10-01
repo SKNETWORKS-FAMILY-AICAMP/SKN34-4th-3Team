@@ -1477,7 +1477,7 @@ sequenceDiagram
 | **5. 구현** | DB 스키마 · Backend · LLM · Frontend 구현, 서비스 간 연동 | ✅ 완료 |
 | **6. 테스트** | 단위 테스트 | 🔄 진행 중 |
 | | 통합 테스트 (실제 OpenAI·Cohere·PostgreSQL 연동 검증) | ✅ 완료 |
-| | 버그 수정 | 🔄 통합 결함 53건 중 35건 처리 |
+| | 버그 수정 | 🔄 남은 결함은 `Docs/STATUS.md` 2절 |
 | **7. 배포** | Docker 환경 구성(`docker-compose.yml`, `setup.sh`, `setup.bat`) | ✅ 완료 |
 | | CI/CD 구성(GitHub Actions `deploy.yml`·`collect.yml`·`collect-retry.yml`) | ✅ 완료 |
 | | 배포 및 운영 점검(AWS App/Data EC2 구성·가이드, HTTPS·PWA 반영) | 🔄 진행 중 |
@@ -1571,7 +1571,7 @@ sequenceDiagram
 
 ## 14. 테스트 보고서
 
-성능 개선·통합 검수 과정의 상세 기록: [Docs/reports/](Docs/reports/)
+성능 개선 평가 기록: [Docs/reports/](Docs/reports/). 남은 결함은 [Docs/STATUS.md](Docs/STATUS.md) 2절
 
 | 문서 | 내용 |
 | --- | --- |
@@ -1582,25 +1582,15 @@ sequenceDiagram
 | [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
 | [LLM_TAX_HALF.md](Docs/reports/LLM_TAX_HALF.md) | 캐시 적용 전후 비교용 세금 평가 |
 | [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
-| [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/INTEGRATION_ISSUES_0914.md) | 통합·시연 결함 목록 |
-| [LLM_INTEGRATION_AUDIT_0909.md](Docs/reports/LLM_INTEGRATION_AUDIT_0909.md) | Backend↔LLM 연동 검수 보고서 |
-| [LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md](Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md) | 향후 개선안 비교·우선순위 |
 | [ELASTICSEARCH_COMPARISON_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md) / [ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md](Docs/reports/ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md) | Elasticsearch 검색기 비교, 서빙·재색인 일관성 수정 |
-| [USER_PERSONALIZATION_DB.md](Docs/reports/USER_PERSONALIZATION_DB.md) / [USER_PERSONALIZATION_PLAN.md](Docs/reports/USER_PERSONALIZATION_PLAN.md) | 유저 개인화 데이터 DB 이관안·연결 계획 |
-| [BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md](Docs/reports/BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md) | 사업계획서 작업 흐름 정리 |
-| [LLM-ADVANCE_REPORT.md](Docs/reports/LLM-ADVANCE_REPORT.md) | LLM 비동기·채팅 스트리밍·사업계획서 개선 병합 정리 |
 | [REPALCE_JUDGE_MODEL_RESULT.md](Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md) / [CATBOOST_JUDGE_COMPARISON.md](Docs/reports/REPLACE_JUDGE_MODEL/CATBOOST_JUDGE_COMPARISON.md) | LLM Judge를 ML 모델로 대체하는 실험 결과(미채택) |
 
-**계획서·가이드** (구현 근거로 남긴 문서. 현재 상태는 각 문서 머리말과 코드 기준)
+**가이드·기능 정리**
 
 | 문서 | 유형 | 내용 |
 | --- | --- | --- |
 | [AWS_DEPLOY_GUIDE.md](Docs/AWS_DEPLOY_GUIDE.md) | 가이드 | AWS 콘솔 배포 절차, 데이터 수집 자동화 |
-| [AWS_MIGRATION_PLAN.md](Docs/reports/AWS_MIGRATION_PLAN.md) | 계획(구현됨) | AWS 이전 설계 |
-| [PWA_PLAN.md](Docs/reports/PWA_PLAN.md) | 계획(구현됨) | PWA·HTTPS 적용 계획 |
-| [BIZPLAN_DOCUMENT_SAVE_PLAN.md](Docs/reports/BIZPLAN_DOCUMENT_SAVE_PLAN.md) | 계획(구현 후 서류 탭 제거) | 사업계획서 파일 보관 |
 | [subscription_cost.md](Docs/reports/subscription_cost.md) | 분석 | LLM 단가·구독 플랜·마진(구독 목업 결제 근거) |
-| [RAG_search_improve_plan.md](Docs/imporve_plan/RAG_search_improve_plan.md) | 계획 | 검색 A/B·Judge 대체 계획(1단계 Nori 하이브리드 채택, 2단계 ML Judge 미채택) |
 | [Elasticsearch_Nori_setting_guide.md](Docs/imporve_plan/Elasticsearch_Nori_setting_guide.md) | 가이드 | Elasticsearch·Nori 설정 |
 | [FEATURE_ROADMAP_EXPENSE.md](Docs/FEATURE_ROADMAP_EXPENSE.md) | 기능 정리 | 창업 로드맵·지출관리·사업계획서 설명과 진행 현황 |
 | [Presentation/DESIGN.md](Presentation/DESIGN.md) | 가이드 | 발표자료(Slidev) 디자인 규칙 |

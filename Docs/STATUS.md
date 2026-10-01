@@ -6,7 +6,7 @@
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 2건, 보류 1건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~55)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
+**미해결 4건, 일부 해결 2건, 보류 1건이다.** 결함 번호는 2026-09-10·09-14 통합·시연 결함 목록(`INTEGRATION_ISSUES_0910.md` 1~42, `INTEGRATION_ISSUES_0914.md` 43~55) 기준이다. 두 목록은 2026-10-01 삭제했고(원문은 git 이력), 다른 문서가 번호로 참조하는 미해결 결함은 2절로 옮겼다. 이전 저장소 기준 위생 항목(24~30·33 등)은 옮기지 않았다.
 
 ## 1. 병합 현황
 
@@ -75,7 +75,11 @@
 | --- | --- | --- |
 | 결함 40. 공고문 붙여넣기 요약을 부르는 화면이 없음 | 미해결 | `POST /announcements/summary`와 `api.summarizeAnnouncement`는 살아 있으나 프론트 재설계(`9c8e075`)가 원문 입력 화면을 없애 호출자가 0건이다. 화면 설계 결정이 필요하다 |
 | P1-3. 부트스트랩 결함(결함 13) | 보류 | Postgres 경로가 기본 테이블을 만들지 않는다. 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다. 함께 있던 결함 12(`_apply_extras`가 `rollback()` 없이 실패를 삼킴)는 해결됐다(3절) |
-| LLM 테스트 4개 수집 실패 | 미해결 | `LLM/tests/test_judge_ml_pipeline.py`·`test_judge_text_features.py`·`test_tfidf_judge_experiment.py`·`test_tune_judge_models.py`가 저장소에 없는 `ML` 패키지를 import해 `uv run pytest`가 수집 단계에서 실패한다. ML Judge는 채택하지 않았으므로 테스트 삭제 또는 패키지 복원 결정이 필요하다. 그 전까지는 `--ignore`로 제외(`LLM/README.md`) |
+| 결함 14. `.env.example`대로 하면 compose가 기동하지 않음 | 미해결(완화) | `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB`가 빈 값이면 `db`가 기동을 거부하고 `backend`·`llm`이 `service_healthy`에서 무한 대기한다. `setup.sh`·`setup.bat`가 빌드 전에 빈 값을 잡으므로 compose를 직접 부를 때만 남는다 |
+| 결함 44. 세액감면 계산이 사용자 입력 6개를 한꺼번에 요구함 | 일부 해결 | 대상·자격 질문은 추가 정보를 최대 2개만 묻고(`c1eae08`), 감면액 계산은 프로필 값을 선채움한다(`97df684`). 남은 것: `REQUIRED_USER_INPUTS`(`LLM/src/rag/graph.py`)가 6개이고 `eligible_tax_krw`·`first_startup`은 항상 묻는다. `first_startup` 기본값 도입 여부는 미결정 (09-16 보고 기준) |
+| 결함 45. AI 답변이 느림 | 일부 해결 | `reasoning_effort="low"`, 객체 재사용, 세금 Semantic Cache(평균 17.69초 → 12.46초), 채팅 스트리밍(`/chat/messages/stream`, PR #20)으로 개선했다. 남은 것: `category=tax`·`expense`는 route가 확정되는데도 Router LLM 호출이 돈다(코드 재확인). 정책 질문 첫 검색어 fan-out(최대 7개) 지연은 미측정 |
+| 결함 54. `GET /tax/tax-reduction/result`가 500 | 미해결 | `repo.insert_tax_reduction`이 `reasons`를 JSON 문자열로 저장하는데 `tax_service.latest_tax_reduction`이 그대로 리스트 필드에 담아 응답 검증에서 실패한다. 조치 방향: 조회 시 `json.loads`로 되돌림. 이 경로를 부르는 화면은 없다 (09-16 보고 기준) |
+| 결함 55. 같은 응답의 `llmUsed`가 항상 false | 미해결 | `tax_reduction_results`에 `llm_used` 컬럼이 없어 조회 시 항상 `false`다(코드 재확인). 조치 방향: `app_extras.sql`에 컬럼을 추가해 저장·조회에 태우거나, API_SPEC에 "판정 실행 응답에서만 의미 있음"을 명시 |
 
 ## 3. 해결된 이슈
 
@@ -101,6 +105,7 @@
 | 실행 절차 부재 | `setup.sh`가 0바이트였음 | `1781790` |
 | 지출 분석(FS-14~17) 화면 부재 | 보류했던 지출관리를 `Frontend/src/pages/ExpenseTracker.jsx`로 다시 연결(`SubPage.jsx`에서 렌더) | PR #7 `1f6405e`, PR #12 `82abd5c` |
 | P1-3 결함 12. `_apply_extras` 실패 시 트랜잭션 오염 | 실패를 `rollback()` 없이 삼켰음 | `Backend/core/db.py`가 파일 전체 실행 후 실패 시 `rollback()`·경고 로그 |
+| LLM 테스트 4개 수집 실패 | judge 실험 테스트(`test_judge_ml_pipeline.py` 등 4개)가 저장소에 없는 `ML` 패키지를 import해 pytest 수집이 실패했음 | 미채택 실험이라 테스트 삭제 `a3d520e` |
 | 프론트 챗 타임아웃이 서버 예산보다 짧음 | `apiPost` 기본 30초가 tax 예산 120초보다 짧았음. `api.chat`이 tax 계열 135초·그 외 60초를 씀 | `e619d23` |
 
 **교훈 두 가지.**
@@ -140,15 +145,13 @@
 
 ## 5. 관련 문서
 
-- 통합 결함 목록(1~42): `Docs/reports/INTEGRATION_ISSUES_0910.md`
-- 시연 결함 목록(43~): `Docs/reports/INTEGRATION_ISSUES_0914.md`
 - 작업 체크리스트: `Docs/TODO.md`
 - AWS 배포·수집 자동화: `Docs/AWS_DEPLOY_GUIDE.md`, `Docs/data_collection_preprocessing.md` 2.3절
 - 데이터 구조와 스키마 적용 경로: `Docs/Design/ERD.md`
 - Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`
 - 세금 Semantic Cache 효과: `Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md`
-- 사업계획서 작업 흐름: `Docs/reports/BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md`
+- 사업계획서 기능 정리: `Docs/FEATURE_ROADMAP_EXPENSE.md` 3절
 - 화면 변경 기록: `Frontend/CHANGES.md`
 - LLM 서비스 실행 절차: `LLM/RUN_GUIDE.md`
 - 전체 로컬 실행: `setup.sh` · `setup.bat` (각 파일 상단 주석)

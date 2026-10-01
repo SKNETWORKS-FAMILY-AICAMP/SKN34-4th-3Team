@@ -131,7 +131,7 @@ flowchart LR
 
 - **구독·결제(목업)**: 마이페이지 `구독 · 결제`에서 무료·베이직·프로 플랜을 바꾼다. 실제 결제는 없고 `user_subscriptions`에 플랜만 저장한다(`/users/me/subscription`, 근거 `Docs/reports/subscription_cost.md`)
 - **온보딩 안내**: 로그인 후 각 화면을 처음 열면 기능을 차례로 짚어 주는 투어가 한 번 뜬다(`Frontend/src/components/PageTour.jsx`)
-- **PWA**: 브라우저에서 앱처럼 설치할 수 있다(`vite-plugin-pwa`, `Docs/reports/PWA_PLAN.md`). Service Worker는 HTTPS(AWS 배포)에서 동작한다
+- **PWA**: 브라우저에서 앱처럼 설치할 수 있다(`vite-plugin-pwa`, `Frontend/vite.config.js`). Service Worker는 HTTPS(AWS 배포)에서 동작한다
 
 ## 9. 저장소 구조
 
@@ -261,7 +261,7 @@ docker compose --profile frontend --profile presentation up -d --build
 
 기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. frontend(nginx) 는 backend 의 `/health` 헬스체크가 healthy 가 된 뒤에 뜬다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
 
-화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다. 단 backend 는 `--reload` 없이 돌므로 Backend 코드가 바뀐 pull 뒤에는 화면만 재배포하지 말고 `docker compose --profile frontend up -d --build` 로 backend 까지 다시 만든다. 구 backend 에 새 화면이 붙으면 대화방 삭제가 전체 기록 삭제로 동작할 수 있다(`Docs/reports/INTEGRATION_ISSUES_0914.md` 3절).
+화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다. 단 backend 는 `--reload` 없이 돌므로 Backend 코드가 바뀐 pull 뒤에는 화면만 재배포하지 말고 `docker compose --profile frontend up -d --build` 로 backend 까지 다시 만든다. 구 backend 에 새 화면이 붙으면 API 계약이 어긋나 오동작할 수 있다(예: 예전 backend 는 대화방 하나 삭제 요청을 전체 기록 삭제로 처리했다).
 
 ### 데이터가 없는 노트북이 서버를 맡을 때
 

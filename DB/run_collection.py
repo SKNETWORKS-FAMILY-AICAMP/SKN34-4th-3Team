@@ -46,8 +46,6 @@ def get_db_config() -> dict:
 
     다른 수집 스크립트(scripts/collect_common.py의 DB_CONFIG)와 동일하게
     DB_HOST/DB_PORT/POSTGRES_*를 쓴다.
-    (근거: Docs/reports/AWS_MIGRATION_PLAN.md 10절 "feature/scheduler 처리
-     방침" 표 — "SQL 실행부를 DB_HOST 기준으로 수정 후 병합")
     AWS에서는 docker-compose.app.yml의 collector 서비스가 DB_HOST에
     COMPOSE_DB_HOST(Data EC2 private IP)를, DB_PORT에 COMPOSE_DB_PORT
     (기본 5432)를 넣고, POSTGRES_*는 .env(env_file)에서 받는다.

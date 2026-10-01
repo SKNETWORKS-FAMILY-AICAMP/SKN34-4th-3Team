@@ -60,7 +60,7 @@ Docker Compose 기반의 컨테이너형 서비스로 구성한다.
 * 프로젝트별 `pyproject.toml` 및 `uv.lock`을 통해 의존성 버전을 고정
 
 ## Test
-* **LLM:** pytest. `LLM/tests/` 아래 테스트 파일 46개(테스트 함수 412개, 2026-10-01 기준). `ML` 패키지를 import하는 judge 실험 테스트 4개는 수집 실패하므로 제외하고 실행(`LLM/README.md` 테스트 절). `LLM/pyproject.toml`의 `testpaths = ["tests"]`
+* **LLM:** pytest. `LLM/tests/` 아래 테스트 파일 42개(테스트 함수 385개, 2026-10-01 기준). `LLM/pyproject.toml`의 `testpaths = ["tests"]`
 * **Backend:** 표준 `unittest`. `Backend/tests/` 아래 16개 파일(테스트 함수 134개). `uv run python -m unittest discover tests`. CI(`deploy.yml`)에서 실행
 * **Frontend:** Node 내장 테스트 러너. `Frontend/tests/*.test.mjs` 2개 파일, `node --test "tests/*.test.mjs"`. CI에서 `npm run build`와 함께 실행
 * **Lint / Formatter:** 설정된 것 없음

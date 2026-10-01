@@ -600,10 +600,7 @@ cd LLM
 uv run pytest -q
 ```
 
-테스트 파일 46개, 테스트 함수 412개다(2026-10-01 기준). 이 중 `test_judge_ml_pipeline.py`,
-`test_judge_text_features.py`, `test_tfidf_judge_experiment.py`, `test_tune_judge_models.py` 4개는
-저장소에 없는 `ML` 패키지를 import해 수집 단계에서 실패하므로 `--ignore`로 빼고 실행한다
-(`LLM/README.md` 테스트 절). 주요 테스트:
+테스트 파일 42개, 테스트 함수 385개다(2026-10-01 기준). 주요 테스트:
 
 - `tests/test_graph.py`: Router, Policy/Notice branch, isolation
 - `tests/test_tax_graph.py`: single/multi-hop, 3-way edge, Reference 우선, MAX_HOPS,

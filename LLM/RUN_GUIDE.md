@@ -250,9 +250,6 @@ uv run pytest -q
 저장소에 없는 초기 `src/data/RAG_data` PDF 20개를 전제로 한 테스트는
 2026-09-22에 제거했다. 나머지 테스트는 해당 PDF 없이 실행할 수 있다.
 
-단, `ML` 패키지를 import하는 judge 실험 테스트 4개는 수집 단계에서 실패한다. 제외 방법은
-`LLM/README.md` 테스트 절을 따른다.
-
 ## 9. 자주 발생하는 문제
 
 ### `No module named 'src.features'`
