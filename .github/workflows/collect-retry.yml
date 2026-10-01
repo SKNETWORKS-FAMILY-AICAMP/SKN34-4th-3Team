@@ -1,0 +1,43 @@
+# 수집 중 일시 장애(timeout·5xx·429·트래픽 초과)로 남은 실패를 3시간마다 자동 재실행한다.
+# 대상: collection_failures 의 transient 중 next_retry_at 이 지난 스크립트(DB/run_collection.py --retry).
+# 재시도 3회를 넘기면 permanent 로 바뀌고 이 workflow 가 실패해 담당자에게 알린다.
+# 필요한 Secrets: EC2_HOST, EC2_USER, EC2_SSH_KEY (collect.yml 과 동일)
+name: collect-data-retry
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # UTC 기준 3시간마다
+  workflow_dispatch:
+
+# deploy.yml·collect.yml 과 같은 그룹이라 배포·수집이 동시에 돌지 않는다.
+concurrency:
+  group: ec2-app
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 110m
+          script: |
+            set -e
+            cd ~/SKN34-4th-3Team
+            git pull --ff-only origin main || { echo "::error::git pull 실패"; exit 1; }
+            collect_rc=0
+            docker compose -f docker-compose.app.yml run --rm collector \
+              uv run --frozen python run_collection.py --retry || collect_rc=$?
+            # 3: 재시도 대상 없음(run_collection.py EXIT_NOTHING_TO_RETRY). 재색인 없이 끝낸다.
+            [ "$collect_rc" -eq 3 ] && exit 0
+            reindex_rc=0
+            docker compose -f docker-compose.app.yml exec -T llm \
+              curl -fsS --max-time 1800 -X POST localhost:8001/rag/reindex \
+              -H 'Content-Type: application/json' -d '{"documentIds":[],"force":false}' || reindex_rc=$?
+            [ "$collect_rc" -ne 0 ] && echo "::error::재수집 실패(rc=$collect_rc)"
+            [ "$reindex_rc" -ne 0 ] && echo "::error::reindex 실패(rc=$reindex_rc)"
+            [ "$collect_rc" -eq 0 ] && [ "$reindex_rc" -eq 0 ]

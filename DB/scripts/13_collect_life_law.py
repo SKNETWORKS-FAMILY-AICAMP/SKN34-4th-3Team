@@ -8,12 +8,13 @@
 # =========================================================
 
 import re
+import sys
 import time
 import html
-import requests
 import psycopg2
 from dotenv import load_dotenv
 import os
+from collect_common import exit_code, record_failure, request
 
 load_dotenv()
 
@@ -57,7 +58,7 @@ def get_chapters(csm_seq):
     """csmSeq 하나의 CsmMain.laf 페이지에서 전체 챕터(ccfNo, cciNo, cnpClsNo) 조합을 추출."""
     url = f"{BASE}/CsmMain.laf"
     params = {"csmSeq": csm_seq}
-    response = requests.get(url, params=params, headers=HEADERS, timeout=15)
+    response = request("GET", url, params=params, headers=HEADERS, timeout=15)
     text = html.unescape(response.text)
 
     pattern = re.compile(
@@ -73,7 +74,7 @@ def get_chapters(csm_seq):
 def fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no):
     """콘텐츠 페이지 하나를 크롤링해서 제목과 본문을 추출.
     Returns:
-        (title, body) 튜플. 실패하거나 본문 마커를 못 찾으면 (title, None).
+        (title, body) 튜플. 본문 마커를 못 찾으면 (title, None). 요청 실패는 예외로 올린다.
     """
     url = f"{BASE}/CnpClsMain.laf"
     params = {
@@ -83,13 +84,7 @@ def fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no):
         "cciNo": cci_no,
         "cnpClsNo": cnp_cls_no,
     }
-    try:
-        response = requests.get(url, params=params, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"    요청 실패: {e}")
-        return None, None
-
+    response = request("GET", url, params=params, headers=HEADERS, timeout=15)
     text = response.text
 
     title_start = text.find("<title>")
@@ -191,38 +186,38 @@ if __name__ == "__main__":
         print(f"\n=== [{category_name}] (csmSeq={csm_seq}) 챕터 목록 수집 ===")
         try:
             chapters = get_chapters(csm_seq)
-        except requests.exceptions.RequestException as e:
-            print(f"  목록 수집 실패: {e}")
+        except Exception as e:
+            record_failure(conn, f"csmSeq={csm_seq}", e)
             continue
         print(f"  {len(chapters)}개 챕터 발견")
         time.sleep(REQUEST_DELAY_SECONDS)
 
         for ccf_no, cci_no, cnp_cls_no in chapters:
+            total_processed += 1
             source_url = (
                 f"{BASE}/CnpClsMain.laf?popMenu=ov&csmSeq={csm_seq}"
                 f"&ccfNo={ccf_no}&cciNo={cci_no}&cnpClsNo={cnp_cls_no}"
             )
-            total_processed += 1
- 
+            
             if is_already_saved_by_source(conn, source_url):
                 total_skipped += 1
                 if total_processed % 30 == 0:
                     print(f"  {total_processed}건 처리, 누적 저장 {total_inserted}건 (건너뜀 {total_skipped}건)")
                 continue
- 
-            title, body = fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no)
- 
-            if body is None:
-                total_no_body += 1
+            try:
+                title, body = fetch_content(csm_seq, ccf_no, cci_no, cnp_cls_no)
+                if body is None:
+                    total_no_body += 1
+                elif insert_content(conn, category_name, title, body, source_url):
+                    total_inserted += 1
+                    conn.commit()
+                else:
+                    total_skipped += 1
+            except Exception as e:
+                record_failure(conn, f"csmSeq={csm_seq},ccfNo={ccf_no},cciNo={cci_no},cnpClsNo={cnp_cls_no}", e)
                 time.sleep(REQUEST_DELAY_SECONDS)
                 continue
- 
-            if insert_content(conn, category_name, title, body, source_url):
-                total_inserted += 1
-                conn.commit()
-            else:
-                total_skipped += 1
- 
+
             if total_processed % 30 == 0:
                 print(f"  {total_processed}건 처리, 누적 저장 {total_inserted}건 (건너뜀 {total_skipped}건)")
  
@@ -236,3 +231,4 @@ if __name__ == "__main__":
     print(f"건너뜀(중복): {total_skipped}건")
     print(f"본문 마커 없음: {total_no_body}건")
     print(f"총 처리: {total_processed}건")
+    sys.exit(exit_code())

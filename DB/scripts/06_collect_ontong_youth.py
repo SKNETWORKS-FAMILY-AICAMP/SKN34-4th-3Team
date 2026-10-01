@@ -5,12 +5,13 @@
 
 import os
 import re
+import sys
 import time
-import requests
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
 from normalize_region import normalize_region
+from collect_common import exit_code, json_of, record_failure, request
 
 load_dotenv()
 
@@ -31,7 +32,7 @@ KEEP_KEYWORDS_IN_TAG = ["벤처", "중소기업", "대출", "자금", "보증"]
 EXCLUDE_KEYWORDS = ["축제", "페스타", "페스티벌", "콘서트", "공연", "체험행사", "챌린지", "장학금", "학자금"]
 
 
-def fetch_page(page_num=1, page_size=100, max_retries=3):
+def fetch_page(page_num=1, page_size=100):
     params = {
         "apiKeyNm": API_KEY,
         "pageNum": page_num,
@@ -39,51 +40,7 @@ def fetch_page(page_num=1, page_size=100, max_retries=3):
         "rtnType": "json",
         "lclsfNm": "일자리",
     }
-    retry_statuses = {403, 429, 500, 502, 503, 504}
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.get(BASE_URL, params=params, timeout=30)
-        except requests.exceptions.RequestException as e:
-            if attempt == max_retries:
-                raise
-            wait = 5 * attempt
-            print(f"  page={page_num} 요청 오류({type(e).__name__}), {wait}초 후 재시도 ({attempt}/{max_retries})")
-            time.sleep(wait)
-            continue
-
-        if response.status_code == 200:
-            return response.json()
-
-        if response.status_code in retry_statuses and attempt < max_retries:
-            wait = 5 * attempt
-            print(f"  page={page_num} status={response.status_code}, {wait}초 후 재시도 ({attempt}/{max_retries})")
-            time.sleep(wait)
-            continue
-
-        raise requests.exceptions.HTTPError(
-            f"온통청년 API 요청 실패 (page={page_num}, status={response.status_code})"
-        )
-
-
-def fetch_all_pages():
-    all_items = []
-    page = 1
-    while True:
-        data = fetch_page(page_num=page)
-        result = data.get("result", {})
-        items = result.get("youthPolicyList", [])
-        tot_count = result.get("pagging", {}).get("totCount", 0)
-
-        all_items.extend(items)
-        print(f"  {page}페이지: {len(items)}건 (전체 {tot_count}건 중 누적 {len(all_items)}건)")
-
-        if len(all_items) >= tot_count or not items:
-            break
-        page += 1
-        time.sleep(0.5) 
-
-    return all_items
+    return json_of(request("GET", BASE_URL, params=params))
 
 
 def is_relevant(item):
@@ -186,17 +143,38 @@ def insert_policy_and_announcement(conn, item):
 
 if __name__ == "__main__":
     print("온통청년 '일자리' 대분류 전체 수집 시작...")
-    all_items = fetch_all_pages()
-
-    relevant_items = [item for item in all_items if is_relevant(item)]
-    print(f"전체 {len(all_items)}건 중 관련 있는 {len(relevant_items)}건으로 필터링됨")
-
     conn = psycopg2.connect(**DB_CONFIG)
+    fetched = 0
+    relevant = 0
     inserted = 0
-    for item in relevant_items:
-        if insert_policy_and_announcement(conn, item):
-            inserted += 1
-    conn.commit()
+    page = 1
+    # 페이지마다 바로 적재한다. 페이지가 실패하면 기록하고 멈춘다(재시도 시 처음부터, 중복은 건너뜀).
+    while True:
+        try:
+            data = fetch_page(page_num=page)
+            result = data.get("result", {})
+            items = result.get("youthPolicyList", [])
+            tot_count = result.get("pagging", {}).get("totCount", 0)
+
+            fetched += len(items)
+            print(f"  {page}페이지: {len(items)}건 (전체 {tot_count}건 중 누적 {fetched}건)")
+
+            for item in items:
+                if not is_relevant(item):
+                    continue
+                relevant += 1
+                if insert_policy_and_announcement(conn, item):
+                    inserted += 1
+            conn.commit()
+        except Exception as e:
+            record_failure(conn, f"page={page}", e)
+            break
+
+        if fetched >= tot_count or not items:
+            break
+        page += 1
+        time.sleep(0.5)
     conn.close()
 
-    print(f"announcements 신규 {inserted}건 저장 완료")
+    print(f"전체 {fetched}건 중 관련 있는 {relevant}건, announcements 신규 {inserted}건 저장 완료")
+    sys.exit(exit_code())
