@@ -25,8 +25,8 @@
 - `holdout-tax-missing-region` 2턴: status
 - `holdout-tax-missing-input-tax` 1턴: status
 
-원시 결과: [세금 JSON](../../LLM/evaluation/results/tax_20260914_210435.json)
-단계별 시간: [Latency 로그](../../LLM/evaluation/results/tax_latency_20260914_210435.log)
+원시 결과: 세금 JSON(`LLM/evaluation/results/tax_20260914_210435.json`, 로컬 생성물, git 미추적)
+단계별 시간: Latency 로그(`LLM/evaluation/results/tax_latency_20260914_210435.log`, 로컬 생성물, git 미추적)
 
 ---
 
@@ -60,5 +60,5 @@
 - `holdout-tax-missing-input-tax` 1턴: status
 - `holdout-tax-future-2027` 2턴: status
 
-원시 결과: [세금 JSON](../../LLM/evaluation/results/tax_20260914_204413.json)
-단계별 시간: [Latency 로그](../../LLM/evaluation/results/tax_latency_20260914_204413.log)
+원시 결과: 세금 JSON(`LLM/evaluation/results/tax_20260914_204413.json`, 로컬 생성물, git 미추적)
+단계별 시간: Latency 로그(`LLM/evaluation/results/tax_latency_20260914_204413.log`, 로컬 생성물, git 미추적)

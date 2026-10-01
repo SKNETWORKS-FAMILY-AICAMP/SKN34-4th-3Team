@@ -2,7 +2,7 @@
 
 ## 결론
 
-이 평가는 holdout250 중 **운영 Dense + Elasticsearch Nori BM25 → policy/source-level RRF → Cohere Rerank 검색기를 사용하는 81턴**만 대상으로 한다. 기준선은 [06_EVAL_250_COMPARISON.md](06_EVAL_250_COMPARISON.md)의 2026-09-16 결과다.
+이 평가는 holdout250 중 **운영 Dense + Elasticsearch Nori BM25 → policy/source-level RRF → Cohere Rerank 검색기를 사용하는 81턴**만 대상으로 한다. 기준선은 [06_EVAL_250_COMPARISON.md](../06_EVAL_250_COMPARISON.md)의 2026-09-16 결과다.
 
 | 보고용 범위 | 기존 | Elasticsearch 적용 후 | 변화 |
 | --- | ---: | ---: | ---: |
@@ -58,4 +58,4 @@ Hit@5는 정답 policy_id가 여러 개인 문항에서도 그중 하나 이상�
 - 세금 자동검사의 grounded 통과는 근거 출처가 존재한다는 뜻이며, 정답 법령 문서를 찾았다는 Recall 지표는 아니다.
 - 운영 그래프 전체를 호출하므로 성능 변화에는 검색기 외에도 현재 Router·Rerank·LLM·캐시 상태가 영향을 줄 수 있다. Elasticsearch의 순수 기여도를 분리하려면 동일 후보에 대한 별도 retrieval-only A/B가 필요하다.
 
-원시 결과: [정책 JSON](../../LLM/evaluation/results/retriever_policy_20260921_124026.json) · [세금 법령 JSON](../../LLM/evaluation/results/retriever_tax_legal_20260921_124026.json)
+원시 결과: 정책 JSON(`LLM/evaluation/results/retriever_policy_20260921_124026.json`, 로컬 생성물, git 미추적) · 세금 법령 JSON(`LLM/evaluation/results/retriever_tax_legal_20260921_124026.json`, 로컬 생성물, git 미추적)

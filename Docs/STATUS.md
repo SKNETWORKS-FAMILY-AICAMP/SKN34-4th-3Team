@@ -1,12 +1,12 @@
 # 진행 현황
 
-- 갱신일: 2026-09-24
-- 기준 브랜치/커밋: `develop` / `82abd5c`
+- 갱신일: 2026-10-01
+- 기준 브랜치/커밋: `develop` / `402dbcc`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 1건, 보류 1건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~55)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
+**미해결 2건, 보류 1건이다.** 결함 번호는 `Docs/reports/INTEGRATION_ISSUES_0910.md`(1~42)와 `Docs/reports/INTEGRATION_ISSUES_0914.md`(43~)를 따른다. 0914 리포트의 시연 결함(43~55)은 이 문서가 추적하지 않으며 그 리포트에서 상태를 관리한다.
 
 ## 1. 병합 현황
 
@@ -51,13 +51,31 @@
 | `feature/refactoring` | `8fa2e64` (PR #10) | 프론트 개발 서버 코드 변경 즉시 반영 |
 | `feature/LLM-plan` | `dc27346` (PR #11) | 사업계획서 입력 정리·양식 검사·HWPX/PDF 출력 |
 | `feature/merge_test` | `82abd5c` (PR #12) | 영수증 OCR 개선(품목별 금액, 품목·상호 직접 수정), 사업계획서·OCR 유닛테스트 |
+| `feature/LLM-planfix` | `a87bb66` (PR #13) | 사업계획서 파일 생성 오류 수정 |
+| `feature/personalize` | `d35f0c4` (PR #14) | 로드맵·사업계획서 localStorage 제거(서버 저장 전환) |
+| `feature/aws` | `8f8cf3d` (PR #17) | AWS 배포 파일(`docker-compose.app.yml`·`data.yml`, `deploy.yml`, `backup_db.sh`)과 가이드 |
+| `feature/merge_test` | `d9de0f4` (PR #19) | 계정 하드코드 제거 |
+| `feature/LLM-advance` | `b8d2e08` (PR #20) | LLM 비동기 처리·채팅 스트리밍, 사업계획서 출력 형식 제한·이탈 경고 |
+| `feature/pwa` | `93ee1bc` (PR #22), `877cfb1` (PR #24) | PWA, HTTPS용 nginx 분리(`nginx.https.conf`·`nginx-locations.conf`), 설치 버튼 |
+| `feature/scheduler` | `72e82a8` (PR #26) | 국세청 법령해석례 수집, 정기 수집·재시도(GitHub Actions 방식) |
+| `feature/DB` | `e2e8f8c` (PR #27), `71de8b0` (PR #30) | 법령해석례 적재, `bizplan_drafts.data`, 생활법령정보 크롤링 |
+| `feature/merge_test` | `aac3357` (PR #28), `ce0f2ff` (PR #34) | 크리티컬 이슈 수정, 재시도 로직 복구 |
+| `feature_frontend` | `dcc31ad` (PR #31) | 지출관리 화면 리팩터링, 로고·메인 버튼 |
+| `feature/docu_save` | `a05543c` (PR #32) | 사업계획서 서류 저장(`bizplan_documents`) |
+| `feature/server` | `dcbcd1f` (PR #33) | 재발 방지 적용 |
+| `feature/bm` | `a2e0d95` (PR #36) | 구독 플랜·목업 결제(`user_subscriptions`) |
+| `feature_frontend` | `2668655` (PR #37) | 온보딩 투어, 사업계획서 보관함(`bizplans`), 지출 엑셀 보고서 |
+| `feature/merge_test` | `0c101a8` (PR #38) | 마이페이지 서류 탭 제거, 병합 이슈 해결 |
+| `feature/server` | `bfda1f3` (PR #40) | 주간 수집 → 임베딩 → ES 재색인 자동화(`collect.yml`) |
+| `feature/DB` | `402dbcc` (PR #41) | 수집 실패 분류·기록(`collection_failures`)과 일시 장애 재시도(`collect-retry.yml`), 생활법령 재수집 속도 개선 |
 
 ## 2. 미해결·보류 항목
 
 | 항목 | 상태 | 내용 |
 | --- | --- | --- |
 | 결함 40. 공고문 붙여넣기 요약을 부르는 화면이 없음 | 미해결 | `POST /announcements/summary`와 `api.summarizeAnnouncement`는 살아 있으나 프론트 재설계(`9c8e075`)가 원문 입력 화면을 없애 호출자가 0건이다. 화면 설계 결정이 필요하다 |
-| P1-3. 부트스트랩 결함 2건(결함 12·13) | 보류 | `Backend/core/db.py`의 `_apply_extras`가 `rollback()` 없이 실패를 삼키고, Postgres 경로가 기본 테이블을 만들지 않는다. 둘 다 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다 |
+| P1-3. 부트스트랩 결함(결함 13) | 보류 | Postgres 경로가 기본 테이블을 만들지 않는다. 스키마 없는 Postgres에서만 재현되고 compose는 initdb로 `01_schema.sql`을 적용하므로 고치지 않기로 했다. 함께 있던 결함 12(`_apply_extras`가 `rollback()` 없이 실패를 삼킴)는 해결됐다(3절) |
+| LLM 테스트 4개 수집 실패 | 미해결 | `LLM/tests/test_judge_ml_pipeline.py`·`test_judge_text_features.py`·`test_tfidf_judge_experiment.py`·`test_tune_judge_models.py`가 저장소에 없는 `ML` 패키지를 import해 `uv run pytest`가 수집 단계에서 실패한다. ML Judge는 채택하지 않았으므로 테스트 삭제 또는 패키지 복원 결정이 필요하다. 그 전까지는 `--ignore`로 제외(`LLM/README.md`) |
 
 ## 3. 해결된 이슈
 
@@ -82,6 +100,7 @@
 | AI 상담·공고문 분석 | 생성 주체 순서, 비로그인 401 안내, LLM 인덱스 기동 워밍업(결함 37~39). 콜드 스타트 경합은 llm 헬스체크 + `service_healthy`로 보완 | `c4eb000`, `a835832` |
 | 실행 절차 부재 | `setup.sh`가 0바이트였음 | `1781790` |
 | 지출 분석(FS-14~17) 화면 부재 | 보류했던 지출관리를 `Frontend/src/pages/ExpenseTracker.jsx`로 다시 연결(`SubPage.jsx`에서 렌더) | PR #7 `1f6405e`, PR #12 `82abd5c` |
+| P1-3 결함 12. `_apply_extras` 실패 시 트랜잭션 오염 | 실패를 `rollback()` 없이 삼켰음 | `Backend/core/db.py`가 파일 전체 실행 후 실패 시 `rollback()`·경고 로그 |
 | 프론트 챗 타임아웃이 서버 예산보다 짧음 | `apiPost` 기본 30초가 tax 예산 120초보다 짧았음. `api.chat`이 tax 계열 135초·그 외 60초를 씀 | `e619d23` |
 
 **교훈 두 가지.**
@@ -124,6 +143,7 @@
 - 통합 결함 목록(1~42): `Docs/reports/INTEGRATION_ISSUES_0910.md`
 - 시연 결함 목록(43~): `Docs/reports/INTEGRATION_ISSUES_0914.md`
 - 작업 체크리스트: `Docs/TODO.md`
+- AWS 배포·수집 자동화: `Docs/AWS_DEPLOY_GUIDE.md`, `Docs/data_collection_preprocessing.md` 2.3절
 - 데이터 구조와 스키마 적용 경로: `Docs/Design/ERD.md`
 - Backend↔LLM 계약: `Docs/Design/LLM_API_SPEC_V1.md`
 - 시스템 구성: `Docs/Design/ARCHITECTURE.md`

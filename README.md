@@ -156,10 +156,10 @@
 | 구분 | 기술 |
 | --- | --- |
 | **Backend** | ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white) ![Django](https://img.shields.io/badge/Django-092E20?style=flat-square&logo=django&logoColor=white) ![Django Ninja](https://img.shields.io/badge/Django_Ninja-092E20?style=flat-square) ![psycopg](https://img.shields.io/badge/psycopg_3-4169E1?style=flat-square) |
-| **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) |
-| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) |
-| **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) |
-| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) ![nginx](https://img.shields.io/badge/nginx_1.29-009639?style=flat-square&logo=nginx&logoColor=white) |
+| **LLM / AI** | ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square) ![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square) ![OpenAI](https://img.shields.io/badge/OpenAI-412991?style=flat-square&logo=openai&logoColor=white) ![Cohere](https://img.shields.io/badge/Cohere_Rerank-39594D?style=flat-square) ![Tesseract](https://img.shields.io/badge/Tesseract_OCR-3C8DBC?style=flat-square) |
+| **Database** | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?style=flat-square&logo=postgresql&logoColor=white) ![pgvector](https://img.shields.io/badge/pgvector-4169E1?style=flat-square) ![Elasticsearch](https://img.shields.io/badge/Elasticsearch_9_(Nori)-005571?style=flat-square&logo=elasticsearch&logoColor=white) |
+| **Frontend** | ![React](https://img.shields.io/badge/React_18.3-61DAFB?style=flat-square&logo=react&logoColor=black) ![Vite](https://img.shields.io/badge/Vite_5.4-646CFF?style=flat-square&logo=vite&logoColor=white) ![PWA](https://img.shields.io/badge/PWA-5A0FC8?style=flat-square&logo=pwa&logoColor=white) ![ExcelJS](https://img.shields.io/badge/ExcelJS-217346?style=flat-square) |
+| **Infra** | ![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=flat-square&logo=docker&logoColor=white) ![nginx](https://img.shields.io/badge/nginx_1.29-009639?style=flat-square&logo=nginx&logoColor=white) ![AWS EC2](https://img.shields.io/badge/AWS_EC2-FF9900?style=flat-square&logo=amazonaws&logoColor=white) ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat-square&logo=githubactions&logoColor=white) |
 | **패키지 관리** | ![uv](https://img.shields.io/badge/uv-DE5FE9?style=flat-square) ![npm](https://img.shields.io/badge/npm-CB3837?style=flat-square&logo=npm&logoColor=white) |
 | **협업** | ![Git](https://img.shields.io/badge/Git-F05032?style=flat-square&logo=git&logoColor=white) ![GitHub](https://img.shields.io/badge/GitHub-181717?style=flat-square&logo=github&logoColor=white) |
 
@@ -171,13 +171,15 @@
 <summary><b>&nbsp;&nbsp;데이터</b></summary>
 <br>
 
-- 관련 세법 자료 
+- 관련 세법 자료 — 국가법령정보센터 법령 조문(19개 법령), 국세청 법령해석례, 생활법령정보(창업 분야)
 - 정부24 공공서비스(혜택) 정보 — 창업·청년·소상공인 등 키워드 기반 정책 데이터
 - K-Startup(창업진흥원) 지원사업 공고 — 만 20~39세 대상, 모집 중인 공고
 - 기업마당(중소벤처기업부) 중소기업 지원사업 공고
 - 온통청년 청년정책 — 창업·벤처·중소기업·대출·자금·보증 관련만 필터링 수집
 
-위 4개 소스에서 수집한 세법·시행령·시행규칙 등 4,459건 및 정책 총 2,931건, 그중 공고 2,187건
+세법·시행령·시행규칙 조문 4,459건, 정책 총 2,931건, 그중 공고 2,187건(2026-09-18 집계. 이후 추가된 법령해석례·생활법령은 미포함)
+
+배포 환경에서는 GitHub Actions가 매주 수집하고(`collect.yml`), 일시 장애는 3시간마다 재시도한다(`collect-retry.yml`).
 
 데이터 수집·전처리 상세 내용은 [Docs/data_collection_preprocessing.md](Docs/data_collection_preprocessing.md) 참고
 
@@ -189,6 +191,8 @@
 <br>
 
 - **RAG**: 세법·정책 원문 문서를 벡터로 임베딩하여 벡터데이터베이스에 저장하고, 이를 근거로 검색·응답하여 환각을 방지
+- **Hybrid 검색**: pgvector Dense 검색과 Elasticsearch Nori(한국어 형태소) BM25를 RRF로 결합한 뒤 Cohere Rerank
+- **OCR**: Tesseract로 영수증 글자를 읽고 LLM이 항목을 정리(실패 시 Vision LLM)
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
@@ -214,9 +218,11 @@
 ![시스템 아키텍처](Docs/data/2026-09-16_102812.png)
 
 - **Frontend → Backend**: 외부에 노출되는 유일한 진입점. Frontend가 실행되고, api 요청이 프록시를 거쳐 Backend로 감
-- **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답·세액감면판정 근거 생성·공고문 요약을 담당
+- **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답(스트리밍)·세액감면판정 근거 생성·공고문 요약·영수증 OCR·사업계획서 생성/출력을 담당
 - **DB**: 관계형 데이터와 벡터 데이터를 Postgres + pgvector 하나로 통합 관리. Backend와 LLM이 각자 필요한 부분에 직접 접속
-- **외부 시스템**: 국세청·정부24·온통청년 등에서 받아온 원천 데이터는 관리자 기능을 통해 적재됨
+- **Elasticsearch**: pgvector 청크를 Nori BM25 인덱스로 옮겨 LLM 하이브리드 검색의 키워드 쪽으로 사용
+- **외부 시스템**: 국가법령정보·국세청·정부24·온통청년 등에서 받아온 원천 데이터는 수집 스크립트(`DB/run_collection.py`)가 DB에 직접 적재. 관리자 API는 소량 수기 등록용
+- **배포**: 단일 호스트 `docker-compose.yml`, AWS는 App EC2(`docker-compose.app.yml`)·Data EC2(`docker-compose.data.yml`) 2대 구성(`Docs/AWS_DEPLOY_GUIDE.md`). 상세는 `Docs/Design/ARCHITECTURE.md`
 
 
 ---
@@ -228,12 +234,19 @@
 ├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
-├── DB/              # DB 스키마와 수집 스크립트
+├── DB/              # DB 스키마, 수집 스크립트(scripts/), 수집 실행기(run_collection.py)
+├── elasticsearch/   # Nori 분석기를 설치한 Elasticsearch 이미지
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
-│   └── reports/     # 특정 시점의 검수·분석 보고서
-├── presentation/    # 발표자료(PPT, 데모 영상 등)
-├── docker-compose.yml
+│   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
+│   └── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
+├── Presentation/    # 발표자료(Slidev, /ppt/로 서빙)
+├── scripts/         # 운영 스크립트(backup_db.sh: DB 백업 → S3)
+├── .github/workflows/  # deploy(테스트·배포), collect(주간 수집), collect-retry(실패 재시도)
+├── docker-compose.yml       # 로컬·단일 호스트
+├── docker-compose.dev.yml   # 개발 오버라이드(--reload, frontend-dev)
+├── docker-compose.app.yml   # AWS App EC2
+├── docker-compose.data.yml  # AWS Data EC2
 ├── setup.sh         # 로컬 실행 (macOS / Linux / Git Bash)
 ├── setup.bat        # 로컬 실행 (Windows cmd.exe)
 └── .env.example     # 환경변수 키 목록 (값은 비어 있음)
@@ -250,6 +263,9 @@
 | 지출 분석 | FS-14~17 | 영수증 등록, 영수증 정보 추출(OCR), 지출 분류, 경비처리 가능성 분석 |
 | 지원정책 탐색 | FS-18~23 | 지원정책 검색, 맞춤 정책 추천, 지원 자격 확인, 신청기간·방법 확인, 공고문 AI 요약, 관심 정책 저장 |
 | 관리자 | FS-24~28 | 관리자 로그인, 사용자 관리, 세법·정책·공고문 데이터 관리, RAG 문서 관리, 시스템 모니터링 |
+| 사업계획서 | FS-29~31 | 사업계획서 초안 생성, AI 예비진단, 아이디어 어시스턴트 |
+
+기능별 상세·화면 연결 현황은 [Docs/Design/FUNCTIONAL_SPEC.md](Docs/Design/FUNCTIONAL_SPEC.md) 참고
 
 ---
 
@@ -268,22 +284,24 @@ flowchart LR
         A["회원/프로필"]
         B["AI 상담(챗봇)"]
         C["세무 관리"]
+        D["지출 분석(영수증)"]
         E["지원정책 탐색"]
+        H["사업계획서"]
         F["관리자 데이터 관리"]
     end
 
     subgraph Future["추가 기능 (추후 개발)"]
-        D["지출 분석(영수증)"]
         G["공공입찰 업무지원"]
     end
 
     User --- A
     User --- B
     User --- C
+    User --- D
     User --- E
+    User --- H
     Admin --- F
     Ext -. 데이터 제공 .-> F
-    User -. 추가 기능 .-> D
     User -. 추가 기능 .-> G
 ```
 
@@ -292,7 +310,7 @@ flowchart LR
 <br>
 
 Actor는 청년·1인 창업자(주 사용자) / 관리자 / 외부 시스템(국가법령정보센터·정부24·K-Startup·기업마당·온통청년, 하나로 통합)으로 총 셋으로 구분됨. 
-지출 분석(영수증)과 공공입찰 업무지원은 추가 기능으로 추후 개발 예정.
+지출 분석(영수증)은 지출관리 화면으로, 사업계획서는 사업계획서 화면으로 구현됨. 공공입찰 업무지원만 추가 기능(추후 개발)으로 범위 밖.
 
 </details>
 <br>
@@ -326,7 +344,7 @@ flowchart TD
             UC13(["청년창업 세액감면 자동판정"])
         end
 
-        subgraph G4["지출 분석 (추가 기능)"]
+        subgraph G4["지출 분석"]
             UC14(["영수증 등록"])
             UC15(["영수증 정보 추출(OCR)"])
             UC16(["지출 분류"])
@@ -342,12 +360,21 @@ flowchart TD
             UC23(["관심 정책 저장"])
         end
 
+        subgraph G7["사업계획서"]
+            UC29(["사업계획서 초안 생성"])
+            UC30(["사업계획서 AI 예비진단"])
+            UC31(["사업계획서 아이디어 어시스턴트"])
+        end
+
         subgraph G6["명세 외 구현 기능"]
             UX1(["창업 로드맵 AI 코치"])
             UX2(["개인 일정 등록·삭제"])
             UX3(["알림함 확인"])
             UX4(["대화 기록 조회·삭제"])
             UX5(["모집 중 공고·서비스 지표 조회(비로그인)"])
+            UX6(["구독 플랜 조회·변경(목업 결제)"])
+            UX7(["사업계획서 보관함 관리"])
+            UX8(["화면별 온보딩 안내"])
         end
     end
 
@@ -364,10 +391,10 @@ flowchart TD
     User --- UC11
     User --- UC12
     User --- UC13
-    User -.- UC14
-    User -.- UC15
-    User -.- UC16
-    User -.- UC17
+    User --- UC14
+    User --- UC15
+    User --- UC16
+    User --- UC17
     User --- UC18
     User --- UC19
     User --- UC20
@@ -378,7 +405,13 @@ flowchart TD
     User --- UX2
     User --- UX3
     User --- UX4
+    User --- UC29
+    User --- UC30
+    User --- UC31
     User --- UX5
+    User --- UX6
+    User --- UX7
+    User --- UX8
 
     UC06 -. include .-> UC08
 ```
@@ -387,10 +420,10 @@ flowchart TD
 <summary>설명</summary>
 <br>
 
-`지출 분석`(UC14~17)은 추후 개발 예정인 기능이라 점선으로 표시. 
+`지출 분석`(UC14~17)은 지출관리 화면(`ExpenseTracker.jsx`), `사업계획서`(UC29~31)는 사업계획서 화면(`BusinessPlanPage.jsx`)이 제공. 
 `세금/경비처리/절세 Q&A`는 답변마다 근거 문서를 함께 제시해야 하므로 `답변 근거 확인`을 `<<include>>` 관계로 연결. 
 
-`명세 외 구현 기능`(UX1~5)은 FS 번호는 없지만 실제 코드·화면에 있는 기능 : 로드맵 코치(`POST /chat/messages`의 `category=roadmap`), 개인 일정(`POST`·`DELETE /calendar`), 알림함(`/notifications`), 대화 기록(`GET`·`DELETE /chat/messages`), 비로그인 조회(`GET /announcements`·`GET /stats`).
+`명세 외 구현 기능`(UX1~8)은 FS 번호는 없지만 실제 코드·화면에 있는 기능 : 로드맵 코치(`category=roadmap` 채팅), 개인 일정(`POST`·`DELETE /calendar`), 알림함(`/notifications`, 화면 없음), 대화 기록(`/chat/messages`·`/chat/rooms`), 비로그인 조회(`GET /announcements`·`GET /stats`), 구독(`/users/me/subscription`), 사업계획서 보관함(`/bizplan/plans`), 온보딩 투어(서버 호출 없음). 화면 연결 여부는 [Docs/Design/USECASE.md](Docs/Design/USECASE.md) 참고.
 
 </details>
 <br>
@@ -422,7 +455,7 @@ flowchart TD
 <summary>설명</summary>
 <br>
 
-실제 데이터 수집은 [DB/scripts/02~06](DB/scripts) 스크립트가 DB에 직접 적재.
+실제 데이터 수집은 [DB/scripts](DB/scripts)의 02~13 스크립트를 [DB/run_collection.py](DB/run_collection.py)가 순서대로 실행해 DB에 직접 적재(배포 환경은 GitHub Actions 주간 실행). 관리자 API를 부르는 화면은 없음.
 
 </details>
 
@@ -535,6 +568,8 @@ erDiagram
         string image_url
         string status "DEFAULT 'pending'"
         datetime created_at
+        bytea image_data "원본 이미지"
+        string mime_type
     }
 
     receipt_extractions {
@@ -544,6 +579,8 @@ erDiagram
         string vendor
         int amount
         string items
+        string proof_type "증빙 종류"
+        string read_meta "JSON: 읽음 여부·원문 근거·OCR 신뢰도"
     }
 
     expenses {
@@ -556,6 +593,9 @@ erDiagram
         boolean deductible
         float deductible_confidence
         string deductible_basis
+        string deductible_tier "high/ambiguous/low"
+        boolean proof_valid "NULL=판단 불가"
+        string missing_fields "JSON 배열"
     }
 
     policies {
@@ -653,14 +693,106 @@ erDiagram
     }
 ```
 
+**유저 개인화·구독 테이블** (대화방·로드맵 체크·사업계획서 임시저장/보관함/서류·구독 플랜)
+
+```mermaid
+erDiagram
+    users ||--o{ chat_rooms : opens
+    chat_rooms ||--o{ chat_messages : contains
+    users ||--o{ chat_messages : sends
+    users ||--o{ user_roadmap_progress : checks
+    users ||--o| bizplan_drafts : drafts
+    users ||--o{ bizplan_documents : stores
+    bizplan_documents ||--o{ bizplan_document_files : formats
+    users ||--o{ bizplans : archives
+    users ||--o| user_subscriptions : subscribes
+
+    chat_rooms {
+        int id PK
+        int user_id FK
+        string category "tax / expense / saving / policy / roadmap"
+        string title "NULL이면 첫 질문을 제목으로"
+        datetime created_at
+        datetime updated_at "마지막 메시지 시각"
+        datetime deleted_at "NULL이면 활성, 삭제는 표시만"
+    }
+
+    chat_messages {
+        int id PK
+        int user_id FK
+        int room_id FK "NOT NULL, ON DELETE CASCADE"
+        string category
+        string question
+        string answer
+        datetime created_at
+    }
+
+    user_roadmap_progress {
+        int user_id PK "FK"
+        int version PK "DEFAULT 2"
+        string task_key PK "단계:인덱스 (예: A:0)"
+        datetime done_at
+    }
+
+    bizplan_drafts {
+        int user_id PK "FK"
+        jsonb data "작성 화면 상태 전체"
+        jsonb form "미사용"
+        jsonb plan "미사용"
+        jsonb eval_result "미사용"
+        datetime updated_at
+    }
+
+    bizplans {
+        int id PK
+        int user_id FK "ON DELETE CASCADE"
+        string title "DEFAULT ''"
+        string status "writing / drafted / evaluated / done"
+        int score "최근 평가 점수"
+        jsonb data "작성 화면 상태 전체"
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_subscriptions {
+        int user_id PK "FK, ON DELETE CASCADE"
+        string plan "free / basic / pro (CHECK)"
+        datetime started_at
+        datetime renews_at "무료면 NULL"
+    }
+
+    bizplan_documents {
+        int id PK
+        int user_id FK "ON DELETE CASCADE"
+        string title
+        string file_name
+        string format "hwpx / pdf"
+        string mime_type
+        bytea file_data "파일 원본"
+        int size_bytes
+        datetime created_at
+    }
+
+    bizplan_document_files {
+        int document_id PK "FK, ON DELETE CASCADE"
+        string format PK "추가 출력 형식"
+        string file_name
+        string mime_type
+        bytea file_data
+        int size_bytes
+    }
+```
+
 <details>
 <summary><b>&nbsp;&nbsp;주요 테이블 관계 설명</b></summary>
 <br>
 
 - **User – BusinessProfile**: 1:1. 개인정보와 사업자 정보를 분리해 API도 별도 엔드포인트로 관리
 - **CalendarEvent**: `event_type`이 `TAX`(세금 일정) / `POLICY`(지원정책 마감일) / `USER`(사용자 직접 등록) 세 값을 가지며, 공용 마스터 데이터와 사용자 소유 행이 한 테이블에 공존
-- **RagDocument**: `source_type` + `source_id`로 `tax_documents`/`policies`/`announcements` 여러 테이블을 논리적으로 참조하고, `policy_id`는 `policies(id)`를 가리키는 실제 FK. `policies` 행을 지우면 CASCADE로 관련 `rag_documents` 청크도 함께 삭제됨
+- **RagDocument**: `source_type` + `source_id`로 `tax_documents`/`policies`/`announcements` 여러 테이블을 논리적으로 참조하고, `policy_id`는 `policies(id)`를 가리키는 실제 FK. `ON DELETE` 옵션이 없어 청크가 참조하는 `policies` 행은 청크를 먼저 지워야 삭제됨
 - **Notification**: 앱 알림함·메일 대기열·브라우저 푸시를 한 테이블로 관리
+- **ChatRoom / UserRoadmapProgress / BizplanDraft / Bizplan / BizplanDocument / UserSubscription**: 브라우저 localStorage에 있던 대화방·로드맵 체크·사업계획서를 유저별로 서버에 두고, 사업계획서 보관함과 구독 플랜을 저장
+- 수집 실패 기록 `collection_failures`와 상세 설명은 [Docs/Design/ERD.md](Docs/Design/ERD.md) 참고
 
 </details>
 
@@ -693,9 +825,20 @@ classDiagram
         +date foundedAt
     }
 
+    class ChatRoom {
+        +int id
+        +int userId
+        +string category
+        +string title
+        +datetime createdAt
+        +datetime updatedAt
+        +datetime deletedAt
+    }
+
     class ChatMessage {
         +int id
         +int userId
+        +int roomId
         +string category
         +string question
         +string answer
@@ -765,6 +908,8 @@ classDiagram
         +string imageUrl
         +string status
         +datetime createdAt
+        +bytes imageData
+        +string mimeType
     }
 
     class ReceiptExtraction {
@@ -774,6 +919,8 @@ classDiagram
         +string vendor
         +int amount
         +string items
+        +string proofType
+        +string readMeta
     }
 
     class Expense {
@@ -786,6 +933,9 @@ classDiagram
         +boolean deductible
         +float deductibleConfidence
         +string deductibleBasis
+        +string deductibleTier
+        +boolean proofValid
+        +string missingFields
     }
 
     class Policy {
@@ -849,6 +999,58 @@ classDiagram
         +datetime createdAt
     }
 
+    class UserRoadmapProgress {
+        +int userId
+        +int version
+        +string taskKey
+        +datetime doneAt
+    }
+
+    class UserSubscription {
+        +int userId
+        +string plan
+        +datetime startedAt
+        +datetime renewsAt
+    }
+
+    class BizplanDraft {
+        +int userId
+        +json data
+        +datetime updatedAt
+    }
+
+    class Bizplan {
+        +int id
+        +int userId
+        +string title
+        +string status
+        +int score
+        +json data
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class BizplanDocument {
+        +int id
+        +int userId
+        +string title
+        +string fileName
+        +string format
+        +string mimeType
+        +bytes fileData
+        +int sizeBytes
+        +datetime createdAt
+    }
+
+    class BizplanDocumentFile {
+        +int documentId
+        +string format
+        +string fileName
+        +string mimeType
+        +bytes fileData
+        +int sizeBytes
+    }
+
     class RagDocument {
         +int id
         +string sourceType
@@ -862,6 +1064,8 @@ classDiagram
     }
 
     User "1" --> "0..1" BusinessProfile
+    User "1" --> "0..*" ChatRoom
+    ChatRoom "1" --> "0..*" ChatMessage
     User "1" --> "0..*" ChatMessage
     ChatMessage "1" --> "0..*" AnswerSource
     User "1" --> "0..1" TaxInfo
@@ -882,6 +1086,12 @@ classDiagram
     AdminUser "1" --> "0..*" TaxDocument
     User "1" --> "0..*" CalendarEvent
     User "1" --> "0..*" Notification
+    User "1" --> "0..*" UserRoadmapProgress
+    User "1" --> "0..1" UserSubscription
+    User "1" --> "0..1" BizplanDraft
+    User "1" --> "0..*" Bizplan
+    User "1" --> "0..*" BizplanDocument
+    BizplanDocument "1" --> "0..*" BizplanDocumentFile
 ```
 
 <details>
@@ -890,7 +1100,7 @@ classDiagram
 
 - 속성 타입·제약: ERD 참고
 - RagDocument: `sourceType`/`sourceId`(논리 참조) + `policyId`(실제 FK) 혼재
-- Receipt·ReceiptExtraction·Expense: 추가 기능(추후 개발)용, 화면 미연결
+- Receipt·ReceiptExtraction·Expense: 지출관리 화면(FS-14~17)용
 - `tax_rag_cache`: Backend 미사용 파생 테이블이라 클래스 제외
 
 </details>
@@ -910,16 +1120,28 @@ classDiagram
         +updateMe(userId, payload) User
         +getBusinessProfile(userId) BusinessProfile
         +updateBusinessProfile(userId, payload) BusinessProfile
+        +getRoadmapProgress(userId) RoadmapProgress
+        +setRoadmapTask(userId, taskKey, done)
         +onboardingComplete(userId) bool
+    }
+
+    class SubscriptionService {
+        +getSubscription(userId) Subscription
+        +changePlan(userId, plan) Subscription
     }
 
     class ChatService {
         +suggestedQuestions(category) string[]
-        +sendMessage(userId, category, question, roadmapStep) ChatMessage
+        +sendMessage(userId, category, question, roadmapStep, roomId) ChatMessage
+        +sendMessageAsync(userId, category, question, roadmapStep, roomId) ChatMessage
+        +prepareMessageStreamAsync(userId, category, roadmapStep, roomId) Options
+        +sendMessageStreamAsync(userId, category, question, roomId, options) Event[]
+        +getSources(messageId, userId) AnswerSource[]
         +listMessages(userId, category) ChatMessage[]
         +clearMessages(userId, category) int
-        +deleteMessages(userId, messageIds) int
-        +getSources(messageId, userId) AnswerSource[]
+        +listRooms(userId, category) ChatRoom[]
+        +renameRoom(userId, roomId, title)
+        +deleteRoom(userId, roomId)
     }
 
     class CalendarService {
@@ -940,16 +1162,44 @@ classDiagram
     }
 
     class ExpenseService {
-        +createReceipt(userId, filename, imageBase64, mimeType) Receipt
+        +createReceipt(userId, filename, imageBase64, mimeType, imageBytes) Receipt
         +getExtraction(receiptId, userId) ReceiptExtraction
         +listExpenses(userId, category, fromDate, toDate) Expense[]
         +updateCategory(expenseId, userId, category) DeductibilityResult
-        +deleteExpense(expenseId, userId)
         +deductibility(expenseId, userId) DeductibilityResult
+        +analysis(expenseId, userId) AnalysisResult
+        +addItem(expenseId, userId, name, price) AnalysisResult
+        +deleteItem(expenseId, userId, itemIndex) AnalysisResult
+        +updateVendor(expenseId, userId, vendor) AnalysisResult
+        +getReceiptImage(receiptId, userId) bytes
+        +deleteExpense(expenseId, userId)
+    }
+
+    class BizplanService {
+        +generate(body, userId) BusinessPlan
+        +evaluate(body) BusinessPlanEvaluation
+        +coach(body) CoachAnswer
+        +refine(body) RefinedInput
+        +inspectTemplate(body) TemplateInfo
+        +render(body) RenderedFile
+        +getDraft(userId) BizplanDraft
+        +saveDraft(userId, data)
+        +deleteDraft(userId)
+        +saveDocument(userId, body) BizplanDocument
+        +listDocuments(userId) BizplanDocument[]
+        +getDocumentFile(userId, documentId, format) bytes
+        +deleteDocument(userId, documentId)
+        +planMeta(data) PlanMeta
+        +listPlans(userId) Bizplan[]
+        +savePlan(userId, planId, data) int
+        +renamePlan(userId, planId, title)
+        +deletePlan(userId, planId)
+        +openPlan(userId, planId)
+        +newPlan(userId)
     }
 
     class PolicyService {
-        +search(keyword, region, industry, userId, offset, limit) Policy[]
+        +search(keyword, region, industry, userId, offset, limit, onlyAnnouncements) Policy[]
         +recommendations(userId, limit) Policy[]
         +detail(policyId) Policy
         +eligibility(policyId, userId) EligibilityResult
@@ -986,9 +1236,17 @@ classDiagram
         +llmStatus() Status
         +ensureIndexReady() IndexState
         +ragAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
+        +asyncRagAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
+        +asyncRagAnswerStream(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Event[]
         +explainTaxReduction(eligible, reasons, conditions) Explanation
         +extractReceipt(filename, imageBase64, mimeType) ReceiptFields
         +explainExpense(category, vendor, amount, items) DeductibilityResult
+        +generateBusinessPlan(fields) BusinessPlan
+        +evaluateBusinessPlan(fields) BusinessPlanEvaluation
+        +bizplanCoach(fields) CoachAnswer
+        +refineBusinessPlan(fields) RefinedInput
+        +inspectBusinessPlanTemplate(fields) TemplateInfo
+        +renderBusinessPlan(fields) RenderedFile
         +summarizeAnnouncement(rawContent, source) Summary
         +reindex()
     }
@@ -997,6 +1255,10 @@ classDiagram
     AuthService ..> AdminUser
     UserService ..> User
     UserService ..> BusinessProfile
+    UserService ..> UserRoadmapProgress
+    SubscriptionService ..> UserSubscription
+    SubscriptionService ..> ChatMessage
+    ChatService ..> ChatRoom
     ChatService ..> ChatMessage
     ChatService ..> AnswerSource
     ChatService ..> LLMServiceClient
@@ -1010,6 +1272,11 @@ classDiagram
     ExpenseService ..> ReceiptExtraction
     ExpenseService ..> Expense
     ExpenseService ..> LLMServiceClient
+    BizplanService ..> BizplanDraft
+    BizplanService ..> Bizplan
+    BizplanService ..> BizplanDocument
+    BizplanService ..> BizplanDocumentFile
+    BizplanService ..> LLMServiceClient
     PolicyService ..> Policy
     PolicyService ..> Announcement
     PolicyService ..> AnnouncementSummary
@@ -1094,19 +1361,22 @@ sequenceDiagram
     participant LLM as LLM 서비스
     participant DB as DB
 
-    FE->>API: POST /chat/messages { category, question, roadmapStep? }
+    FE->>API: POST /chat/messages/stream { category, question, roadmapStep?, roomId? }
     API->>SVC: 질의 전달
-    SVC->>DB: 최근 대화, 사용자·사업자 프로필, (policy일 때) 모집 중 공고 조회
+    SVC->>DB: 같은 대화방 최근 대화, 사용자·사업자 프로필, (policy일 때) 모집 중 공고 조회
     DB-->>SVC: conversationHistory, userContext, noticeResults 재료
-    SVC->>LLM: POST /rag/chat { category, question, roadmapStep, userContext, noticeResults, conversationHistory }
-    alt LLM 응답 (45초 policy·roadmap / 120초 tax·expense·saving)
-        LLM-->>SVC: answer, sources, grounded, route, status, guardrail_reason
-    else 미연결·빈 답변
+    SVC->>LLM: POST /rag/chat/stream { category, question, roadmapStep, userContext, noticeResults, conversationHistory }
+    loop 답변 생성 중 (45초 policy·roadmap / 120초 tax·expense·saving)
+        LLM-->>SVC: {type: draft, answer}
+        SVC-->>FE: {type: draft, answer} (NDJSON 한 줄)
+    end
+    alt 정상 종료
+        LLM-->>SVC: {type: done, result: answer, sources, grounded, route, status, guardrail_reason}
+    else error 이벤트·미연결·done 없이 종료
         SVC->>SVC: 목업 답변 (status=integration_unavailable, llmUsed=false)
     end
-    SVC->>DB: ChatMessage, AnswerSource 저장
-    SVC-->>API: 답변
-    API-->>FE: 200 OK (messageId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason)
+    SVC->>DB: ChatRoom(없으면 생성), ChatMessage, AnswerSource 저장
+    SVC-->>FE: {type: done, result: messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason}
 
     Note over FE,API: 이후 근거 확인 요청
     FE->>API: GET /chat/messages/{messageId}/sources
@@ -1122,7 +1392,7 @@ sequenceDiagram
 <br>
 
 답변 생성 시점에 근거 문서를 함께 저장해두므로, 이후 "답변 근거 확인"(FS-08)은 LLM을 다시 호출하지 않고 DB 조회만으로 처리. 
-Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필), `noticeResults`(`category=policy`일 때만 모집 중 공고 상위 20건, 본문 800자로 자름), `conversationHistory`(같은 category의 최근 완료 대화) 세 가지를 조립함.(`Backend/services/chat_service.py`) 
+Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필), `noticeResults`(`category=policy`일 때만 모집 중 공고 상위 20건, 본문 800자로 자름), `conversationHistory`(같은 대화방의 최근 완료 대화) 세 가지를 조립함. 채팅 화면은 스트리밍 경로(`/chat/messages/stream` → `/rag/chat/stream`)로 답변을 생성 중에 이어서 보여줌.(`Backend/services/chat_service.py`) 
 실제 공고 조회는 Backend가, LLM은 넘겨받은 목록을 근거로 쓸 뿐 DB를 직접 뒤지지 않음. 
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 `status≠success`면 `needsConfirmation=true`로 표시.
 
@@ -1209,7 +1479,8 @@ sequenceDiagram
 | | 통합 테스트 (실제 OpenAI·Cohere·PostgreSQL 연동 검증) | ✅ 완료 |
 | | 버그 수정 | 🔄 통합 결함 53건 중 35건 처리 |
 | **7. 배포** | Docker 환경 구성(`docker-compose.yml`, `setup.sh`, `setup.bat`) | ✅ 완료 |
-| | CI/CD 구성 / 배포 및 운영 점검 | ⬜ 미착수 |
+| | CI/CD 구성(GitHub Actions `deploy.yml`·`collect.yml`·`collect-retry.yml`) | ✅ 완료 |
+| | 배포 및 운영 점검(AWS App/Data EC2 구성·가이드, HTTPS·PWA 반영) | 🔄 진행 중 |
 | **8. 문서화** | DESIGN.md 작성 / 발표·데모 자료 준비 | 🔄 진행 중 |
 | | README 작성 | ✅ 완료 |
 
@@ -1311,25 +1582,43 @@ sequenceDiagram
 | [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
 | [LLM_TAX_HALF.md](Docs/reports/LLM_TAX_HALF.md) | 캐시 적용 전후 비교용 세금 평가 |
 | [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
-| [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/) | 통합·시연 결함 목록 |
+| [INTEGRATION_ISSUES_0910.md](Docs/reports/INTEGRATION_ISSUES_0910.md) / [INTEGRATION_ISSUES_0914.md](Docs/reports/INTEGRATION_ISSUES_0914.md) | 통합·시연 결함 목록 |
 | [LLM_INTEGRATION_AUDIT_0909.md](Docs/reports/LLM_INTEGRATION_AUDIT_0909.md) | Backend↔LLM 연동 검수 보고서 |
 | [LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md](Docs/reports/LLM_IMPROVEMENT_OPTIONS_COMPARISON_0914.md) | 향후 개선안 비교·우선순위 |
 | [ELASTICSEARCH_COMPARISON_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md) / [ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md](Docs/reports/ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md) | Elasticsearch 검색기 비교, 서빙·재색인 일관성 수정 |
 | [USER_PERSONALIZATION_DB.md](Docs/reports/USER_PERSONALIZATION_DB.md) / [USER_PERSONALIZATION_PLAN.md](Docs/reports/USER_PERSONALIZATION_PLAN.md) | 유저 개인화 데이터 DB 이관안·연결 계획 |
 | [BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md](Docs/reports/BUSINESS_PLAN_WORKFLOW_SESSION_REPORT_20260924.md) | 사업계획서 작업 흐름 정리 |
+| [LLM-ADVANCE_REPORT.md](Docs/reports/LLM-ADVANCE_REPORT.md) | LLM 비동기·채팅 스트리밍·사업계획서 개선 병합 정리 |
+| [REPALCE_JUDGE_MODEL_RESULT.md](Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md) / [CATBOOST_JUDGE_COMPARISON.md](Docs/reports/REPLACE_JUDGE_MODEL/CATBOOST_JUDGE_COMPARISON.md) | LLM Judge를 ML 모델로 대체하는 실험 결과(미채택) |
+
+**계획서·가이드** (구현 근거로 남긴 문서. 현재 상태는 각 문서 머리말과 코드 기준)
+
+| 문서 | 유형 | 내용 |
+| --- | --- | --- |
+| [AWS_DEPLOY_GUIDE.md](Docs/AWS_DEPLOY_GUIDE.md) | 가이드 | AWS 콘솔 배포 절차, 데이터 수집 자동화 |
+| [AWS_MIGRATION_PLAN.md](Docs/reports/AWS_MIGRATION_PLAN.md) | 계획(구현됨) | AWS 이전 설계 |
+| [PWA_PLAN.md](Docs/reports/PWA_PLAN.md) | 계획(구현됨) | PWA·HTTPS 적용 계획 |
+| [BIZPLAN_DOCUMENT_SAVE_PLAN.md](Docs/reports/BIZPLAN_DOCUMENT_SAVE_PLAN.md) | 계획(구현 후 서류 탭 제거) | 사업계획서 파일 보관 |
+| [subscription_cost.md](Docs/reports/subscription_cost.md) | 분석 | LLM 단가·구독 플랜·마진(구독 목업 결제 근거) |
+| [RAG_search_improve_plan.md](Docs/imporve_plan/RAG_search_improve_plan.md) | 계획 | 검색 A/B·Judge 대체 계획(1단계 Nori 하이브리드 채택, 2단계 ML Judge 미채택) |
+| [Elasticsearch_Nori_setting_guide.md](Docs/imporve_plan/Elasticsearch_Nori_setting_guide.md) | 가이드 | Elasticsearch·Nori 설정 |
+| [FEATURE_ROADMAP_EXPENSE.md](Docs/FEATURE_ROADMAP_EXPENSE.md) | 기능 정리 | 창업 로드맵·지출관리·사업계획서 설명과 진행 현황 |
+| [Presentation/DESIGN.md](Presentation/DESIGN.md) | 가이드 | 발표자료(Slidev) 디자인 규칙 |
 
 
 ---
 
 ## 15. 향후 확장
 
-1. **사업기획서 초안 작성**: 초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 향후 창업 시 사용될 사업기획서 초안을 작성하는 기능까지 확장. 청년·1인 창업자의 창업 행정 업무 전반을 지원하는 AI 플랫폼을 목표로 함
+> 기존 확장 계획이던 **사업계획서 초안 작성**(사업계획서 화면), **영수증 지출 분석**(지출관리 화면, Tesseract OCR + LLM), **AWS 웹 배포**(App/Data EC2, GitHub Actions, HTTPS·PWA 구성)는 구현됨.
 
-2. **영수증을 통한 지출 분석**: 영수증 등의 지출 자료를 기반으로 OpenAI Vision 호출을 통해 영수증 정보 추출 → 지출 분류 → 지출 내역 분석 → 경비처리 가능성 안내 기능을 제공
+1. **공고문 DB 적재 시 요약본 즉시 생성**: 공고문이 DB에 적재될 때 요약도 기본으로 함께 생성·저장되도록 개선
 
-3. **배포 범위 확대**: AWS를 사용한 웹사이트 배포 및 앱 배포
+2. **지원금 대상 여부 판정**: 지출 항목이 정부지원금 사용 대상인지 판정(`Docs/FEATURE_ROADMAP_EXPENSE.md` 4절)
 
-4. **공고문 DB 적재 시 요약본 즉시 생성**: 공고문이 DB에 적재될 때 요약도 기본으로 함께 생성·저장되도록 개선
+3. **공공입찰 업무지원**: 유스케이스상 추가 기능(범위 밖)으로 남은 항목
+
+4. **앱 배포 확대**: 현재 PWA 설치만 지원. 앱 스토어 배포는 미착수
 
 
 ---
@@ -1351,11 +1640,13 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Backend API 문서 | http://localhost:8000/docs |
 | LLM API 문서 | http://localhost:8001/docs |
 
-- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다
+- 로컬 개발에서는 `db`·`db-migrate`(스키마 적용 후 종료)·`elasticsearch`·`llm`·`backend`가 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend`·`presentation` 서비스는 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다
+- 코드 수정을 바로 반영하는 개발 모드: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d` (backend·llm `--reload`, Vite 컨테이너 `frontend-dev` :5173)
+- AWS 배포는 [Docs/AWS_DEPLOY_GUIDE.md](Docs/AWS_DEPLOY_GUIDE.md), 학원 내부망 단일 서버 배포는 `Docs/README.md` 12절
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
-- 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 3절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
+- 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 4절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
 
 ---
 

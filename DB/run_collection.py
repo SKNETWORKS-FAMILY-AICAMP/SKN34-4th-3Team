@@ -44,12 +44,13 @@ SQL_SEQUENCE = [
 def get_db_config() -> dict:
     """DB 접속 정보를 환경변수에서 읽는다.
 
-    다른 수집 스크립트(02~07번)들과 동일하게 DB_HOST/DB_PORT를 쓴다.
-    (근거: Docs/AWS_MIGRATION_PLAN.md 10절 "feature/scheduler 처리
+    다른 수집 스크립트(scripts/collect_common.py의 DB_CONFIG)와 동일하게
+    DB_HOST/DB_PORT/POSTGRES_*를 쓴다.
+    (근거: Docs/reports/AWS_MIGRATION_PLAN.md 10절 "feature/scheduler 처리
      방침" 표 — "SQL 실행부를 DB_HOST 기준으로 수정 후 병합")
-    collector 서비스의 compose 정의는 아직 없어서(AWS 구조 확정 후
-    작성 예정), 배포 시 .env의 DB_HOST 값을 Data EC2 주소로 설정하는
-    형태가 될 것으로 보인다.
+    AWS에서는 docker-compose.app.yml의 collector 서비스가 DB_HOST에
+    COMPOSE_DB_HOST(Data EC2 private IP)를, DB_PORT에 COMPOSE_DB_PORT
+    (기본 5432)를 넣고, POSTGRES_*는 .env(env_file)에서 받는다.
     """
     return {
         "host": os.getenv("DB_HOST", "localhost"),

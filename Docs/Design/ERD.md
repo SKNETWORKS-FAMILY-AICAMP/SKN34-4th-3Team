@@ -269,6 +269,8 @@ erDiagram
 
 Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채웠다(`notifications` 테이블, `users.phone`·`status`, `calendar_events.user_id`, `reminders.dispatched`, `expenses.user_id`, 영수증 경비 판정용 `receipts.image_data`·`mime_type`, `receipt_extractions.proof_type`·`read_meta`, `expenses.deductible_tier`·`proof_valid`·`missing_fields`, `announcements.apply_method`, `announcement_summaries.llm_used`, `users.region`의 `chk_users_region` CHECK 제약(`NOT VALID`)). LLM 세금 캐시 테이블 `tax_rag_cache`도 이 파일에 있다. 위 다이어그램은 이를 반영한 상태다.
 
+같은 파일에 있는 유저 개인화 테이블(`chat_rooms`, `user_roadmap_progress`, `bizplan_drafts`, `bizplans`, `bizplan_documents`, `bizplan_document_files`)과 `user_subscriptions`는 아래 "유저 개인화 저장 이관" 절에, 수집 운영용 `collection_failures`는 "수집 실패 기록" 절에 따로 그렸다. `tax_documents.title VARCHAR(500)` 변경은 `01_schema.sql`에도 이미 반영돼 있어 재적용해도 변화가 없다.
+
 `meta_ids`만 추가하지 않았다. 인메모리 id 카운터를 저장하려던 덤프 산출물이라, `SERIAL`을 쓰면 개념 자체가 사라진다. Backend의 Postgres 덤프 경로도 제거됐다(`Docs/STATUS.md` P0-3).
 
 `expenses.user_id`는 `receipt_id → receipts.user_id`로 유도할 수 있는 비정규화다. 조회 필터 편의를 위해 남겨 두었다.
@@ -283,11 +285,11 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 - **`db-migrate`**: `db`가 healthy가 되면 `psql -v ON_ERROR_STOP=1`로 `app_extras.sql`을 적용하고 종료하는 one-shot 서비스다. `backend`·`llm`은 이 서비스가 성공해야 기동한다. 기존 볼륨에도 스키마 변경이 `docker compose up`만으로 반영된다. 수동 재적용은 `docker compose up -d db-migrate`
 - `db` healthcheck는 `pg_isready -h 127.0.0.1`(TCP)로 확인한다. initdb 중 임시 서버는 TCP를 열지 않아, 소켓으로 확인하면 init 도중 healthy가 되어 `db-migrate`가 연결 거부로 실패할 수 있다
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
-- `Backend/core/db.py`의 `_apply_extras`는 파일을 `;` 단위로 잘라 한 트랜잭션에서 실행한다. `DO $$` 블록이 쪼개져 실패하면 이후 문장이 모두 실패하고 롤백되므로 사실상 적용되지 않는다. compose 컨테이너에서는 파일 경로(`/DB`)도 없다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
+- `Backend/core/db.py`의 `_apply_extras`는 파일 전체를 한 번에 실행하고 실패하면 `rollback()` 후 경고 로그만 남긴다. compose 컨테이너에서는 파일 경로(`/DB`)가 없어 건너뛴다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
 - `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
 - compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
 
-## 유저 개인화 저장 이관 (대화방·로드맵·사업계획서 적용)
+## 유저 개인화 저장 이관 (대화방·로드맵·사업계획서·구독 적용)
 
 브라우저 localStorage에만 있던 대화방·로드맵 체크·사업계획서 초안을 유저별로 DB에 둔다. 스키마는 `DB/app_extras.sql`에 있고, 코드는 세 기능 모두 전환했다(로드맵·사업계획서는 `feature/personalize`, 기존 localStorage 값은 로그인 때 한 번 서버로 옮긴다). 로드맵·사업계획서 연결 내용은 `Docs/reports/USER_PERSONALIZATION_PLAN.md`에 있다. 위 다이어그램에는 넣지 않았다. DDL·코드 수정안·검증 절차는 `Docs/reports/USER_PERSONALIZATION_DB.md`에 있다.
 
@@ -300,11 +302,13 @@ erDiagram
     users ||--o| bizplan_drafts : drafts
     users ||--o{ bizplan_documents : stores
     bizplan_documents ||--o{ bizplan_document_files : formats
+    users ||--o{ bizplans : archives
+    users ||--o| user_subscriptions : subscribes
 
     chat_rooms {
         int id PK
         int user_id FK
-        string category "tax / policy / roadmap"
+        string category "tax / expense / saving / policy / roadmap"
         string title "NULL이면 첫 질문을 제목으로"
         datetime created_at
         datetime updated_at "마지막 메시지 시각"
@@ -337,6 +341,24 @@ erDiagram
         datetime updated_at
     }
 
+    bizplans {
+        int id PK
+        int user_id FK "ON DELETE CASCADE"
+        string title "DEFAULT ''"
+        string status "writing / drafted / evaluated / done"
+        int score "최근 평가 점수"
+        jsonb data "작성 화면 상태 전체"
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_subscriptions {
+        int user_id PK "FK, ON DELETE CASCADE"
+        string plan "free / basic / pro (CHECK)"
+        datetime started_at
+        datetime renews_at "무료면 NULL"
+    }
+
     bizplan_documents {
         int id PK
         int user_id FK "ON DELETE CASCADE"
@@ -362,4 +384,28 @@ erDiagram
 - **User – ChatRoom – ChatMessage**: localStorage의 방 경계(`changeup:chat-rooms:*`)·이름(`chat-room-names`)·숨김(`chat-room-hidden`)을 대체한다. 방이 서버에 있어 LLM 대화 문맥(`repo.recent_chats`)을 방 단위로 자를 수 있다. 기존 메시지는 `(user_id, category)`당 "이전 대화" 방 하나로 백필한다. `chat_messages.category`는 통계·호환용으로 남긴다. 방 삭제는 `deleted_at`만 채우고 방·메시지·근거 행은 남겨 관리자 통계를 보존한다.
 - **User – UserRoadmapProgress**: 완료한 체크 항목만 행으로 둔다(해제하면 삭제). `task_key`는 프론트의 현재 키 형식(`A:0`)을 그대로 쓰고, 항목 구성이 바뀌면 `version`을 올려 이전 체크를 무효화한다.
 - **User – BizplanDraft**: 유저당 임시저장 1건(1:1). 저장 필드가 자주 늘어나 작성 화면 상태 전체(양식·이미지 Base64 포함)를 `data` JSONB 하나에 둔다. `form`·`plan`·`eval_result`는 쓰지 않으며 삭제는 팀 합의 뒤 진행한다.
-- **User – BizplanDocument – BizplanDocumentFile**: ‘문서 저장’으로 기본 문서는 PDF·HWPX를 함께 보관한다. 대표 파일은 `bizplan_documents`, 추가 형식은 `bizplan_document_files`에 두고 같은 트랜잭션에서 저장·삭제한다. 제출 양식과 기존 단일 파일은 원본 형식만 제공한다. 사용자당 8문서, 파일당 50MiB, 중복 저장 허용. 두 형식은 1문서로 계산한다. 임시저장과 별도로 마이페이지에서 형식 선택·다운로드·삭제한다. `user_id, created_at DESC` 인덱스를 사용하고, 저장 직전 사용자 행을 잠근 트랜잭션에서 개수를 재확인해 동시 요청에도 상한을 보장한다.
+- **User – Bizplan**: 사업계획서 보관함(1:N). 작성 화면 상태 전체를 건별로 `data`에 두고, 목록용 `title`·`status`·`score`는 저장 시 `data`에서 뽑는다(`bizplan_service.plan_meta`). 지금 작성 화면에 열린 건은 `bizplan_drafts.data.planId`로 가리킨다. 마이페이지 `사업계획서` 메뉴가 `/bizplan/plans*`로 관리한다. `(user_id, updated_at DESC)` 인덱스.
+- **User – UserSubscription**: 구독 플랜(1:0..1). 행이 없으면 무료 플랜이다. 결제는 목업이라 결제 내역 테이블은 없다(`/users/me/subscription`).
+- **User – BizplanDocument – BizplanDocumentFile**: ‘문서 저장’으로 기본 문서는 PDF·HWPX를 함께 보관한다. 대표 파일은 `bizplan_documents`, 추가 형식은 `bizplan_document_files`에 두고 같은 트랜잭션에서 저장·삭제한다. 제출 양식과 기존 단일 파일은 원본 형식만 제공한다. 사용자당 8문서, 파일당 50MiB, 중복 저장 허용. 두 형식은 1문서로 계산한다. API(`/bizplan/documents*`)만 남아 있고 마이페이지 서류 탭은 제거돼(`227dbfd`) 현재 화면에서 쓰지 않는다. `user_id, created_at DESC` 인덱스를 사용하고, 저장 직전 사용자 행을 잠근 트랜잭션에서 개수를 재확인해 동시 요청에도 상한을 보장한다.
+
+## 수집 실패 기록
+
+`DB/scripts/collect_common.py`가 수집 실패 단위(페이지·키워드·법령 등)를 기록하는 운영 테이블이다. 다른 테이블과 FK가 없다.
+
+```mermaid
+erDiagram
+    collection_failures {
+        bigint id PK
+        string script "예: 04_collect_kstartup.py"
+        string unit "page=3 / mst=280409 등"
+        string kind "transient / permanent (CHECK)"
+        string reason
+        int attempt "지연 재실행 회차, 정기 실행은 0"
+        datetime next_retry_at
+        datetime resolved_at "NULL이면 미해결"
+        datetime created_at
+    }
+```
+
+- `transient`는 `DB/run_collection.py --retry`(GitHub Actions `collect-retry.yml`)가 `next_retry_at` 이후 다시 실행하고, `permanent`는 담당자 조치 대상이다
+- 스크립트가 다시 실행되면 그 스크립트의 이전 미해결 행은 `resolved_at`으로 닫힌다. 미해결 행 조회용 부분 인덱스 `idx_collection_failures_open`
