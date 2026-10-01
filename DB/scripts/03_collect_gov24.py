@@ -4,9 +4,10 @@
 # =========================================================
 
 import os
-import requests
+import sys
 import psycopg2
 from dotenv import load_dotenv
+from collect_common import exit_code, json_of, record_failure, request
 
 load_dotenv()
 
@@ -32,32 +33,30 @@ def fetch_services(keyword, page=1, per_page=100):
         f"&cond[서비스명::LIKE]={keyword}"
         f"&serviceKey={API_KEY}"
     )
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError:
-        raise requests.exceptions.HTTPError(
-            f"정부24 API 요청 실패 (keyword={keyword}, page={page}, status={response.status_code}) "
-        ) from None
-    return response.json()
+    return json_of(request("GET", url))
 
 
-def fetch_all_pages(keyword):
-    all_items = []
+def collect_keyword(conn, keyword):
+    """페이지마다 바로 적재한다. 페이지가 실패하면 기록하고 이 키워드는 거기서 멈춘다."""
+    fetched = 0
     page = 1
     while True:
-        data = fetch_services(keyword, page=page)
-        items = data.get("data", [])
-        all_items.extend(items)
+        try:
+            data = fetch_services(keyword, page=page)
+            items = data.get("data", [])
+            fetched += len(items)
 
-        match_count = data.get("matchCount", 0)
-        print(f"  [{keyword}] {page}페이지: {len(items)}건 (전체 {match_count}건 중 누적 {len(all_items)}건)")
+            match_count = data.get("matchCount", 0)
+            print(f"  [{keyword}] {page}페이지: {len(items)}건 (전체 {match_count}건 중 누적 {fetched}건)")
 
-        if len(all_items) >= match_count or not items:
-            break
+            insert_policies(conn, [map_to_policy_row(item) for item in items])
+        except Exception as e:
+            record_failure(conn, f"keyword={keyword},page={page}", e)
+            return
+
+        if fetched >= match_count or not items:
+            return
         page += 1
-
-    return all_items
 
 
 def map_to_policy_row(item):
@@ -72,8 +71,7 @@ def map_to_policy_row(item):
     }
 
 
-def insert_policies(rows):
-    conn = psycopg2.connect(**DB_CONFIG)
+def insert_policies(conn, rows):
     cur = conn.cursor()
 
     inserted = 0
@@ -93,15 +91,15 @@ def insert_policies(rows):
 
     conn.commit()
     cur.close()
-    conn.close()
     print(f"신규 {inserted}건 저장 (중복 {len(rows) - inserted}건은 건너뜀)")
 
 
 if __name__ == "__main__":
+    conn = psycopg2.connect(**DB_CONFIG)
     for keyword in SEARCH_KEYWORDS:
         print(f"[{keyword}] 검색 시작...")
-        items = fetch_all_pages(keyword)
-        rows = [map_to_policy_row(item) for item in items]
-        insert_policies(rows)
+        collect_keyword(conn, keyword)
+    conn.close()
 
     print("전체 수집 완료!")
+    sys.exit(exit_code())

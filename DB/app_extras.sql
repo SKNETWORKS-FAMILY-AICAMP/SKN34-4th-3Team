@@ -172,3 +172,19 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     started_at TIMESTAMP NOT NULL DEFAULT now(),
     renews_at  TIMESTAMP
 );
+
+-- 수집 실패 단위 기록(DB/scripts/collect_common.py). 스크립트가 다시 실행되면 이전 미해결 행은 resolved_at 으로 닫는다.
+-- transient 는 run_collection.py --retry 가 next_retry_at 이후 자동 재실행, permanent 는 담당자 조치 대상.
+CREATE TABLE IF NOT EXISTS collection_failures (
+    id            BIGSERIAL PRIMARY KEY,
+    script        VARCHAR(100) NOT NULL,          -- 04_collect_kstartup.py
+    unit          VARCHAR(255) NOT NULL,          -- page=3 / keyword=창업,page=2 / mst=280409 / ntstDcmId=..
+    kind          VARCHAR(20)  NOT NULL CHECK (kind IN ('transient','permanent')),
+    reason        TEXT,
+    attempt       INT NOT NULL DEFAULT 0,         -- 지연 재실행 회차(정기 실행은 0)
+    next_retry_at TIMESTAMPTZ,
+    resolved_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_collection_failures_open
+    ON collection_failures (script) WHERE resolved_at IS NULL;

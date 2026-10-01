@@ -10,6 +10,7 @@
 #   같은 방식(-h COMPOSE_DB_HOST로 원격 접속)을 따름.
 # =========================================================
 
+import argparse
 import os
 import subprocess
 import sys
@@ -17,7 +18,12 @@ from pathlib import Path
 
 import psycopg2
 
+from scripts.collect_common import EXIT_PERMANENT, EXIT_TRANSIENT
+
 SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
+
+# --retry 로 재실행할 대상이 없을 때의 종료 코드(.github/workflows/collect-retry.yml 이 구분한다).
+EXIT_NOTHING_TO_RETRY = 3
 
 COLLECTION_SEQUENCE = [
     "02_collect_tax_law.py",
@@ -54,20 +60,69 @@ def get_db_config() -> dict:
     }
 
 
-def run_python_script(script_name: str) -> bool:
-    """수집 스크립트 하나를 실행하고 성공 여부를 반환한다."""
+def resolve_open_failures(script_name: str, db_config: dict) -> None:
+    """스크립트를 다시 실행하기 전에 이전 미해결 실패를 닫는다(이번 실행이 전체를 다시 시도한다)."""
+    with psycopg2.connect(**db_config) as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE collection_failures SET resolved_at = now() WHERE script = %s AND resolved_at IS NULL",
+            (script_name,),
+        )
+    conn.close()
+
+
+def record_crash(script_name: str, returncode: int, attempt: int, db_config: dict) -> None:
+    """실패를 기록하지 못하고 비정상 종료한 스크립트를 permanent 로 남긴다."""
+    try:
+        with psycopg2.connect(**db_config) as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO collection_failures (script, unit, kind, reason, attempt)
+                VALUES (%s, 'script', 'permanent', %s, %s)
+                """,
+                (script_name, f"비정상 종료(rc={returncode})", attempt),
+            )
+        conn.close()
+    except psycopg2.Error as e:
+        print(f"[기록 실패] {script_name}: {e}")
+
+
+def find_due_retries(db_config: dict) -> dict:
+    """재시도 시각이 지난 일시 장애가 있는 스크립트와 다음 재시도 회차를 반환한다."""
+    with psycopg2.connect(**db_config) as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT script, MAX(attempt) + 1
+            FROM collection_failures
+            WHERE kind = 'transient' AND resolved_at IS NULL AND next_retry_at <= now()
+            GROUP BY script
+            """
+        )
+        rows = cur.fetchall()
+    conn.close()
+    return dict(rows)
+
+
+def run_python_script(script_name: str, db_config: dict, attempt: int = 0) -> int:
+    """수집 스크립트 하나를 실행하고 종료 코드를 반환한다.
+
+    0: 성공 / EXIT_TRANSIENT: 일시 장애만(자동 재실행 대상) / 그 외: 영구 장애 또는 비정상 종료
+    """
     script_path = SCRIPTS_DIR / script_name
-    print(f"[실행] {script_name}")
+    print(f"[실행] {script_name}" + (f" (재시도 {attempt}회차)" if attempt else ""))
+    resolve_open_failures(script_name, db_config)
     result = subprocess.run(
         [sys.executable, str(script_path)],
-        text=True,
+        env={**os.environ, "COLLECT_ATTEMPT": str(attempt)},
     )
-    if result.returncode != 0:
-        print(f"[실패] {script_name}")
-        print(result.stderr)
-        return False
-    print(result.stdout)
-    return True
+    rc = result.returncode
+    if rc == EXIT_TRANSIENT:
+        print(f"::warning::{script_name} 일시 장애 발생, 자동 재실행 예정")
+    elif rc == EXIT_PERMANENT:
+        print(f"::error::{script_name} 영구 장애 발생, collection_failures 확인 필요")
+    elif rc != 0:
+        print(f"::error::{script_name} 비정상 종료(rc={rc})")
+        record_crash(script_name, rc, attempt, db_config)
+    return rc
 
 
 def run_sql_script(script_name: str, db_config: dict) -> bool:
@@ -102,20 +157,29 @@ def run_sql_script(script_name: str, db_config: dict) -> bool:
     return True
 
 
-def run_all_collection() -> dict:
-    """전체 수집 파이프라인을 순서대로 실행한다.
+def run_all_collection(retries: dict | None = None) -> dict:
+    """수집 파이프라인을 순서대로 실행한다.
+
+    Args:
+        retries: {스크립트명: 재시도 회차}. 주어지면 해당 스크립트만 재실행한다.
 
     Returns:
-        성공/실패한 스크립트 목록을 담은 결과 dict.
+        성공 / 일시 장애(자동 재실행 대상) / 실패(담당자 조치 대상) 스크립트 목록.
     """
     db_config = get_db_config()
 
     succeeded = []
+    transient = []
     failed = []
 
     for script in COLLECTION_SEQUENCE:
-        if run_python_script(script):
+        if retries is not None and script not in retries:
+            continue
+        rc = run_python_script(script, db_config, (retries or {}).get(script, 0))
+        if rc == 0:
             succeeded.append(script)
+        elif rc == EXIT_TRANSIENT:
+            transient.append(script)
         else:
             failed.append(script)
 
@@ -125,12 +189,34 @@ def run_all_collection() -> dict:
         else:
             failed.append(script)
 
-    return {"succeeded": succeeded, "failed": failed}
+    return {"succeeded": succeeded, "transient": transient, "failed": failed}
 
 
 if __name__ == "__main__":
-    result = run_all_collection()
-    print(f"\n완료: 성공 {len(result['succeeded'])}건, 실패 {len(result['failed'])}건")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--retry",
+        action="store_true",
+        help="재시도 시각이 지난 일시 장애가 있는 스크립트만 다시 실행한다.",
+    )
+    args = parser.parse_args()
+
+    retries = None
+    if args.retry:
+        retries = find_due_retries(get_db_config())
+        if not retries:
+            print("재시도 대상 없음")
+            sys.exit(EXIT_NOTHING_TO_RETRY)
+        print(f"재시도 대상: {retries}")
+
+    result = run_all_collection(retries)
+    print(
+        f"\n완료: 성공 {len(result['succeeded'])}건, "
+        f"일시 장애 {len(result['transient'])}건, 실패 {len(result['failed'])}건"
+    )
+    if result["transient"]:
+        print(f"자동 재실행 예정: {result['transient']}")
+    # 일시 장애는 collect-retry.yml 이 자동 회수하므로, 담당자 조치가 필요한 실패만 비정상 종료한다.
     if result["failed"]:
         print(f"실패한 스크립트: {result['failed']}")
         sys.exit(1)
