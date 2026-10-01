@@ -56,10 +56,10 @@
 
 원시 결과:
 
-- 최초 정책·Guardrail: [policy_guardrail_holdout250_0912.json](../../LLM/evaluation/results/policy_guardrail_holdout250_0912.json)
-- 현재 정책·Guardrail: [policy_guardrail_holdout250_0916.json](../../LLM/evaluation/results/policy_guardrail_holdout250_0916.json)
-- 최초 세금·로드맵: [tax_roadmap_holdout250_0912.json](../../LLM/evaluation/results/tax_roadmap_holdout250_0912.json)
-- 현재 세금·로드맵: [tax_roadmap_holdout250_0916.json](../../LLM/evaluation/results/tax_roadmap_holdout250_0916.json)
+- 최초 정책·Guardrail: policy_guardrail_holdout250_0912.json(`LLM/evaluation/results/policy_guardrail_holdout250_0912.json`, 로컬 생성물, git 미추적)
+- 현재 정책·Guardrail: policy_guardrail_holdout250_0916.json(`LLM/evaluation/results/policy_guardrail_holdout250_0916.json`, 로컬 생성물, git 미추적)
+- 최초 세금·로드맵: tax_roadmap_holdout250_0912.json(`LLM/evaluation/results/tax_roadmap_holdout250_0912.json`, 로컬 생성물, git 미추적)
+- 현재 세금·로드맵: tax_roadmap_holdout250_0916.json(`LLM/evaluation/results/tax_roadmap_holdout250_0916.json`, 로컬 생성물, git 미추적)
 
 ## 상세 결과 1 — Guardrail과 정책 검색
 

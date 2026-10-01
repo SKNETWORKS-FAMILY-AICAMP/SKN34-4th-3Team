@@ -26,18 +26,23 @@
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /users/me | 개인정보 조회 | 필요 | - | `{ age, region, ... }` | FS-03 |
-| PUT | /users/me | 개인정보 수정 | 필요 | `{ age, region, ... }` | `{ updated: true }` | FS-03 |
+| GET | /users/me | 개인정보 조회 | 필요 | - | `{ id, email, name, age, region, phone }` | FS-03 |
+| PUT | /users/me | 개인정보 수정 | 필요 | `{ name?, age?, region?, phone? }` | `{ updated: true }` | FS-03 |
 | GET | /users/me/business-profile | 사업자 정보 조회 | 필요 | - | `{ businessType, industry, foundedAt, ... }` | FS-04 |
 | PUT | /users/me/business-profile | 사업자 정보 등록/수정 | 필요 | `{ businessType, industry, foundedAt, ... }` | `{ updated: true }` | FS-04 |
 | GET | /users/me/roadmap-progress | 창업 로드맵 진행 상태 조회 | 필요 | - | `{ version, done: ["A:0", ...] }` | UX1 |
 | PUT | /users/me/roadmap-progress | 창업 로드맵 항목 체크/해제 | 필요 | `{ taskKey, done }` (`taskKey` 형식 `A:0`, 아니면 `422`) | `{ updated: true }` | UX1 |
+| GET | /users/me/subscription | 내 구독 플랜·이번 달 사용량 | 필요 | - | `{ plans: [{ key, name, price, policyChatLimit, features }], current: { plan, startedAt, renewsAt }, usage: { policyChat, policyChatLimit, taxChat } }` | UX6 |
+| PUT | /users/me/subscription | 구독 플랜 변경(목업 결제, 실제 결제 없음) | 필요 | `{ plan }` (`free` \| `basic` \| `pro`, 그 외 `422`) | GET과 같음 | UX6 |
+
+구독 플랜·가격은 `Backend/services/subscription_service.py`에 상수로 있고(근거 `Docs/reports/subscription_cost.md`), 저장은 `user_subscriptions`다. 마이페이지 `구독 · 결제` 메뉴가 부른다. `policyChatLimit`는 표시용이며 현재 채팅 요청에서 한도를 강제하지 않는다.
 
 ## chat — AI 상담(챗봇)
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /chat/categories/{category}/suggested-questions | 카테고리별 추천 질문 목록(하드코딩) | **불필요** | - | `{ category, questions: [...] }` (알 수 없는 category는 tax 목록) | FS-05 |
+| POST | /chat/messages/stream | 챗봇 질의 전송(스트리밍, **화면이 쓰는 경로**) | 필요 | `/chat/messages`와 같음 | NDJSON(`application/x-ndjson`) 한 줄당 이벤트 하나: `{ type: "draft", answer }`(생성 중 답변, 0회 이상) → 마지막에 `{ type: "done", result }`(`result`는 `/chat/messages` 응답과 같은 형태) | FS-05, FS-06, FS-07 |
 | POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy / roadmap) | 필요 | `{ category, question, roadmapStep?, roomId? }` (`roadmapStep`은 `A`~`F`·`Z`, `roadmap`에서만 허용. `roomId`를 비우면 새 대화방) | `{ messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
 | GET | /chat/messages | 내 대화 기록 조회 | 필요 | `?category`(선택) | `{ messages: [...] }` | FS-05 |
 | DELETE | /chat/messages | 내 대화방 전체(또는 카테고리 단위) 삭제 | 필요 | `?category`(선택). 예전 방식의 `?ids`는 `400`(대화방 하나는 `DELETE /chat/rooms/{roomId}`) | `{ deleted: true, count: n }` | FS-05 |
@@ -101,7 +106,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## bizplan — 사업계획서
 
-사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)과 마이페이지 사업계획서 탭(보관함 `/bizplan/plans`)이 부른다. 생성·예비진단·정리·양식 검사·출력은 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다. 임시저장은 작성 상태 JSON을, 서류 저장은 서버에서 출력한 파일 원본을 DB에 별도로 보관한다.
+사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)과 마이페이지 `사업계획서` 메뉴(보관함 `/bizplan/plans`)가 부른다. 생성·예비진단·정리·양식 검사·출력은 LLM에 닿지 못하면 `503`이다(`Backend/services/bizplan_service.py`). `refine`·`template-inspect`·`render`는 LLM의 `400`·`404`·`413`·`415`·`422`·`429`·`503`·`504`를 그대로 전달하고 그 밖의 오류는 `503`으로 바꾼다. 임시저장은 작성 상태 JSON을, 서류 저장은 서버에서 출력한 파일 원본을 DB에 별도로 보관한다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -118,20 +123,29 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | GET | /bizplan/documents | 내 임시저장 요약·저장 파일 목록(파일 최신순, 본문 제외) | 필요 | - | `{ draft: { title, updatedAt } 또는 null, documents: [{ id, title, fileName, format, sizeBytes, createdAt, files }] }`, `200` | FS-29 |
 | GET | /bizplan/documents/{id}/file | 내 서류 형식별 다운로드 | 필요 | `format=pdf` 또는 `hwpx` (생략하면 대표 파일) | 바이너리, 저장된 MIME 타입·한글 파일명 지원 `Content-Disposition`, `200` | FS-29 |
 | DELETE | /bizplan/documents/{id} | 내 저장 서류 삭제 | 필요 | - | `{ deleted: true }`, `200` | FS-29 |
+| GET | /bizplan/plans | 보관한 사업계획서 목록(최근 저장순) | 필요 | - | `{ plans: [{ id, title, status, statusLabel, score, createdAt, updatedAt, isCurrent }] }` (`status`: `writing` \| `drafted` \| `evaluated` \| `done`) | FS-29 |
+| POST | /bizplan/plans | 작성 화면 상태를 보관함에 새 건으로 저장 | 필요 | `{ data }` (임시저장과 같은 형식, 12 MiB 이하) | `{ id }` | FS-29 |
+| POST | /bizplan/plans/new | 새 사업계획서 시작(작성 화면 임시저장 비움, 보관함 유지) | 필요 | - | `{ updated: true }` | FS-29 |
+| PUT | /bizplan/plans/{planId} | 보관한 사업계획서 덮어쓰기 | 필요 | `{ data }` | `{ id }` | FS-29 |
+| PATCH | /bizplan/plans/{planId} | 이름 변경 | 필요 | `{ title }` (1~200자) | `{ updated: true }` | FS-29 |
+| DELETE | /bizplan/plans/{planId} | 보관함에서 삭제(작성 화면에 열린 건이면 임시저장도 삭제) | 필요 | - | `{ updated: true }` | FS-29 |
+| POST | /bizplan/plans/{planId}/open | 보관한 건을 작성 화면으로 불러오기(임시저장을 그 건으로 교체) | 필요 | - | `{ updated: true }` | FS-29 |
 
-‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 보관한다. `files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이며 기존 단일 파일 문서는 원래 형식만 제공한다. 두 형식은 문서 1건으로 계산하고 한 트랜잭션에서 저장·삭제한다. 마이페이지에서 형식을 선택해 다운로드하며, 보관하지 않은 형식은 `404`이다.
+‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 보관한다. `files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이며 기존 단일 파일 문서는 원래 형식만 제공한다. 두 형식은 문서 1건으로 계산하고 한 트랜잭션에서 저장·삭제한다. 보관하지 않은 형식은 `404`이다.
 
 서류는 사용자당 최대 8개, 파일당 50MiB이다. 중복 저장은 허용하고 자동 삭제하지 않는다. 저장 전 개수 확인으로 불필요한 렌더링을 막고, 렌더링 후 사용자 행 잠금·개수 재확인·INSERT를 한 트랜잭션으로 수행해 동시 저장에서도 상한을 보장한다. 개수 초과는 `409`, 파일 크기 초과는 `413`, 미인증은 `401`, 없는 서류와 다른 사용자의 서류 조회·삭제는 모두 `404`이다. 목록·다운로드·삭제는 LLM을 호출하지 않는다.
 
 `templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
 
-임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. `/bizplan/documents` API는 현재 프론트에서 사용하지 않는다(파일은 사업계획서 페이지에서 바로 렌더링해 받는다). 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
+임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. `/bizplan/documents` API는 Backend에만 남아 있고 현재 프론트에서 부르지 않는다(마이페이지 서류 탭은 `227dbfd`에서 제거됐고, 파일은 사업계획서 페이지에서 `/bizplan/render`로 바로 받는다). 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
+
+보관함(`bizplans`)은 작성 화면 상태 전체를 건별로 보관한다. 임시저장 `data.planId`가 지금 작성 화면에 열린 보관함 건을 가리키며, 목록의 `isCurrent`가 이 값으로 정해진다. 제목·진행 단계·점수는 저장할 때 `data`에서 뽑는다(`bizplan_service.plan_meta`). 보관함이 생기기 전의 임시저장은 목록 조회 시 한 건으로 옮겨진다. 개수 제한은 없다.
 
 ## policies — 지원정책 탐색
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| GET | /policies | 지원정책 검색 | 필요 | `?keyword&region&industry&page&size` (size 1~100, 기본 20) | `{ policies: [...] }` | FS-18 |
+| GET | /policies | 지원정책 검색 | 필요 | `?keyword&region&industry&page&size&only_announcements` (size 1~100, 기본 20. `only_announcements=true`면 원문 공고가 연결된 정책만) | `{ policies: [...] }` | FS-18 |
 | GET | /policies/recommendations | 맞춤 정책 추천 | 필요 | `?limit` (1~50, 기본 20) | `{ policies: [...] }` | FS-19 |
 | GET | /policies/{policyId} | 정책 상세(신청기간·방법 포함) 조회 | 필요 | - | `{ policy, applyPeriod, applyMethod, announcementId }` | FS-21 |
 | GET | /policies/{policyId}/eligibility | 지원 자격 확인 | 필요 | - | `{ eligible, reasons }` | FS-20 |
@@ -154,7 +168,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 대부분 `null`이다. 이때 추천 순위는 `matchScore`(지역·업종·마감 임박도)로만 매긴다.
 `GET /policies/{policyId}/eligibility`의 `eligible`도 같은 3값이며 사유는 `reasons`에 담긴다.
 
-`policies` 그룹에서 화면이 부르는 것은 `GET /policies/{policyId}`·`/policies/recommendations`·`/policies/saved`·`POST`·`DELETE /policies/{policyId}/save`·`GET /announcements`·`GET /announcements/{announcementId}/summary`다. **`GET /policies`(FS-18)와 `GET /policies/{policyId}/eligibility`(FS-20)는 부르는 화면이 없다.** 목록 화면은 `GET /policies` 대신 `GET /announcements`를 쓴다. 죽은 코드인 `Frontend/src/pages/GovExplorer.jsx`(어디서도 렌더되지 않음)도 `GET /announcements`를 쓰므로, `GET /policies`는 살아 있는 화면에도 죽은 코드에도 호출자가 없다.
+`policies` 그룹에서 화면이 부르는 것은 `GET /policies`·`/policies/{policyId}`·`/policies/recommendations`·`/policies/saved`·`POST`·`DELETE /policies/{policyId}/save`·`GET /announcements`·`GET /announcements/{announcementId}/summary`다. `GET /policies`(FS-18)는 사업계획서 화면의 공고 검색(`BusinessPlanPage.jsx`, `only_announcements=true`)이 부른다. **`GET /policies/{policyId}/eligibility`(FS-20)는 부르는 화면이 없다.** 공고 목록 화면은 `GET /announcements`를 쓴다.
 
 `GET /announcements`는 로그인 전 홈 화면(마감 임박 공고 패널)이 쓰므로 인증을 요구하지 않는다.
 공고는 공개 정보다. `dday`는 마감까지 남은 일수(정수)이며 마감일이 없으면 `null`이다.
@@ -188,7 +202,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 ## notifications — 알림
 
-설계 초안에는 없던 그룹이다. 구현(`Backend/api/notifications.py`)을 정식 수용해 기록한다. **네 엔드포인트 모두 부르는 화면이 없다.** 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. 다만 `POST /calendar`가 `remind` 기본값으로 리마인더를 만들고, `GET /notifications`·리마인더 등록 시점에 밀린 리마인더가 발송 처리되므로 데이터 경로 자체는 돈다.
+설계 초안에는 없던 그룹이다. 구현(`Backend/api/notifications.py`)을 정식 수용해 기록한다. **네 엔드포인트 모두 부르는 화면이 없다.** 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx`의 `알림 설정` 블록)은 서버를 부르지 않는 로컬 토글이다. 다만 `POST /calendar`가 `remind` 기본값으로 리마인더를 만들고, `GET /notifications`·리마인더 등록 시점에 밀린 리마인더가 발송 처리되므로 데이터 경로 자체는 돈다.
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -222,8 +236,8 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 | 함수 | 가리키는 경로 | 상태 |
 | --- | --- | --- |
-| `api.calendarUpcoming` (`api.js:196`) | `GET /calendar/upcoming` | Backend 미구현. 호출자 없음 |
-| `api.taxSchedule` (`api.js:197`) | `GET /tax/schedule` | Backend 미구현. 호출자 없음 |
-| `api.taxDocuments` (`api.js:198`) | `GET /tax/documents` | Backend 미구현. 호출자 없음 |
+| `api.calendarUpcoming` (`api.js:335`) | `GET /calendar/upcoming` | Backend 미구현. 호출자 없음 |
+| `api.taxSchedule` (`api.js:336`) | `GET /tax/schedule` | Backend 미구현. 호출자 없음 |
+| `api.taxDocuments` (`api.js:337`) | `GET /tax/documents` | Backend 미구현. 호출자 없음 |
 
-`api.summarizeAnnouncement`(`api.js:220`)는 경로(`POST /announcements/summary`)가 Backend에 있으나 호출자가 없는 경우로, 위 세 개와 성격이 다르다(`policies` 절 참고).
+`api.summarizeAnnouncement`(`api.js:361`)는 경로(`POST /announcements/summary`)가 Backend에 있으나 호출자가 없는 경우로, 위 세 개와 성격이 다르다(`policies` 절 참고).

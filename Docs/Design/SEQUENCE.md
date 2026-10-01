@@ -44,19 +44,22 @@ sequenceDiagram
     participant LLM as LLM 서비스
     participant DB as DB
 
-    FE->>API: POST /chat/messages { category, question, roadmapStep? }
+    FE->>API: POST /chat/messages/stream { category, question, roadmapStep?, roomId? }
     API->>SVC: 질의 전달
-    SVC->>DB: 최근 대화, 사용자·사업자 프로필, (policy일 때) 모집 중 공고 조회
+    SVC->>DB: 같은 대화방 최근 대화, 사용자·사업자 프로필, (policy일 때) 모집 중 공고 조회
     DB-->>SVC: conversationHistory, userContext, noticeResults 재료
-    SVC->>LLM: POST /rag/chat { category, question, roadmapStep, userContext, noticeResults, conversationHistory }
-    alt LLM 응답 (45초 policy·roadmap / 120초 tax·expense·saving)
-        LLM-->>SVC: answer, sources, grounded, route, status, guardrail_reason
-    else 미연결·빈 답변
+    SVC->>LLM: POST /rag/chat/stream { category, question, roadmapStep, userContext, noticeResults, conversationHistory }
+    loop 답변 생성 중 (45초 policy·roadmap / 120초 tax·expense·saving)
+        LLM-->>SVC: {type: draft, answer}
+        SVC-->>FE: {type: draft, answer} (NDJSON 한 줄)
+    end
+    alt 정상 종료
+        LLM-->>SVC: {type: done, result: answer, sources, grounded, route, status, guardrail_reason}
+    else error 이벤트·미연결·done 없이 종료
         SVC->>SVC: 목업 답변 (status=integration_unavailable, llmUsed=false)
     end
-    SVC->>DB: ChatMessage, AnswerSource 저장
-    SVC-->>API: 답변
-    API-->>FE: 200 OK (messageId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason)
+    SVC->>DB: ChatRoom(없으면 생성), ChatMessage, AnswerSource 저장
+    SVC-->>FE: {type: done, result: messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason}
 
     Note over FE,API: 이후 근거 확인 요청
     FE->>API: GET /chat/messages/{messageId}/sources
@@ -67,13 +70,15 @@ sequenceDiagram
     API-->>FE: 200 OK (sources)
 ```
 
+채팅 화면(`Frontend/src/components/AiConsult.jsx`)은 스트리밍 경로(`api.chatStream`)를 쓴다. 스트리밍이 아닌 `POST /chat/messages` → `POST /rag/chat`도 같은 조립·저장 과정을 거치며 마지막에 한 번만 응답한다.
+
 답변 생성 시점에 근거 문서를 함께 저장해두므로, 이후 "답변 근거 확인"(FS-08)은 LLM을 다시 호출하지 않고 DB 조회만으로 처리한다.
 
 Service는 LLM을 부르기 전에 두 가지를 조립한다(`Backend/services/chat_service.py`).
 
 - `userContext`: `userId`·나이·지역·사업자 유형·업종·사업자등록일·창업일. 로그인 사용자의 프로필에서 만든다
 - `noticeResults`: `category=policy`일 때만 모집 중 공고 상위 20건을 보낸다. 공고 본문은 `NOTICE_TEXT_LIMIT`(800자)로 자른다. 다른 category는 `null`
-- `conversationHistory`: 같은 category의 최근 완료 대화(`repo.recent_chats`)
+- `conversationHistory`: 같은 대화방(`roomId`)의 최근 완료 대화(`repo.recent_chats`). `roomId`가 없으면(새 대화방) 비어 있다
 
 **실제 공고 조회는 Backend가 한다.** LLM은 넘겨받은 목록을 근거로 쓸 뿐 DB를 직접 뒤지지 않는다(`Docs/Design/LLM_API_SPEC_V1.md` 10절 역할 경계).
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 LLM이 답한 문장과 `status`를 그대로 보존하며 `status≠success`면 `needsConfirmation=true`로 표시한다. 목업 답변은 LLM에 닿지 못했거나 빈 답변일 때만 쓴다.
@@ -92,7 +97,7 @@ sequenceDiagram
 
     FE->>API: POST /expenses/receipts (이미지 업로드, 4 MiB 이하)
     API->>SVC: 영수증 등록 요청
-    SVC->>LLM: POST /ocr/receipt (60초)
+    SVC->>LLM: POST /ocr/receipt (40초)
     LLM->>LLM: Tesseract OCR (이미지 보정·회전 재시도)
     alt 읽은 글자 8자 이상
         LLM->>LLM: OCR 글자만으로 LLM 해석 (source=ocr_llm)
@@ -156,7 +161,7 @@ sequenceDiagram
 
 **질의마다 준비 상태를 확인하던 예전 동작과 혼동하면 안 된다.** 그 왕복은 제거됐고(`Docs/STATUS.md` P0-2-1), 이것은 기동 시 한 번 도는 워밍업이다.
 
-## 5. 사업계획서 초안·예비진단·어시스턴트 (FS-29 ~ FS-31)
+## 5. 사업계획서 초안·예비진단·어시스턴트·보관 (FS-29 ~ FS-31)
 
 ```mermaid
 sequenceDiagram
@@ -164,10 +169,12 @@ sequenceDiagram
     participant API as Backend(api)
     participant SVC as Backend(service)
     participant LLM as LLM 서비스
+    participant DB as DB
 
-    FE->>API: POST /bizplan/generate { 기초 정보, 아이디어, templateText? }
+    FE->>API: POST /bizplan/generate { 기초 정보, 아이디어, templateText?, announcementId? }
     API->>SVC: 초안 생성 요청
-    SVC->>LLM: POST /rag/business-plan (60초)
+    SVC->>DB: 사용자 이름, (announcementId 있으면) 공고 기준 조회
+    SVC->>LLM: POST /rag/business-plan (120초)
     alt 응답 성공
         LLM-->>SVC: sections, summary
         SVC-->>API: 초안
@@ -176,24 +183,31 @@ sequenceDiagram
         SVC-->>API: HttpError 503
         API-->>FE: 503
     end
-    FE->>API: PUT /bizplan/draft (임시저장 버튼, 입력값·초안 → bizplan_drafts)
+    Note over FE,DB: 임시저장 버튼
+    FE->>API: POST /bizplan/plans 또는 PUT /bizplan/plans/{planId} (작성 화면 상태 → 보관함 bizplans)
+    API->>SVC: 저장 요청
+    SVC->>DB: 제목·진행 단계·점수 추출 후 저장
+    API-->>FE: { id }
+    FE->>API: PUT /bizplan/draft { data + planId } (→ bizplan_drafts)
 
     Note over FE,LLM: 예비진단·어시스턴트도 같은 구조
     FE->>API: POST /bizplan/evaluate { sections }
     API->>SVC: 채점 요청
-    SVC->>LLM: POST /rag/business-plan-evaluate (60초)
+    SVC->>LLM: POST /rag/business-plan-evaluate (120초)
     LLM-->>SVC: overallScore, overallComment, sections
     SVC-->>API: 예비진단 결과
     API-->>FE: 200 OK
     FE->>API: POST /bizplan/coach { question, sections, conversationHistory }
     API->>SVC: 질문
-    SVC->>LLM: POST /rag/business-plan-coach (60초)
+    SVC->>LLM: POST /rag/business-plan-coach (120초)
     LLM-->>SVC: answer, inScope, redirect
     SVC-->>API: 답변
     API-->>FE: 200 OK
 ```
 
-세 호출 모두 RAG 검색 그래프를 거치지 않는 단일 LLM 호출이고, Backend는 DB에 아무것도 저장하지 않는다(`Backend/services/bizplan_service.py`). 대화 기록도 화면이 들고 있다가 매 질문에 함께 보낸다.
+생성·예비진단·어시스턴트는 RAG 검색 그래프를 거치지 않는 단일 LLM 호출이다. 어시스턴트 대화 기록은 화면이 들고 있다가 매 질문에 함께 보낸다. 입력 정리(`/bizplan/refine` → `/rag/business-plan-refine`)도 같은 구조이고, 양식 검사(`/bizplan/template-inspect`)·파일 출력(`/bizplan/render`)은 LLM 서비스의 문서 처리(모델 호출 없음)를 부른다. 시간 제한은 모두 `LLM_TIMEOUT_BIZPLAN`(120초)이다.
+
+저장은 두 단계다(`Backend/services/bizplan_service.py`). `bizplan_drafts`는 지금 작성 화면에 열린 한 건이고, `bizplans`는 보관함이다. 임시저장 `data.planId`가 열린 보관함 건을 가리킨다. 마이페이지 `사업계획서` 메뉴에서 `POST /bizplan/plans/{planId}/open`을 부르면 그 건이 작성 화면(임시저장)으로 복사되고, `POST /bizplan/plans/new`는 임시저장만 비운다.
 
 ## 관련 문서
 

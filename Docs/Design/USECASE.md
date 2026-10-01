@@ -4,7 +4,7 @@
 
 - **청년·1인 창업자**: 서비스의 주 사용자(Primary Actor)
 - **관리자**: 세법·정책·공고문 데이터 및 서비스를 관리
-- **외부 시스템**: 국가법령정보센터, 정부24, K-Startup, 기업마당, 온통청년 등 데이터 연계 대상 (하나의 Actor로 통합). 실제 수집은 `DB/scripts/02~06` 스크립트가 DB에 직접 적재한다
+- **외부 시스템**: 국가법령정보센터, 정부24, K-Startup, 기업마당, 온통청년 등 데이터 연계 대상 (하나의 Actor로 통합). 실제 수집은 `DB/scripts/02~13` 스크립트(`DB/run_collection.py`로 순서 실행)가 DB에 직접 적재한다
 
 현재 범위는 **세무 관리 + 지원금·정책 탐색**을 메인 기능으로 하고, **지출 분석(영수증 경비 판정)과 사업계획서 작성**을 함께 제공한다. **공공입찰 업무지원은 추가 기능(추후 개발)**으로 범위 밖에 둔다. 추가 기능 목록은 `Docs/README.md` 8절 참고.
 
@@ -78,7 +78,7 @@ flowchart TD
         end
 
         subgraph G5["지원정책 탐색"]
-            UC18(["지원정책 검색 ✕"])
+            UC18(["지원정책 검색"])
             UC19(["맞춤 정책 추천"])
             UC20(["지원 자격 확인 ✕"])
             UC21(["신청기간·방법 확인"])
@@ -98,6 +98,9 @@ flowchart TD
             UX3(["알림함 확인 ✕"])
             UX4(["대화 기록 조회·삭제"])
             UX5(["모집 중 공고·서비스 지표 조회(비로그인)"])
+            UX6(["구독 플랜 조회·변경(목업 결제)"])
+            UX7(["사업계획서 보관함 관리"])
+            UX8(["화면별 온보딩 안내"])
         end
     end
 
@@ -132,6 +135,9 @@ flowchart TD
     User --- UX3
     User --- UX4
     User --- UX5
+    User --- UX6
+    User --- UX7
+    User --- UX8
 
     UC06 -. include .-> UC08
 ```
@@ -146,7 +152,7 @@ flowchart TD
 
 `청년창업 세액감면 자동판정`은 설계 초안에서 `답변 근거 확인`을 include했으나 구현에서는 뺐다. 판정 응답은 LLM이 생성한 `legalBasis` 문장만 담고 근거 문서 목록을 저장·조회하지 않는다(`GET /chat/messages/{id}/sources`는 챗 메시지 전용).
 
-`명세 외 구현 기능`(UX1~5)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 서버 `user_roadmap_progress`(`/users/me/roadmap-progress`)에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx:628-638`)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4·5는 화면까지 연결돼 있다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
+`명세 외 구현 기능`(UX1~8)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 서버 `user_roadmap_progress`(`/users/me/roadmap-progress`)에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`, 구독은 `GET`·`PUT /users/me/subscription`(마이페이지 `구독 · 결제`, 실제 결제 없음), 사업계획서 보관함은 `/bizplan/plans*`(마이페이지 `사업계획서`), 온보딩 안내는 서버 호출 없이 화면별로 처음 한 번 뜨는 투어(`Frontend/src/components/PageTour.jsx`·`GuideTour.jsx`, 완료 여부는 브라우저 localStorage)다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx`의 `알림 설정` 블록)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4~8은 화면까지 연결돼 있다. 지출 분석 엑셀 보고서와 채팅 답변 스트리밍은 기존 기능(FS-16·FS-05)의 화면 동작이라 따로 번호를 두지 않았다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
 
 ## 3. 관리자 · 외부 시스템 — 상세 유스케이스
 
@@ -173,7 +179,7 @@ flowchart TD
 
 표시 규칙은 2절과 같다. **관리자 유스케이스 다섯 개 모두 화면이 없다(`✕`).** `/admin/*` 엔드포인트를 부르는 프론트엔드 코드가 없어 `GET /docs`(Swagger UI)나 직접 호출로만 쓸 수 있다.
 
-`Ext -. 데이터 제공 .-> UC26`은 개념적 연결이다. 실제 대량 적재는 관리자 기능을 거치지 않고 `DB/scripts/02~06` 수집 스크립트가 DB에 직접 쓴다(1절 Actor 설명, `Docs/Design/ARCHITECTURE.md` 1절).
+`Ext -. 데이터 제공 .-> UC26`은 개념적 연결이다. 실제 대량 적재는 관리자 기능을 거치지 않고 `DB/scripts/02~13` 수집 스크립트가 DB에 직접 쓴다. 배포 환경에서는 GitHub Actions가 주간 수집과 RAG 재색인을 자동으로 돌린다(1절 Actor 설명, `Docs/Design/ARCHITECTURE.md` 1절).
 
 ## 4. 통합 일정 캘린더 범위 확장
 

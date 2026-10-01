@@ -67,7 +67,7 @@
 
 ## 결과 파일
 
-- [통합 JSON](../../../LLM/evaluation/results/catboost_judge_comparison/catboost_judge_comparison.json)
-- [정책 E2E JSON](../../../LLM/evaluation/results/catboost_judge_comparison/catboost_e2e_policy.json)
-- [세금 E2E JSON](../../../LLM/evaluation/results/catboost_judge_comparison/catboost_e2e_tax_legal.json)
-- [기준 보고서](ELASTICSEARCH_COMPARISON_REPORT.md)
+- 통합 JSON(`LLM/evaluation/results/catboost_judge_comparison/catboost_judge_comparison.json`, 로컬 생성물, git 미추적)
+- 정책 E2E JSON(`LLM/evaluation/results/catboost_judge_comparison/catboost_e2e_policy.json`, 로컬 생성물, git 미추적)
+- 세금 E2E JSON(`LLM/evaluation/results/catboost_judge_comparison/catboost_e2e_tax_legal.json`, 로컬 생성물, git 미추적)
+- [기준 보고서](../ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md)

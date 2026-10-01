@@ -29,9 +29,20 @@ classDiagram
         +date foundedAt
     }
 
+    class ChatRoom {
+        +int id
+        +int userId
+        +string category
+        +string title
+        +datetime createdAt
+        +datetime updatedAt
+        +datetime deletedAt
+    }
+
     class ChatMessage {
         +int id
         +int userId
+        +int roomId
         +string category
         +string question
         +string answer
@@ -192,6 +203,58 @@ classDiagram
         +datetime createdAt
     }
 
+    class UserRoadmapProgress {
+        +int userId
+        +int version
+        +string taskKey
+        +datetime doneAt
+    }
+
+    class UserSubscription {
+        +int userId
+        +string plan
+        +datetime startedAt
+        +datetime renewsAt
+    }
+
+    class BizplanDraft {
+        +int userId
+        +json data
+        +datetime updatedAt
+    }
+
+    class Bizplan {
+        +int id
+        +int userId
+        +string title
+        +string status
+        +int score
+        +json data
+        +datetime createdAt
+        +datetime updatedAt
+    }
+
+    class BizplanDocument {
+        +int id
+        +int userId
+        +string title
+        +string fileName
+        +string format
+        +string mimeType
+        +bytes fileData
+        +int sizeBytes
+        +datetime createdAt
+    }
+
+    class BizplanDocumentFile {
+        +int documentId
+        +string format
+        +string fileName
+        +string mimeType
+        +bytes fileData
+        +int sizeBytes
+    }
+
     class RagDocument {
         +int id
         +string sourceType
@@ -205,6 +268,8 @@ classDiagram
     }
 
     User "1" --> "0..1" BusinessProfile
+    User "1" --> "0..*" ChatRoom
+    ChatRoom "1" --> "0..*" ChatMessage
     User "1" --> "0..*" ChatMessage
     ChatMessage "1" --> "0..*" AnswerSource
     User "1" --> "0..1" TaxInfo
@@ -225,9 +290,15 @@ classDiagram
     AdminUser "1" --> "0..*" TaxDocument
     User "1" --> "0..*" CalendarEvent
     User "1" --> "0..*" Notification
+    User "1" --> "0..*" UserRoadmapProgress
+    User "1" --> "0..1" UserSubscription
+    User "1" --> "0..1" BizplanDraft
+    User "1" --> "0..*" Bizplan
+    User "1" --> "0..*" BizplanDocument
+    BizplanDocument "1" --> "0..*" BizplanDocumentFile
 ```
 
-> 속성 타입, 제약(NOT NULL, UNIQUE, ON DELETE CASCADE 등)의 근거는 `Docs/Design/ERD.md`와 `DB/01_schema.sql`을 참고한다. 이 문서에서는 중복 기술하지 않는다. `RagDocument`는 참조 방식이 두 가지로 나뉜다. `sourceType`/`sourceId`는 여러 테이블을 가리키는 논리 참조라 DB FK가 없고 관계선도 두지 않는다. 반면 `policyId`는 `policies(id)`를 가리키는 실제 FK라 `Policy`와 관계선을 둔다. `Docs/Design/ERD.md`의 `tax_rag_cache`는 여기에 클래스로 두지 않는다. LLM 세금 Semantic Cache(`LLM/src/rag/tax_cache.py`) 전용 파생 테이블이고 Backend가 읽지도 쓰지도 않아 Backend 도메인 모델이 아니다.
+> 속성 타입, 제약(NOT NULL, UNIQUE, ON DELETE CASCADE 등)의 근거는 `Docs/Design/ERD.md`와 `DB/01_schema.sql`을 참고한다. 이 문서에서는 중복 기술하지 않는다. `RagDocument`는 참조 방식이 두 가지로 나뉜다. `sourceType`/`sourceId`는 여러 테이블을 가리키는 논리 참조라 DB FK가 없고 관계선도 두지 않는다. 반면 `policyId`는 `policies(id)`를 가리키는 실제 FK라 `Policy`와 관계선을 둔다. `Docs/Design/ERD.md`의 `tax_rag_cache`는 여기에 클래스로 두지 않는다. LLM 세금 Semantic Cache(`LLM/src/rag/tax_cache.py`) 전용 파생 테이블이고 Backend가 읽지도 쓰지도 않아 Backend 도메인 모델이 아니다. 수집 운영용 `collection_failures`도 `DB/scripts`만 쓰므로 클래스로 두지 않는다.
 
 ## 2. Service 클래스
 
@@ -246,16 +317,28 @@ classDiagram
         +updateMe(userId, payload) User
         +getBusinessProfile(userId) BusinessProfile
         +updateBusinessProfile(userId, payload) BusinessProfile
+        +getRoadmapProgress(userId) RoadmapProgress
+        +setRoadmapTask(userId, taskKey, done)
         +onboardingComplete(userId) bool
+    }
+
+    class SubscriptionService {
+        +getSubscription(userId) Subscription
+        +changePlan(userId, plan) Subscription
     }
 
     class ChatService {
         +suggestedQuestions(category) string[]
-        +sendMessage(userId, category, question, roadmapStep) ChatMessage
+        +sendMessage(userId, category, question, roadmapStep, roomId) ChatMessage
+        +sendMessageAsync(userId, category, question, roadmapStep, roomId) ChatMessage
+        +prepareMessageStreamAsync(userId, category, roadmapStep, roomId) Options
+        +sendMessageStreamAsync(userId, category, question, roomId, options) Event[]
+        +getSources(messageId, userId) AnswerSource[]
         +listMessages(userId, category) ChatMessage[]
         +clearMessages(userId, category) int
-        +deleteMessages(userId, messageIds) int
-        +getSources(messageId, userId) AnswerSource[]
+        +listRooms(userId, category) ChatRoom[]
+        +renameRoom(userId, roomId, title)
+        +deleteRoom(userId, roomId)
     }
 
     class CalendarService {
@@ -282,18 +365,38 @@ classDiagram
         +updateCategory(expenseId, userId, category) DeductibilityResult
         +deductibility(expenseId, userId) DeductibilityResult
         +analysis(expenseId, userId) AnalysisResult
+        +addItem(expenseId, userId, name, price) AnalysisResult
+        +deleteItem(expenseId, userId, itemIndex) AnalysisResult
+        +updateVendor(expenseId, userId, vendor) AnalysisResult
         +getReceiptImage(receiptId, userId) bytes
         +deleteExpense(expenseId, userId)
     }
 
     class BizplanService {
-        +generate(body) BusinessPlan
+        +generate(body, userId) BusinessPlan
         +evaluate(body) BusinessPlanEvaluation
         +coach(body) CoachAnswer
+        +refine(body) RefinedInput
+        +inspectTemplate(body) TemplateInfo
+        +render(body) RenderedFile
+        +getDraft(userId) BizplanDraft
+        +saveDraft(userId, data)
+        +deleteDraft(userId)
+        +saveDocument(userId, body) BizplanDocument
+        +listDocuments(userId) BizplanDocument[]
+        +getDocumentFile(userId, documentId, format) bytes
+        +deleteDocument(userId, documentId)
+        +planMeta(data) PlanMeta
+        +listPlans(userId) Bizplan[]
+        +savePlan(userId, planId, data) int
+        +renamePlan(userId, planId, title)
+        +deletePlan(userId, planId)
+        +openPlan(userId, planId)
+        +newPlan(userId)
     }
 
     class PolicyService {
-        +search(keyword, region, industry, userId, offset, limit) Policy[]
+        +search(keyword, region, industry, userId, offset, limit, onlyAnnouncements) Policy[]
         +recommendations(userId, limit) Policy[]
         +detail(policyId) Policy
         +eligibility(policyId, userId) EligibilityResult
@@ -330,12 +433,17 @@ classDiagram
         +llmStatus() Status
         +ensureIndexReady() IndexState
         +ragAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
+        +asyncRagAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
+        +asyncRagAnswerStream(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Event[]
         +explainTaxReduction(eligible, reasons, conditions) Explanation
         +extractReceipt(filename, imageBase64, mimeType) ReceiptFields
         +explainExpense(category, vendor, amount, items) DeductibilityResult
         +generateBusinessPlan(fields) BusinessPlan
         +evaluateBusinessPlan(fields) BusinessPlanEvaluation
         +bizplanCoach(fields) CoachAnswer
+        +refineBusinessPlan(fields) RefinedInput
+        +inspectBusinessPlanTemplate(fields) TemplateInfo
+        +renderBusinessPlan(fields) RenderedFile
         +summarizeAnnouncement(rawContent, source) Summary
         +reindex()
     }
@@ -344,6 +452,10 @@ classDiagram
     AuthService ..> AdminUser
     UserService ..> User
     UserService ..> BusinessProfile
+    UserService ..> UserRoadmapProgress
+    SubscriptionService ..> UserSubscription
+    SubscriptionService ..> ChatMessage
+    ChatService ..> ChatRoom
     ChatService ..> ChatMessage
     ChatService ..> AnswerSource
     ChatService ..> LLMServiceClient
@@ -357,6 +469,10 @@ classDiagram
     ExpenseService ..> ReceiptExtraction
     ExpenseService ..> Expense
     ExpenseService ..> LLMServiceClient
+    BizplanService ..> BizplanDraft
+    BizplanService ..> Bizplan
+    BizplanService ..> BizplanDocument
+    BizplanService ..> BizplanDocumentFile
     BizplanService ..> LLMServiceClient
     PolicyService ..> Policy
     PolicyService ..> Announcement
@@ -373,11 +489,11 @@ classDiagram
     CalendarService ..> Notification
 ```
 
-`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `generate_business_plan`, `evaluate_business_plan`, `bizplan_coach`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다. **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 사업계획서 초안·예비진단·어시스턴트와 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `async_rag_answer`, `async_rag_answer_stream`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `generate_business_plan`, `evaluate_business_plan`, `bizplan_coach`, `refine_business_plan`, `inspect_business_plan_template`, `render_business_plan`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다(`async_rag_answer_stream`만 예외를 던지고 `ChatService`가 받아 fallback 처리). **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 사업계획서 초안·예비진단·어시스턴트·정리·양식 검사·출력과 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
 
-`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 지출 분석(FS-14~17)용이며 지출관리 화면이 부른다. `BizplanService`는 사업계획서(FS-29~31)용으로 DB를 쓰지 않고 LLM 호출 결과만 돌려주므로 대응하는 Model 클래스가 없다.
+`Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 지출 분석(FS-14~17)용이며 지출관리 화면이 부른다. `BizplanService`는 사업계획서(FS-29~31)용이다. 생성·예비진단·어시스턴트·정리·양식 검사·출력은 LLM 결과만 돌려주고, 임시저장(`BizplanDraft`)·보관함(`Bizplan`)·서류(`BizplanDocument`·`BizplanDocumentFile`)는 DB에 저장한다. `SubscriptionService`는 구독 플랜(목업 결제)을 `UserSubscription`에 저장하고 이번 달 상담 수를 `ChatMessage`에서 센다.
 
-`User.phone`·`User.status`, `CalendarEvent.userId`, `Reminder.dispatched`, `Expense.userId`·`deductibleTier`·`proofValid`·`missingFields`, `Receipt.imageData`·`mimeType`, `ReceiptExtraction.proofType`·`readMeta`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`와 `Notification` 테이블은 `DB/app_extras.sql`이 공급한다(`Docs/Design/ERD.md` 구현 노트 참고).
+`User.phone`·`User.status`, `CalendarEvent.userId`, `Reminder.dispatched`, `Expense.userId`·`deductibleTier`·`proofValid`·`missingFields`, `Receipt.imageData`·`mimeType`, `ReceiptExtraction.proofType`·`readMeta`, `Announcement.applyMethod`, `AnnouncementSummary.llmUsed`와 `Notification`·`ChatRoom`·`UserRoadmapProgress`·`UserSubscription`·`BizplanDraft`·`Bizplan`·`BizplanDocument`·`BizplanDocumentFile` 테이블은 `DB/app_extras.sql`이 공급한다(`Docs/Design/ERD.md` 구현 노트 참고).
 
 > `DiagnosisResult`, `EligibilityResult`, `DeductibilityResult`, `AnalysisResult`, `BusinessPlan`, `BusinessPlanEvaluation`, `CoachAnswer`, `Token`, `Metrics` 등 메서드 반환값은 별도 클래스로 정의하지 않았다. 실제 구현 시 `Backend/schemas`의 Pydantic 응답 모델로 정의될 값이며, 이 문서에서 미리 확정하지 않는다(과설계 방지).
 

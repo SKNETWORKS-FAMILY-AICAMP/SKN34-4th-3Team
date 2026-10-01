@@ -1,7 +1,7 @@
 # TODO
 
-- 갱신일: 2026-09-15
-- 기준 커밋: `e48c609` (`develop`)
+- 갱신일: 2026-10-01
+- 기준 커밋: `402dbcc` (`develop`)
 
 체크 상태는 코드 기준이다. 현재 상태의 서술은 `Docs/STATUS.md`에 있다.
 
@@ -135,14 +135,14 @@ flowchart TD
 - [x] 서비스 간 연동
 
 ## 테스트
-- [x] 단위 테스트 작성 — LLM(`LLM/tests/`)과 Backend 일부(`Backend/tests/`, 5개 파일). Frontend는 없음
+- [x] 단위 테스트 작성 — LLM(`LLM/tests/`, 42개 파일), Backend(`Backend/tests/`, 16개 파일), Frontend(`Frontend/tests/`, 2개 파일)
 - [ ] 통합 테스트 작성 — 실제 OpenAI·Cohere·PostgreSQL 연동 검증이 남음
-- [ ] 버그 수정 — 통합 결함 42건 중 24건 해결·3건 오탐, 15건 미해결(보류 2건 포함)(`Docs/reports/INTEGRATION_ISSUES_0910.md`). 시연 결함 13건 중 9건 해결·2건 일부 해결·2건 미해결(`Docs/reports/INTEGRATION_ISSUES_0914.md`)
+- [ ] 버그 수정 — 남은 결함은 `Docs/STATUS.md` 2절(미해결 4건·일부 해결 2건·보류 1건)
 
 ## 배포
-- [x] Docker 환경 구성 — `docker-compose.yml`, `setup.sh`, `setup.bat`. `frontend` 프로필의 nginx 컨테이너(`:80`)가 화면과 `/api`를 같은 출처에서 서빙
-- [ ] CI/CD 구성
-- [ ] 배포 및 운영 점검 — 학원 내부망 절차는 `Docs/README.md` 12절에 있음. 도메인·HTTPS 없음
+- [x] Docker 환경 구성 — `docker-compose.yml`(+ 개발용 `docker-compose.dev.yml`), `setup.sh`, `setup.bat`. `frontend` 프로필의 nginx 컨테이너(`:80`)가 화면과 `/api`를 같은 출처에서 서빙. AWS용 `docker-compose.app.yml`·`docker-compose.data.yml`
+- [x] CI/CD 구성 — GitHub Actions `deploy.yml`(테스트 → main 병합 시 App EC2 배포), `collect.yml`(주간 수집·재색인), `collect-retry.yml`(실패 재시도)
+- [ ] 배포 및 운영 점검 — 학원 내부망 절차는 `Docs/README.md` 12절, AWS 절차는 `Docs/AWS_DEPLOY_GUIDE.md`. HTTPS(nginx 443·Let's Encrypt)·PWA 구성은 코드에 반영됨. 운영 점검 결과는 아직 기록되지 않음
 
 ## 문서화
 - [ ] DESIGN.md 작성
