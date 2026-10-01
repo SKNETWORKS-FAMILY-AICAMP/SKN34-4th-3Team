@@ -67,7 +67,7 @@ export function LoginModal({ onClose, onSuccess }) {
           ? '이메일 또는 비밀번호가 올바르지 않습니다.'
           : e2 && e2.status === 409
             ? '이미 가입된 이메일입니다.'
-            : 'Backend(:8000)에 연결하지 못했어요. 서버가 떠 있는지 확인해 주세요.'
+            : '서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.'
       );
     } finally {
       setBusy(false);

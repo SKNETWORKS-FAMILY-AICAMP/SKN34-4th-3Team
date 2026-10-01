@@ -146,6 +146,17 @@ docker exec -i startup_db pg_restore -U <user> -d <db> --clean --if-exists < ~/s
 aws s3 cp ~/startup_platform.dump s3://<버킷>/migration/   # 원본 보관
 ```
 
+복원 후 App EC2에서 스키마를 최신 `main` 기준으로 맞춤
+
+```bash
+# App EC2
+cd ~/SKN34-4th-3Team
+docker compose -f docker-compose.app.yml run --rm db-migrate
+```
+
+- DB 전체 교체(`pg_restore --clean`, `dropdb`·`createdb` 후 복원) 뒤에는 반드시 실행. 덤프 원본 DB에 없던 테이블·컬럼이 빠진 채 운영되는 것을 막음(재실행 안전)
+- 덤프는 최신 `main`의 `DB/app_extras.sql`이 적용된 DB에서 생성. 로컬 DB는 덤프 전에 `docker compose up -d db-migrate`로 스키마를 갱신
+
 ## 8. App EC2 기동
 
 ```bash
