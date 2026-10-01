@@ -9,10 +9,11 @@
 import os
 import re
 import json
+import sys
 import time
-import requests
 import psycopg2
 from dotenv import load_dotenv
+from collect_common import exit_code, json_of, record_failure, request
 
 load_dotenv()
 
@@ -39,7 +40,7 @@ HEADERS = {
 }
 
 
-def fetch_list(keyword, page=1, display=100, max_retries=3):
+def fetch_list(keyword, page=1, display=100):
     params = {
         "OC": OC,
         "target": "ntsCgmExpc",
@@ -48,43 +49,24 @@ def fetch_list(keyword, page=1, display=100, max_retries=3):
         "display": display,
         "page": page,
     }
-    retry_statuses = {403, 429, 500, 502, 503, 504}
-
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.get(LIST_URL, params=params, headers=HEADERS, timeout=30)
-        except requests.exceptions.RequestException as e:
-            if attempt == max_retries:
-                raise
-            wait = 5 * attempt
-            print(f"  [{keyword}] page={page} 요청 오류({type(e).__name__}), {wait}초 후 재시도 ({attempt}/{max_retries})")
-            time.sleep(wait)
-            continue
-
-        if response.status_code == 200:
-            return response.json()
-
-        if response.status_code in retry_statuses and attempt < max_retries:
-            wait = 5 * attempt
-            print(f"  [{keyword}] page={page} status={response.status_code}, {wait}초 후 재시도 ({attempt}/{max_retries})")
-            time.sleep(wait)
-            continue
-
-        raise requests.exceptions.HTTPError(
-            f"국세청 법령해석 목록 API 요청 실패 (keyword={keyword}, page={page}, status={response.status_code})"
-        )
+    return json_of(request("GET", LIST_URL, params=params, headers=HEADERS))
 
 
-def fetch_all_list(keyword):
+def fetch_all_list(conn, keyword):
+    """목록 페이지가 실패하면 기록하고, 그때까지 받은 목록으로 본문 조회를 진행한다."""
     all_items = []
     page = 1
     while True:
-        data = fetch_list(keyword, page=page)
-        body = data.get("CgmExpc", {})
-        items = body.get("cgmExpc", [])
-        if isinstance(items, dict):
-            items = [items]
-        total_cnt = int(body.get("totalCnt", 0))
+        try:
+            data = fetch_list(keyword, page=page)
+            body = data.get("CgmExpc", {})
+            items = body.get("cgmExpc", [])
+            if isinstance(items, dict):
+                items = [items]
+            total_cnt = int(body.get("totalCnt", 0))
+        except Exception as e:
+            record_failure(conn, f"keyword={keyword},page={page}", e)
+            break
 
         all_items.extend(items)
         print(f"  [{keyword}] {page}페이지: {len(items)}건 (전체 {total_cnt}건 중 누적 {len(all_items)}건)")
@@ -111,14 +93,8 @@ def fetch_detail(ntst_dcm_id):
         **HEADERS,
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     }
-    try:
-        response = requests.post(DETAIL_URL, data=payload, headers=headers, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("data", {}).get("ASIQTB002PR01", {}).get("dcmDVO", {})
-    except (requests.exceptions.RequestException, ValueError) as e:
-        print(f"    본문 조회 실패 (ntstDcmId={ntst_dcm_id}): {e}")
-        return None
+    data = json_of(request("POST", DETAIL_URL, data=payload, headers=headers, timeout=15))
+    return data.get("data", {}).get("ASIQTB002PR01", {}).get("dcmDVO", {})
 
 
 def build_content(dcm):
@@ -188,7 +164,7 @@ if __name__ == "__main__":
 
     for keyword in KEYWORDS:
         print(f"\n=== [{keyword}] 목록 수집 시작 ===")
-        items = fetch_all_list(keyword)
+        items = fetch_all_list(conn, keyword)
 
         print(f"=== [{keyword}] 본문 조회 시작 ({len(items)}건) ===")
         for i, item in enumerate(items, 1):
@@ -211,18 +187,19 @@ if __name__ == "__main__":
                     print(f"  [{keyword}] {i}/{len(items)}건 처리 (누적 처리 {total_processed}, 저장 {total_inserted}, 건너뜀 {total_skipped})")
                 continue
 
-            dcm = fetch_detail(ntst_dcm_id)
             total_processed += 1
-            if dcm is None:
+            try:
+                dcm = fetch_detail(ntst_dcm_id)
+                if insert_interpretation(conn, item, dcm):
+                    total_inserted += 1
+                    conn.commit()
+                else:
+                    total_skipped += 1
+            except Exception as e:
+                record_failure(conn, f"ntstDcmId={ntst_dcm_id}", e)
                 total_failed += 1
                 time.sleep(REQUEST_DELAY_SECONDS)
                 continue
-
-            if insert_interpretation(conn, item, dcm):
-                total_inserted += 1
-                conn.commit()
-            else:
-                total_skipped += 1
 
             if total_processed % PROGRESS_LOG_EVERY == 0:
                 print(f"  [{keyword}] {i}/{len(items)}건 처리 (누적 처리 {total_processed}, 저장 {total_inserted}, 건너뜀 {total_skipped})")
@@ -238,3 +215,4 @@ if __name__ == "__main__":
     print(f"신규 저장: {total_inserted}건")
     print(f"건너뜀(중복/내용없음): {total_skipped}건")
     print(f"실패: {total_failed}건")
+    sys.exit(exit_code())

@@ -4,10 +4,11 @@
 # =========================================================
 
 import os
+import sys
 import time
-import requests
 import psycopg2
 from dotenv import load_dotenv
+from collect_common import PermanentError, exit_code, json_of, record_failure, request
 
 load_dotenv()
 
@@ -47,17 +48,14 @@ LAWS_TO_COLLECT = [
 def fetch_law_body(mst):
     url = "http://www.law.go.kr/DRF/lawService.do"
     params = {"OC": OC, "target": "law", "MST": mst, "type": "JSON"}
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    return response.json()
+    return json_of(request("GET", url, params=params))
 
 
 def extract_all_articles(law_json, law_name):
     try:
         articles = law_json["법령"]["조문"]["조문단위"]
     except KeyError:
-        print(f"⚠️ [{law_name}] 예상한 구조와 다릅니다. 최상위 키: {law_json.keys()}")
-        return []
+        raise PermanentError(f"[{law_name}] 예상한 응답 구조와 다름. 최상위 키: {list(law_json.keys())}") from None
 
     rows = []
     for article in articles:
@@ -91,8 +89,7 @@ def extract_all_articles(law_json, law_name):
     return rows
 
 
-def insert_tax_documents(rows):
-    conn = psycopg2.connect(**DB_CONFIG)
+def insert_tax_documents(conn, rows):
     cur = conn.cursor()
 
     inserted = 0
@@ -112,16 +109,21 @@ def insert_tax_documents(rows):
 
     conn.commit()
     cur.close()
-    conn.close()
     print(f"  └ 신규 {inserted}건 저장 (중복 {len(rows) - inserted}건은 건너뜀)")
 
 
 if __name__ == "__main__":
+    conn = psycopg2.connect(**DB_CONFIG)
     for law in LAWS_TO_COLLECT:
         print(f"[{law['name']}] 수집 시작...")
-        law_json = fetch_law_body(law["mst"])
-        rows = extract_all_articles(law_json, law["name"])
-        insert_tax_documents(rows)
+        try:
+            law_json = fetch_law_body(law["mst"])
+            rows = extract_all_articles(law_json, law["name"])
+            insert_tax_documents(conn, rows)
+        except Exception as e:
+            record_failure(conn, f"mst={law['mst']}", e)
         time.sleep(1)
+    conn.close()
 
     print("전체 법령 수집 완료!")
+    sys.exit(exit_code())

@@ -5,11 +5,12 @@
 
 import os
 import re
-import requests
+import sys
 import psycopg2
 from datetime import datetime
 from dotenv import load_dotenv
 from normalize_region import normalize_region
+from collect_common import exit_code, json_of, record_failure, request
 
 load_dotenv()
 
@@ -56,35 +57,7 @@ def fetch_page(page_no=1, num_of_rows=100):
         f"{BASE_URL}?serviceKey={API_KEY}"
         f"&dataType=json&pageNo={page_no}&numOfRows={num_of_rows}"
     )
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError:
-        raise requests.exceptions.HTTPError(
-            f"기업마당 API 요청 실패 (page={page_no}, status={response.status_code}) "
-        ) from None
-    return response.json()
-
-
-def fetch_all_pages():
-    all_items = []
-    page = 1
-    while True:
-        data = fetch_page(page_no=page)
-        body = data.get("response", {}).get("body", {})
-        items = body.get("items", {}).get("item", [])
-        if isinstance(items, dict):  
-            items = [items]
-
-        total_count = int(body.get("totalCount", 0))
-        all_items.extend(items)
-        print(f"  {page}페이지: {len(items)}건 (전체 {total_count}건 중 누적 {len(all_items)}건)")
-
-        if len(all_items) >= total_count or not items:
-            break
-        page += 1
-
-    return all_items
+    return json_of(request("GET", url))
 
 
 def insert_policy_and_announcement(conn, item):
@@ -145,14 +118,35 @@ def insert_policy_and_announcement(conn, item):
 
 if __name__ == "__main__":
     print("기업마당 지원사업 공고 수집 시작...")
-    items = fetch_all_pages()
-
     conn = psycopg2.connect(**DB_CONFIG)
+    fetched = 0
     inserted = 0
-    for item in items:
-        if insert_policy_and_announcement(conn, item):
-            inserted += 1
-    conn.commit()
+    page = 1
+    # 페이지마다 바로 적재한다. 페이지가 실패하면 기록하고 멈춘다(재시도 시 처음부터, 중복은 건너뜀).
+    while True:
+        try:
+            data = fetch_page(page_no=page)
+            body = data.get("response", {}).get("body", {})
+            items = body.get("items", {}).get("item", [])
+            if isinstance(items, dict):
+                items = [items]
+
+            total_count = int(body.get("totalCount", 0))
+            fetched += len(items)
+            print(f"  {page}페이지: {len(items)}건 (전체 {total_count}건 중 누적 {fetched}건)")
+
+            for item in items:
+                if insert_policy_and_announcement(conn, item):
+                    inserted += 1
+            conn.commit()
+        except Exception as e:
+            record_failure(conn, f"page={page}", e)
+            break
+
+        if fetched >= total_count or not items:
+            break
+        page += 1
     conn.close()
 
-    print(f"신규 announcements {inserted}건 저장 (중복 {len(items) - inserted}건은 건너뜀)")
+    print(f"신규 announcements {inserted}건 저장 (조회 {fetched}건 중 나머지는 중복으로 건너뜀)")
+    sys.exit(exit_code())
