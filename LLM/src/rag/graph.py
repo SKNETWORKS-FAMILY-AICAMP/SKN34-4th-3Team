@@ -66,7 +66,9 @@ from src.rag.tax import (
     resolve_legal_reference,
     resolve_missing_information_query,
 )
-from src.rag.tax_cache import TaxRagCache
+from src.rag.tax_cache import (
+    TaxEvidenceId, TaxRagCache, sorted_tax_evidence_ids, tax_evidence_id,
+)
 from src.serving.tax_calculators_docstring import (
     CalculationType,
     TaxCalculationError as ServingTaxCalculationError,
@@ -93,8 +95,8 @@ class RouteDecision(BaseModel):
         description="개인정보나 사업정보가 있어야 답변 가능한 질문인지 여부"
     )
     search_query: str | None = Field(
+        default=None,
         description="검색 결과를 구분하는 핵심 개념·조건만 남긴 짧은 질의. out_of_scope는 null",
-        min_length=1,
     )
 
     @model_validator(mode="after")
@@ -103,9 +105,7 @@ class RouteDecision(BaseModel):
             if self.search_query is not None:
                 raise ValueError("out_of_scope must not have a search query")
         else:
-            if self.search_query is None or not self.search_query.strip():
-                raise ValueError("Router must provide a nonblank search query")
-            self.search_query = self.search_query.strip()
+            self.search_query = (self.search_query or "").strip() or None
         return self
 
 
@@ -181,7 +181,7 @@ class GraphState(TypedDict):
     tax_cache_decision_hit: NotRequired[bool]
     tax_cache_retrieval_only: NotRequired[bool]
     tax_cache_embedding: NotRequired[list[float] | None]
-    tax_cache_prior_evidence_ids: NotRequired[list[int]]
+    tax_cache_prior_evidence_ids: NotRequired[list[TaxEvidenceId]]
 
 
 NoticeSearch = Callable[[GraphState], list[dict[str, object]] | None]
@@ -433,10 +433,7 @@ def _effective_query(state: GraphState) -> str:
 
 def _router_retrieval_query(state: GraphState) -> str:
     """Router의 초기 검색 질의는 후속 Hop Query와 별도로 보존한다."""
-    query = state.get("router_search_query")
-    if not query:
-        raise ValueError("Router did not provide a search query")
-    return query
+    return (state.get("router_search_query") or "").strip() or _effective_query(state)
 
 
 _TAX_CONTEXT_REFERENCE = re.compile(
@@ -529,10 +526,14 @@ async def route_question(
         resolved_route == "policy"
         and is_personalization_requested(_effective_query(state))
     )
+    search_query = decision.search_query
+    if search_query is None:
+        logger.warning("Router search query missing; using effective question")
+        search_query = _effective_query(state)
     return {
         "route": resolved_route,
         "personalized": personalized,
-        "router_search_query": decision.search_query,
+        "router_search_query": search_query,
     }
 
 
@@ -1106,11 +1107,11 @@ def build_graph(
         lookup_query = normalize_tax_search_query(
             state.get("search_query") or _effective_query(state)
         )
-        prior_evidence_ids = sorted(
-            document["id"]
+        prior_evidence_ids = sorted_tax_evidence_ids([
+            evidence_id
             for document in state.get("reranked_docs", [])
-            if isinstance(document.get("id"), int)
-        )
+            if (evidence_id := tax_evidence_id(document)) is not None
+        ])
         try:
             documents, queries, embedding, cached_decision, cache_mode = (
                 await asyncio.to_thread(
@@ -1285,7 +1286,6 @@ def build_graph(
                 if isinstance(tax_retriever, NoriHybridSearch):
                     dense_docs = merge_unique_sources(dense_docs, dense_extra, unit="tax")
                     bm25_docs = merge_unique_sources(bm25_docs, bm25_extra, unit="tax")
-                    rrf_docs = merge_unique_sources(rrf_docs, rrf_extra, unit="tax")
                 else:
                     dense_docs = merge_evidence(dense_docs, dense_extra)
                     bm25_docs = merge_evidence(bm25_docs, bm25_extra)
@@ -1296,11 +1296,25 @@ def build_graph(
                 exact_docs = []
             else:
                 exact_docs = exact_result
+            if isinstance(tax_retriever, NoriHybridSearch):
+                grouped_rankings = [
+                    (backend, ranking)
+                    for result in stage_results
+                    if not isinstance(result, BaseException)
+                    for backend, ranking in zip(("dense", "bm25"), result[:2])
+                    if ranking
+                ]
+                rrf_docs = source_level_rrf(
+                    [ranking for _, ranking in grouped_rankings], unit="tax",
+                    rrf_k=settings_config.hybrid_rrf_k,
+                    top_k=settings_config.cohere_rerank_candidate_k,
+                    ranking_groups=[backend for backend, _ in grouped_rankings],
+                )
             tax_rrf_docs = (
                 merge_unique_sources(exact_docs, rrf_docs, unit="tax")
                 if isinstance(tax_retriever, NoriHybridSearch)
                 else merge_evidence(exact_docs, rrf_docs)
-            )
+            )[:settings_config.cohere_rerank_candidate_k]
             retrieval_ms = (perf_counter() - retrieval_started) * 1000
             rerank_started = perf_counter()
             if tax_rrf_docs:
@@ -1466,7 +1480,7 @@ def build_graph(
             and state.get("hop_count", 0) > 0
             and state.get("reranked_docs")
             and all(
-                isinstance(document.get("id"), int)
+                tax_evidence_id(document) is not None
                 for document in state["reranked_docs"]
             )
         ):
@@ -1773,7 +1787,7 @@ def build_graph(
             and cited_sources
             and state.get("evidence_sufficient") is True
             and state.get("reranked_docs")
-            and all(isinstance(doc.get("id"), int) for doc in state["reranked_docs"])
+            and all(tax_evidence_id(doc) is not None for doc in state["reranked_docs"])
         ):
             try:
                 await asyncio.to_thread(

@@ -61,12 +61,6 @@ class FakeStructuredChatModel:
             self.last_prompt_text = prompt_input.to_string()
             self.last_config = config
             output = dict(self._outputs_by_schema[schema])
-            if schema is RouteDecision and "search_query" not in output:
-                # 재작성을 지정하지 않은 fixture는 입력 질문을 그대로 검색한다.
-                output["search_query"] = (
-                    None if output["route"] == "out_of_scope"
-                    else prompt_input.to_messages()[-1].content.partition("\n질문: ")[2]
-                )
             return schema.model_validate(output)
 
         return RunnableLambda(return_structured_output)

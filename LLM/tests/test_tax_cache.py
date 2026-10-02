@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 import json
+import asyncio
+
+import pytest
 
 from src.core.config import Settings
 from src.rag.tax_cache import (
@@ -8,6 +11,7 @@ from src.rag.tax_cache import (
     _decision_scope,
     _normalized_question,
     _user_conditions,
+    tax_evidence_id,
 )
 from src.serving.rag_routes import RagRuntime
 from src.vectorstores.hybrid import HybridSearch
@@ -26,6 +30,10 @@ class FakeEmbedding:
 class FakeVectorSearch:
     def __init__(self) -> None:
         self.ids: list[int] = []
+        self.sources: dict[int, dict[str, object]] = {}
+
+    def get_tax_source_evidence_by_ids(self, ids):
+        return [self.sources[value] for value in ids if value in self.sources]
 
     def get_tax_evidence_by_ids(
         self, ids: list[int], _created_at: datetime
@@ -432,6 +440,106 @@ def test_hybrid_runtime_passes_postgres_index_to_tax_cache(monkeypatch) -> None:
         return object()
 
     monkeypatch.setattr(rag_routes, "build_graph", fake_build_graph)
+    monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", lambda _settings: [])
     runtime.require_graph(Settings(_env_file=None, tax_cache_enabled=True), None)
     assert isinstance(captured["tax_cache"], TaxRagCache)
     assert captured["tax_cache"]._vector_search is postgres
+
+
+def _source_document():
+    return {"chunk_id": "tax_document-7", "policy_id": None, "title": "세금 공제",
+            "source": "db://tax_documents/7", "page": 1,
+            "content": "세금 공제 기준 및 예외 요건의 전체 본문", "score": 1.0,
+            "source_type": "tax_document", "source_id": 7}
+
+
+def test_mixed_chunk_and_source_cache_preserves_evidence_order_and_decision(monkeypatch):
+    cache, embedding, vector, cursor = _cache(monkeypatch)
+    source = _source_document()
+    vector.sources[7] = source
+    question = "세금 공제 기준"
+    decision = {"sufficient": True, "cited_source_numbers": [1, 2]}
+    cache.save(question, None, [source, {"id": 323}], [question], [0.1] * 1536,
+               evidence_decision=decision)
+    stored = json.loads(cursor.params[-1][3])
+    assert stored["embedding_ids"] == [tax_evidence_id(source), 323]
+    assert "content" not in stored
+    cursor.exact = {"cached_result": stored, "created_at": datetime.now(timezone.utc)}
+
+    documents, _, query_embedding, restored, mode = cache.lookup(question, None)
+    assert documents[0]["content"] == source["content"]
+    assert "id" not in documents[0]
+    assert documents[1]["id"] == 323
+    assert restored == decision and mode == "decision"
+    assert query_embedding is None and embedding.calls == 0
+
+
+@pytest.mark.parametrize("change", ["content", "title", "source", "deleted"])
+def test_source_cache_rejects_modified_or_deleted_evidence(monkeypatch, change):
+    cache, _, vector, cursor = _cache(monkeypatch)
+    source = _source_document()
+    vector.sources[7] = dict(source)
+    question = "세금 공제 기준"
+    cache.save(question, None, [source], [question], [0.1] * 1536,
+               evidence_decision={"sufficient": True})
+    cursor.exact = {"cached_result": json.loads(cursor.params[-1][3]),
+                    "created_at": datetime.now(timezone.utc)}
+    if change == "deleted":
+        vector.sources.clear()
+    else:
+        vector.sources[7][change] = "변경된 값"
+    assert cache.lookup(question, None)[0] == []
+
+
+def test_live_bm25_tax_cache_hit_preserves_source_and_skips_retrieval(monkeypatch):
+    from src.rag.graph import build_graph
+    from src.vectorstores.hybrid import BM25Search
+    from src.vectorstores.nori_hybrid import NoriHybridSearch
+    from tests.test_tax_graph import _router_llm, _decision
+
+    cache, _, vector, cursor = _cache(monkeypatch)
+    source = _source_document()
+    vector.sources[7] = source
+
+    class EmptyDense:
+        def search(self, *_args, **_kwargs):
+            return []
+
+    async def evaluate(_state):
+        return _decision(sufficient=True, cited_source_numbers=[1])
+
+    rerank_calls = []
+    def rerank(_query, documents, top_n):
+        rerank_calls.append(documents)
+        return documents[:top_n]
+
+    search = NoriHybridSearch(dense_search=EmptyDense(), bm25_search=BM25Search([source]))
+    graph = build_graph(_router_llm(), tax_search=search, tax_cache=cache, rerank=rerank,
+                        tax_evidence_evaluator=evaluate, settings=cache._settings)
+    request = {"query": "세금 공제 기준", "category": "tax"}
+    first = asyncio.run(graph.ainvoke(request))
+    assert first["answer_status"] == "success"
+    assert cursor.params
+    cursor.exact = {"cached_result": json.loads(cursor.params[-1][3]),
+                    "created_at": datetime.now(timezone.utc)}
+    second = asyncio.run(graph.ainvoke(request))
+    assert second["answer_status"] == "success"
+    assert second["tax_cache_hit"] is True
+    assert len(rerank_calls) == 1
+    assert second["reranked_docs"][0]["content"] == source["content"]
+
+
+def test_postgres_source_restore_uses_same_content_as_bm25(monkeypatch):
+    from src.features.elasticsearch_indexing import tax_source_document_from_row
+    from src.vectorstores import postgres as module
+
+    row = {"id": 7, "title": "세금 공제", "law_name": "소득세법",
+           "content": "전체 본문", "source": "db://tax_documents/7"}
+    cursor = FakeCursor(None, [row])
+    monkeypatch.setattr(module, "connect_database", lambda _settings: FakeConnection(cursor))
+    vector = object.__new__(PostgresVectorSearch)
+    vector._settings = Settings(_env_file=None)
+    restored = vector.get_tax_source_evidence_by_ids([7])
+    assert restored[0]["content"] == tax_source_document_from_row(row)["content"]
+    assert restored[0]["source_id"] == 7 and "id" not in restored[0]
+    assert cursor.params == [([7],)]

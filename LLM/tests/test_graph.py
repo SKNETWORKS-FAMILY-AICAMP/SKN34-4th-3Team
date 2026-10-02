@@ -89,6 +89,7 @@ def _router_llm(
     route: str,
     *,
     personalized: bool = False,
+    search_query: str | None = None,
     answer_status: str = "success",
     answer: str = "확인된 문서 기반 답변",
 ) -> Any:
@@ -97,6 +98,7 @@ def _router_llm(
             RouteDecision: {
                 "route": route,
                 "personalized": personalized,
+                "search_query": search_query,
             },
             TaxIntentDecision: {
                 "calculation_required": False,
@@ -649,7 +651,7 @@ def test_independent_policy_question_skips_unrelated_history_contextualization()
     assert contextualizer_calls == 0
     assert result["standalone_query"] == "청년 창업 지원사업 확인"
     assert set(queries) == set(
-        build_policy_initial_search_queries("청년 창업 지원사업 알려줘")
+        build_policy_initial_search_queries(result["standalone_query"], normalize=False)
     )
 
 
@@ -771,7 +773,7 @@ def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> Non
         return documents[:top_n]
 
     result = asyncio.run(build_graph(
-        _router_llm("policy", personalized=False),
+        _router_llm("policy", personalized=False, search_query="재도전 보증"),
         policy_search=Search(),  # type: ignore[arg-type]
         rerank=rerank,
     ).ainvoke({
@@ -790,7 +792,7 @@ def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> Non
 
     assert result["personalized"] is True
     assert len(queries) == 2
-    assert "재도전 보증 알려줘" in queries
+    assert "재도전 보증" in queries
     assert all("등록된 내 사업 정보" not in query for query in queries)
     personalized_query = next(query for query in queries if "사용자 조건:" in query)
     assert "사용자 조건: 지역 서울, 창업일 2024-01-10" in personalized_query

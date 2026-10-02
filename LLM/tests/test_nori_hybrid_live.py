@@ -127,7 +127,9 @@ def test_live_runtime_wires_postgres_dense_to_source_basic_bm25(monkeypatch) -> 
     monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", lambda _settings: documents)
     monkeypatch.setattr(postgres, "search", Backend([]).search)
     settings = Settings(_env_file=None, tax_cache_enabled=False)
+    assert asyncio.run(rag_routes.ready(runtime, settings)).index_ready is False
     wired = runtime.require_hybrid_index(settings)
+    assert asyncio.run(rag_routes.ready(runtime, settings)).index_ready is True
     assert isinstance(wired, NoriHybridSearch)
     assert wired.dense_search is postgres
     assert isinstance(wired.bm25_search, BM25Search)
@@ -178,3 +180,52 @@ def test_nori_config_rejects_pool_smaller_than_rerank_budget() -> None:
     with pytest.raises(ValueError, match="NORI_RETRIEVAL_POOL_K"):
         Settings(_env_file=None, nori_retrieval_pool_k=19,
                  cohere_rerank_candidate_k=20)
+
+
+def test_tax_query_variants_share_rerank_budget_and_preserve_exact_evidence():
+    from src.rag.tax import build_tax_initial_search_queries
+    from tests.test_tax_graph import _router_llm as tax_llm, _decision
+
+    question = "청년창업 세액감면 조세특례제한법 제6조"
+    queries = build_tax_initial_search_queries(question, normalize=False)
+    assert len(queries) == 5
+
+    class Dense(Backend):
+        def search(self, query, **options):
+            offset = queries.index(query) * 20
+            return [doc(offset + i) for i in range(1, 21)]
+
+    class Lexical(Backend):
+        def search(self, query, **options):
+            return [doc(81)] if query == queries[-1] else []
+
+    async def evaluate(_state):
+        return _decision(sufficient=True, cited_source_numbers=[1])
+
+    candidates = []
+    def rerank(_query, documents, top_n):
+        candidates.extend(documents)
+        return documents[:top_n]
+
+    search = NoriHybridSearch(
+        dense_search=Dense([]), bm25_search=Lexical([]),
+        exact_legal_search=lambda *_args, **_kwargs: [doc(900), doc(901)],
+    )
+    graph = build_graph(
+        tax_llm(), tax_search=search, rerank=rerank, tax_evidence_evaluator=evaluate,
+        settings=Settings(_env_file=None, tax_cache_enabled=False),
+    )
+    result = asyncio.run(graph.ainvoke({"query": question, "category": "tax"}))
+
+    assert result["answer_status"] == "success"
+    assert len(candidates) == 20
+    assert candidates[0]["source_id"] == 81
+    assert len({row["source_id"] for row in candidates}) == 20
+
+    candidates.clear()
+    question = "조세특례제한법 제6조"
+    queries = build_tax_initial_search_queries(question, normalize=False)
+    result = asyncio.run(graph.ainvoke({"query": question, "category": "tax"}))
+    assert result["answer_status"] == "success"
+    assert len(candidates) == 20
+    assert [row["source_id"] for row in candidates[:2]] == [900, 901]
