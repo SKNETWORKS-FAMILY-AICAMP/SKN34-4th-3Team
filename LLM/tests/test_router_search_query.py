@@ -55,15 +55,46 @@ def answer_inputs(monkeypatch):
     return calls
 
 
-@pytest.mark.parametrize("payload", [
-    {"route": "policy", "personalized": False},
-    {"route": "policy", "personalized": False, "search_query": None},
-    {"route": "tax", "personalized": False, "search_query": "  "},
-    {"route": "out_of_scope", "personalized": False, "search_query": "지원사업"},
-])
-def test_router_rejects_missing_or_inappropriate_search_queries(payload):
+def test_router_rejects_search_query_for_out_of_scope():
     with pytest.raises(ValidationError):
-        RouteDecision.model_validate(payload)
+        RouteDecision.model_validate({
+            "route": "out_of_scope", "personalized": False, "search_query": "지원사업",
+        })
+
+
+@pytest.mark.parametrize("route", ["policy", "tax", "notice"])
+@pytest.mark.parametrize("fields", [{}, {"search_query": None}, {"search_query": ""}, {"search_query": "  "}])
+@pytest.mark.parametrize("standalone", [None, "서울 청년 시설자금 융자 신청 대상"])
+def test_router_falls_back_to_effective_question(route, fields, standalone, caplog):
+    original = "청년 창업 지원사업 알려줘"
+    model = FakeStructuredChatModel({RouteDecision: {
+        "route": route, "personalized": False, **fields,
+    }})
+    update = asyncio.run(route_question({
+        "query": original, "standalone_query": standalone,
+    }, llm=model))
+
+    assert update["route"] == route
+    assert update["router_search_query"] == (standalone or original)
+    assert model.call_count == 1
+    assert "Router search query missing" in caplog.text
+
+
+def test_out_of_scope_allows_missing_search_query():
+    model = FakeStructuredChatModel({RouteDecision: {
+        "route": "out_of_scope", "personalized": False,
+    }})
+    update = asyncio.run(route_question({"query": "오늘 날씨 알려줘"}, llm=model))
+    assert update["guardrail_reason"] == "out_of_scope"
+    assert "router_search_query" not in update
+
+
+@pytest.mark.parametrize("query", [None, "", "  "])
+def test_retrieval_query_falls_back_to_effective_question(query):
+    assert graph_module._router_retrieval_query({
+        "query": "그거 신청 방법은?", "standalone_query": "청년 창업 지원사업 신청 방법",
+        "router_search_query": query,
+    }) == "청년 창업 지원사업 신청 방법"
 
 
 def test_router_rewrites_contextualized_question_in_the_same_call():
