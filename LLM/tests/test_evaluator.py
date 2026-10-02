@@ -162,6 +162,8 @@ def test_graph_dataset_matches_scenario_contract() -> None:
 
 
 def test_holdout250_loads_with_expected_contract_and_distribution() -> None:
+    from evaluation.holdout_cases_250 import SELECTED_POLICY_IDS
+
     cases = load_evaluation_cases(DEFAULT_DATASET, mode="policy", suite="holdout250")
     scenarios = load_evaluation_cases(DEFAULT_DATASET, mode="graph", suite="holdout250")
 
@@ -171,7 +173,7 @@ def test_holdout250_loads_with_expected_contract_and_distribution() -> None:
     assert len(scenarios) == 62
     assert all(len(scenario.turns) == 2 for scenario in scenarios)
     assert sum(len(scenario.turns) for scenario in scenarios) == 124
-    assert len({policy_id for case in cases for policy_id in case.relevant_policy_ids}) == 63
+    assert {policy_id for case in cases for policy_id in case.relevant_policy_ids} == set(SELECTED_POLICY_IDS)
 
     user_totals = Counter(case.user_id for case in cases)
     for scenario in scenarios:
@@ -180,7 +182,7 @@ def test_holdout250_loads_with_expected_contract_and_distribution() -> None:
     assert all(case.tags for case in cases)
     assert all(scenario.tags for scenario in scenarios)
     assert sum(
-        turn.reference is not None
+        turn.reference is not None and "calculation_type" in turn.reference
         for scenario in scenarios
         for turn in scenario.turns
     ) == 10
@@ -201,7 +203,7 @@ def test_holdout250_tax_references_match_deterministic_calculator() -> None:
         turn.reference
         for scenario in scenarios
         for turn in scenario.turns
-        if turn.reference is not None
+        if turn.reference is not None and "calculation_type" in turn.reference
     ]
 
     assert len(references) == 10
@@ -213,6 +215,21 @@ def test_holdout250_tax_references_match_deterministic_calculator() -> None:
             observed[key] == value
             for key, value in reference["expected_result"].items()
         )
+
+
+def test_holdout250_tax_answer_expectations() -> None:
+    scenarios = load_evaluation_cases(DEFAULT_DATASET, mode="graph", suite="holdout250")
+    by_id = {scenario.scenario_id: scenario for scenario in scenarios}
+    startup = by_id["holdout-tax-v2-startup-reduction-seoul-v2"].turns[1]
+    assert startup.reference["expected_result"] == {
+        "reduction_amount_krw": "6000000.00", "tax_after_reduction_krw": "6000000.00",
+    }
+    legal = by_id["holdout-tax-v2-startup-reduction-law-v2"].turns[1]
+    assert legal.reference is None
+    assert legal.expected.require_grounded is True
+    assert legal.expected.required_source_ids is None
+    assert by_id["holdout-tax-v2-common-input-v2"].turns[0].reference is None
+    assert by_id["holdout-tax-v2-future-year-2026-v2"].turns[0].reference is None
 
 
 

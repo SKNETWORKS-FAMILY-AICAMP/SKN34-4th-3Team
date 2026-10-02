@@ -1,4 +1,4 @@
-"""PostgreSQL Dense + Elasticsearch Nori retrieval for the live graph."""
+"""PostgreSQL Dense + source-level BM25 retrieval for the live graph."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from elasticsearch import ApiError, TransportError
 
 from src.data.contracts import VectorSearchResult
 from src.vectorstores.elasticsearch import ElasticsearchBM25Search
+from src.vectorstores.hybrid import BM25Search
 from src.vectorstores.postgres import PostgresVectorSearch
 
 SourceUnit = Literal["policy", "tax"]
@@ -31,13 +32,17 @@ def source_key(document: VectorSearchResult, unit: SourceUnit) -> tuple[str, int
 
 def source_level_rrf(
     rankings: list[list[VectorSearchResult]], *, unit: SourceUnit, rrf_k: int, top_k: int,
+    ranking_groups: list[str] | None = None,
 ) -> list[VectorSearchResult]:
-    """RRF once per source in each ranking, never once per chunk."""
+    """Fuse sources, optionally taking only the best contribution per group."""
     if rrf_k < 1 or top_k < 1:
         raise ValueError("rrf_k and top_k must be positive")
-    scores: dict[tuple[str, int], float] = {}
+    if ranking_groups is not None and len(ranking_groups) != len(rankings):
+        raise ValueError("ranking_groups must match rankings")
+    contributions: dict[tuple[str, int], dict[str | int, float]] = {}
     representative: dict[tuple[str, int], VectorSearchResult] = {}
-    for ranking in rankings:
+    for index, ranking in enumerate(rankings):
+        group = ranking_groups[index] if ranking_groups is not None else index
         seen: set[tuple[str, int]] = set()
         for document in ranking:
             key = source_key(document, unit)
@@ -45,10 +50,13 @@ def source_level_rrf(
                 continue
             seen.add(key)
             representative.setdefault(key, document)
-            scores[key] = scores.get(key, 0.0) + 1 / (rrf_k + len(seen))
+            scores = contributions.setdefault(key, {})
+            scores[group] = max(scores.get(group, 0.0), 1 / (rrf_k + len(seen)))
     if not rankings:
         return []
-    maximum = len(rankings) / (rrf_k + 1)
+    scores = {key: sum(groups.values()) for key, groups in contributions.items()}
+    group_count = len(set(ranking_groups)) if ranking_groups is not None else len(rankings)
+    maximum = group_count / (rrf_k + 1)
     keys = sorted(scores, key=lambda key: -scores[key])[:top_k]
     return [{**representative[key], "score": scores[key] / maximum} for key in keys]
 
@@ -73,7 +81,7 @@ class NoriHybridSearch:
         self,
         *,
         dense_search: PostgresVectorSearch,
-        bm25_search: ElasticsearchBM25Search,
+        bm25_search: ElasticsearchBM25Search | BM25Search,
         retrieval_pool_k: int = 40,
         rerank_candidate_k: int = 20,
         rrf_k: int = 60,
@@ -148,7 +156,7 @@ class NoriHybridSearch:
         self, law_name: str, article: str, *, top_k: int = 5,
     ) -> list[VectorSearchResult]:
         # Preserve the production graph's exact-reference path. This is not a
-        # BM25 fallback: normal lexical retrieval always uses Elasticsearch.
+        # BM25 fallback: normal lexical retrieval uses the configured backend.
         if self._exact_legal_search is not None:
             return self._exact_legal_search(law_name, article, top_k=top_k)
         pattern = re.compile(rf"^{re.escape(law_name)}\s+제\s*{re.escape(article)}조(?!\d)")

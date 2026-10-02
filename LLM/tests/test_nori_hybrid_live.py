@@ -7,7 +7,7 @@ from elasticsearch import ConnectionError as ElasticsearchConnectionError
 from src.core.config import Settings
 from src.rag.graph import build_graph
 from src.serving import rag_routes
-from src.vectorstores.hybrid import HybridSearch
+from src.vectorstores.hybrid import BM25Search, HybridSearch
 from src.vectorstores.nori_hybrid import NoriHybridSearch, merge_unique_sources, source_level_rrf
 from src.vectorstores.postgres import PostgresVectorSearch
 from tests.test_graph import _router_llm
@@ -91,26 +91,12 @@ def test_out_of_sync_elasticsearch_is_skipped() -> None:
     assert lexical.calls == []
 
 
-def test_ready_requires_elasticsearch_for_postgres_hybrid(monkeypatch) -> None:
+def test_ready_uses_runtime_index_for_basic_bm25() -> None:
     runtime = rag_routes.RagRuntime()
-    runtime.set_index(Backend([]), document_count=1, chunk_count=1, index_source="cache")
-    state = {"ready": False}
-
-    class FakeElasticsearch:
-        def __init__(self, _settings: Settings) -> None:
-            pass
-
-        def ready(self) -> bool:
-            return state["ready"]
-
-    monkeypatch.setattr(rag_routes, "ElasticsearchBM25Search", FakeElasticsearch)
     settings = Settings(_env_file=None, vector_store_backend="postgres", retrieval_mode="hybrid")
-
     assert asyncio.run(rag_routes.ready(runtime, settings)).index_ready is False
-    state["ready"] = True
+    runtime.set_index(Backend([]), document_count=1, chunk_count=1, index_source="cache")
     assert asyncio.run(rag_routes.ready(runtime, settings)).index_ready is True
-    runtime.elasticsearch_synced = False
-    assert asyncio.run(rag_routes.ready(runtime, settings)).index_ready is False
 
 
 def test_tax_exact_legal_lookup_remains_available() -> None:
@@ -125,22 +111,31 @@ def test_tax_exact_legal_lookup_remains_available() -> None:
     assert called == [("some law", "6", 3)]
 
 
-def test_live_runtime_wires_postgres_dense_to_nori(monkeypatch) -> None:
+def test_live_runtime_wires_postgres_dense_to_source_basic_bm25(monkeypatch) -> None:
     postgres = object.__new__(PostgresVectorSearch)
     legacy = HybridSearch(dense_search=postgres, chunks=[], dense_candidate_k=20,
                           bm25_candidate_k=20, rrf_k=60)
     runtime = rag_routes.RagRuntime(embedding_factory=lambda: object(),
                                      llm_factory=lambda: object())
     runtime.set_index(legacy, document_count=1, chunk_count=1, index_source="cache")
-    lexical = Backend([])
-    monkeypatch.setattr(rag_routes, "ElasticsearchBM25Search", lambda _settings: lexical)
+    documents = [
+        {"document_id": "policy-1", "policy_id": 1, "source_type": "policy",
+         "source_id": 1, "title": "지원", "source": "test", "content": "청년 지원"},
+        {"document_id": "tax-2", "policy_id": None, "source_type": "tax_document",
+         "source_id": 2, "title": "세금", "source": "test", "content": "세금 공제"},
+    ]
+    monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", lambda _settings: documents)
+    monkeypatch.setattr(postgres, "search", Backend([]).search)
     settings = Settings(_env_file=None, tax_cache_enabled=False)
     wired = runtime.require_hybrid_index(settings)
     assert isinstance(wired, NoriHybridSearch)
     assert wired.dense_search is postgres
-    assert wired.bm25_search is lexical
+    assert isinstance(wired.bm25_search, BM25Search)
+    assert len(wired.bm25_search.get_chunks()) == 2
     assert wired.retrieval_pool_k == 40
     assert wired.rerank_candidate_k == 20
+    assert wired.search("청년 지원", require_policy_id=True)[0]["policy_id"] == 1
+    assert wired.search("세금 공제", source_types=("tax_document",))[0]["source_id"] == 2
 
 
 def test_live_graph_hands_20_unique_policies_to_reranker() -> None:

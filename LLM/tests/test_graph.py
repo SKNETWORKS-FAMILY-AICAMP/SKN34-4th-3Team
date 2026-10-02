@@ -795,7 +795,7 @@ def test_explicit_personalization_phrase_runs_base_and_profile_searches() -> Non
     personalized_query = next(query for query in queries if "사용자 조건:" in query)
     assert "사용자 조건: 지역 서울, 창업일 2024-01-10" in personalized_query
     assert {doc["policy_id"] for doc in result["retrieved_docs"]} == {1, 2}
-    assert rerank_queries == ["재도전 보증 알려줘"]
+    assert rerank_queries == [result["standalone_query"]]
 
 
 def test_policy_rerank_backfills_distinct_policies_and_keeps_supporting_chunk() -> None:

@@ -44,6 +44,7 @@ NORI_SEARCH_STOP_TAGS = (
     "SY",
     "XSA",
     "XSV",
+    "NNB",
 )
 
 
