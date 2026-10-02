@@ -18,7 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.core.config import Settings, get_settings
 from src.data.contracts import UserProfile, VectorSearchResult
@@ -35,8 +35,6 @@ from src.rag.discovery import (
     build_policy_initial_search_queries,
     build_personalized_query,
     is_personalization_requested,
-    normalize_policy_search_query,
-    strip_personalization_phrases,
 )
 from src.rag.guardrails import has_blocked_keyword
 from src.rag.history import compact_conversation_history
@@ -86,7 +84,7 @@ TAX_HOP_SEARCH_TIMEOUT_SECONDS = 20.0
 
 
 class RouteDecision(BaseModel):
-    """질문 유형과 사용자 Context 필요 여부를 담는 Router 구조화 출력."""
+    """질문 경로·개인화 여부와 검색 조건을 보존한 질의를 담는다."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -94,6 +92,21 @@ class RouteDecision(BaseModel):
     personalized: bool = Field(
         description="개인정보나 사업정보가 있어야 답변 가능한 질문인지 여부"
     )
+    search_query: str | None = Field(
+        description="검색 결과를 구분하는 핵심 개념·조건만 남긴 짧은 질의. out_of_scope는 null",
+        min_length=1,
+    )
+
+    @model_validator(mode="after")
+    def validate_search_query(self) -> "RouteDecision":
+        if self.route == "out_of_scope":
+            if self.search_query is not None:
+                raise ValueError("out_of_scope must not have a search query")
+        else:
+            if self.search_query is None or not self.search_query.strip():
+                raise ValueError("Router must provide a nonblank search query")
+            self.search_query = self.search_query.strip()
+        return self
 
 
 class ContextualizedQuestion(BaseModel):
@@ -118,8 +131,10 @@ class GraphState(TypedDict):
     user_context: NotRequired[UserProfile | None]
     conversation_history: NotRequired[list[dict[str, str]]]
     standalone_query: NotRequired[str]
+    router_search_query: NotRequired[str | None]
     search_query: NotRequired[str | None]
     personalized_search_query: NotRequired[str | None]
+    policy_search_queries: NotRequired[list[str]]
     dense_docs: NotRequired[list[VectorSearchResult]]
     bm25_docs: NotRequired[list[VectorSearchResult]]
     retrieved_docs: NotRequired[list[VectorSearchResult]]
@@ -306,6 +321,29 @@ ROUTER_SYSTEM_PROMPT = dedent(
     out_of_scope입니다. Backend category는 참고값일 뿐이며 범위 밖 요청을 허용하는
     근거가 아닙니다. 사용자 개인정보나 사업정보가 필요한 판정 질문이면
     personalized를 true로 반환하세요. out_of_scope이면 personalized는 false입니다.
+
+    분류와 동시에 search_query를 작성하세요. 별도의 문장 요약이나 답변이 아니라,
+    검색 결과를 구분하는 핵심 개념과 조건을 담은 하나의 짧은 검색 질의입니다.
+    - 질문의 대상, 업종, 지원 목적, 제도·세목, 요청한 정보 항목을 보존하세요.
+    - 지역, 연령, 사업자 유형, 업력, 기간, 금액·비율·상한/하한 등 결과를
+      구분하는 명시적 조건은 단위와 비교 관계까지 보존하세요.
+      법령명과 조·항·호 등 정확한 참조는 그대로 보존하세요.
+    - 부정·제외 조건과 대안 관계를 보존하세요. '보조금이 아닌 융자'를
+      단순히 '보조금 융자'로 바꾸지 마세요. 복합 요구는 한 쪽을 삭제하지 마세요.
+    - 인사, 감정, 반복, 요청성 표현과 검색 조건에 해당하지 않는 배경 설명은
+      생략하고, 조건 간 관계를 알아볼 수 있는 핵심 구나 짧은 표현으로 작성하세요.
+      단어 수를 줄이려고 핵심 조건을 버리지 마세요.
+    - 질문과 복원된 대화 문맥에 없는 조건·수치·지역·공식 사업명·법령 번호를
+      추측하거나 추가하지 마세요. 원래 개념의 의미를 바꾸지 마세요.
+    - 개인화 지시 자체는 personalized로 표현하고, 질문에 명시된 실제 조건은
+      search_query에 남기세요. broad한 질문을 임의로 특정 사업으로 좁히지 마세요.
+    - out_of_scope이면 search_query는 null입니다.
+
+    검색 질의 예시:
+    - '서울에서 카페를 창업하려는 청년인데 받을 수 있는 지원사업이 있는지 알려주세요'
+      → '서울 청년 카페 창업 지원사업'
+    - '개업 3년 이내 제조업 개인사업자인데 보조금 말고 시설자금 융자를 원합니다'
+      → '업력 3년 이내 제조업 개인사업자 시설자금 융자 보조금 제외'
     '''
 ).strip()
 
@@ -344,6 +382,7 @@ def initialize_state(state: GraphState) -> dict[str, object]:
         "user_context": state.get("user_context"),
         "conversation_history": list(state.get("conversation_history", [])),
         "standalone_query": state["query"],
+        "router_search_query": None,
         "search_query": None,
         "personalized_search_query": None,
         "dense_docs": [],
@@ -390,6 +429,14 @@ def initialize_state(state: GraphState) -> dict[str, object]:
 def _effective_query(state: GraphState) -> str:
     """문맥 복원 결과가 있으면 사용하고 아니면 원래 질문을 반환한다."""
     return state.get("standalone_query") or state["query"]
+
+
+def _router_retrieval_query(state: GraphState) -> str:
+    """Router의 초기 검색 질의는 후속 Hop Query와 별도로 보존한다."""
+    query = state.get("router_search_query")
+    if not query:
+        raise ValueError("Router did not provide a search query")
+    return query
 
 
 _TAX_CONTEXT_REFERENCE = re.compile(
@@ -456,7 +503,7 @@ async def route_question(
     *,
     llm: BaseChatModel,
 ) -> dict[str, object]:
-    """기존 LangChain Structured Output 방식으로 질문 경로를 결정한다."""
+    """한 번의 구조화 출력으로 경로와 검색 질의를 함께 결정한다."""
     router_chain = ROUTER_PROMPT | llm.with_structured_output(RouteDecision)
     decision = RouteDecision.model_validate(
         await router_chain.ainvoke(
@@ -469,6 +516,7 @@ async def route_question(
         decision.route,
         decision.personalized,
     )
+    logger.debug("Router search query=%s", decision.search_query)
     if decision.route == "out_of_scope":
         return {
             "route": _default_route_for_category(state.get("category")),
@@ -484,6 +532,7 @@ async def route_question(
     return {
         "route": resolved_route,
         "personalized": personalized,
+        "router_search_query": decision.search_query,
     }
 
 
@@ -769,11 +818,11 @@ def build_graph(
             logger.info("Policy retrieval unavailable")
             return {"termination_reason": "policy_retriever_unavailable"}
         effective_query = _effective_query(state)
-        search_query = normalize_policy_search_query(
-            strip_personalization_phrases(effective_query)
-        )
+        search_query = _router_retrieval_query(state)
         personalized_search_query = None
-        search_queries = build_policy_initial_search_queries(search_query)
+        search_queries = build_policy_initial_search_queries(
+            search_query, normalize=False
+        )
         search_arguments = {
             "policy_id": state.get("policy_id"),
             "source_types": ("policy", "announcement"),
@@ -783,7 +832,7 @@ def build_graph(
         try:
             if state.get("personalized") and state.get("user_context") is not None:
                 personalized_search_query = build_personalized_query(
-                    search_query, state["user_context"]
+                    search_query, state["user_context"], normalize=False
                 )
                 search_queries.append(personalized_search_query)
             stage_results = await asyncio.gather(
@@ -801,11 +850,18 @@ def build_graph(
             for dense_result, bm25_result in zip(dense_lists, bm25_lists):
                 dense_docs = merge_evidence(dense_docs, dense_result)
                 bm25_docs = merge_evidence(bm25_docs, bm25_result)
-            rankings = [result for pair in zip(dense_lists, bm25_lists) for result in pair if result]
+            grouped_rankings = [
+                (backend, result)
+                for pair in zip(dense_lists, bm25_lists)
+                for backend, result in zip(("dense", "bm25"), pair)
+                if result
+            ]
+            rankings = [result for _, result in grouped_rankings]
             retrieved_docs = (
                 source_level_rrf(
                     rankings, unit="policy", rrf_k=settings_config.hybrid_rrf_k,
                     top_k=settings_config.cohere_rerank_candidate_k,
+                    ranking_groups=[backend for backend, _ in grouped_rankings],
                 )
                 if isinstance(policy_search, NoriHybridSearch)
                 else reciprocal_rank_fusion(
@@ -832,7 +888,7 @@ def build_graph(
         try:
             ranked_candidates = await asyncio.to_thread(
                 rerank_function,
-                search_query,
+                effective_query,
                 retrieved_docs,
                 settings_config.cohere_rerank_candidate_k,
             )
@@ -846,7 +902,7 @@ def build_graph(
             top_k=requested_top_k,
         )
         missing_information = _missing_policy_information(
-            search_query, [*reranked_docs, *policy_supporting_docs]
+            effective_query, [*reranked_docs, *policy_supporting_docs]
         )
         logger.info(
             "Policy route counts: dense=%d bm25=%d rrf=%d "
@@ -865,6 +921,7 @@ def build_graph(
             "bm25_docs": bm25_docs,
             "retrieved_docs": retrieved_docs,
             "policy_ranked_candidates": ranked_candidates,
+            "policy_search_queries": search_queries,
             "reranked_docs": reranked_docs,
             "policy_supporting_docs": policy_supporting_docs,
             "evidence_sufficient": not missing_information,
@@ -876,30 +933,37 @@ def build_graph(
 
     async def notice_node(state: GraphState) -> dict[str, object]:
         """실제 Backend Notice interface가 주입되면 조회 결과만 저장한다."""
+        search_query = _router_retrieval_query(state)
         if notice_search is None:
             logger.info("Notice backend available=false")
             return {
+                "search_query": search_query,
                 "notice_results": [],
                 "notice_backend_available": False,
                 "termination_reason": "notice_integration_unavailable",
             }
         try:
-            notice_results = await asyncio.to_thread(notice_search, state)
+            notice_results = await asyncio.to_thread(
+                notice_search, {**state, "search_query": search_query},
+            )
         except Exception:
             logger.exception("Backend notice search failed")
             return {
+                "search_query": search_query,
                 "notice_results": [],
                 "notice_backend_available": True,
                 "termination_reason": "notice_backend_error",
             }
         if notice_results is None:
             return {
+                "search_query": search_query,
                 "notice_results": [],
                 "notice_backend_available": False,
                 "termination_reason": "notice_integration_unavailable",
             }
         logger.info("Notice route count: results=%d", len(notice_results))
         return {
+            "search_query": search_query,
             "notice_results": notice_results,
             "notice_backend_available": True,
             "termination_reason": (
@@ -1152,8 +1216,8 @@ def build_graph(
 
     async def tax_retrieval_node(state: GraphState) -> dict[str, object]:
         """현재 Hop Query로 Tax Hybrid Retrieval과 Cohere Rerank를 실행한다."""
-        raw_search_query = state.get("search_query") or _effective_query(state)
-        search_query = normalize_tax_search_query(raw_search_query)
+        raw_search_query = state.get("search_query") or _router_retrieval_query(state)
+        search_query = raw_search_query
         search_history = state.get("search_history", [])
         if search_query.casefold().strip() in {
             query.casefold().strip() for query in search_history
@@ -1174,7 +1238,9 @@ def build_graph(
             }
         queries = [search_query]
         if state.get("hop_count", 0) == 0:
-            queries = build_tax_initial_search_queries(search_query)
+            queries = build_tax_initial_search_queries(
+                search_query, normalize=False
+            )
         retrieval_started = perf_counter()
         try:
             exact_reference = parse_exact_legal_query(search_query)
@@ -1247,7 +1313,11 @@ def build_graph(
                     hop_docs = await asyncio.wait_for(
                         asyncio.to_thread(
                             rerank_function,
-                            search_query,
+                            (
+                                _effective_query(state)
+                                if state.get("hop_count", 0) == 0
+                                else search_query
+                            ),
                             tax_rrf_docs,
                             state.get("top_k") or settings_config.default_top_k,
                         ),

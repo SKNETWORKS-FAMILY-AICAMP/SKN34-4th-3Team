@@ -459,7 +459,9 @@ def test_tax_follow_up_with_reference_still_uses_contextualization(
 
     assert contextualizer_calls == 1
     assert result["standalone_query"] == standalone_question
-    assert search.queries[0] == standalone_question
+    assert set(search.queries) == set(
+        build_tax_initial_search_queries(normalize_tax_search_query(standalone_question))
+    )
 
 
 def _input_plan_payload(

@@ -286,9 +286,11 @@ def normalize_tax_search_query(query: str) -> str:
     return normalized or query.strip()
 
 
-def build_tax_initial_search_queries(query: str) -> list[str]:
+def build_tax_initial_search_queries(
+    query: str, *, normalize: bool = True
+) -> list[str]:
     """명확한 세액감면 질문의 독립 근거를 첫 Hop 검색어로 만든다."""
-    normalized = normalize_tax_search_query(query)
+    normalized = normalize_tax_search_query(query) if normalize else query
     queries = [normalized]
     if "창업" in normalized and any(
         keyword in normalized for keyword in ("감면", "세액", "조세특례")
