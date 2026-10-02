@@ -1,6 +1,6 @@
-"""receipt_ocr: 방향 점수·전처리 후보 선택·시간 예산·TSV 파싱.
+"""receipt_ocr: 엔진 선택(PP-OCR → Tesseract 대체)·PP-OCR 줄 묶기·방향 점수·전처리 후보 선택·시간 예산·TSV 파싱.
 
-tesseract 실행(`_ocr_image`)은 대역으로 바꿔, 설치 여부와 무관하게 선택 로직만 검증한다.
+paddle 파이프라인과 tesseract 실행(`_ocr_image`)은 대역으로 바꿔, 설치 여부와 무관하게 선택 로직만 검증한다.
 """
 
 from io import BytesIO
@@ -93,7 +93,7 @@ def test_local_threshold_keeps_dark_text_on_uneven_background() -> None:
     assert binary[10, 175] == 255
 
 
-# ---- run_ocr 선택 흐름 ----
+# ---- run_tesseract_ocr(대체 경로) 선택 흐름 ----
 
 
 def _patch_ocr_calls(monkeypatch: pytest.MonkeyPatch, results: list[OcrResult]) -> list[int]:
@@ -108,7 +108,7 @@ def _patch_ocr_calls(monkeypatch: pytest.MonkeyPatch, results: list[OcrResult]) 
     return calls
 
 
-def test_run_ocr_picks_best_of_three_candidates_and_skips_rotation(
+def test_tesseract_picks_best_of_three_candidates_and_skips_rotation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     good_line = ("결제금액 29,210 2026-07-27 청정원 베이컨 토마토 5,480", 80.0)
@@ -116,14 +116,14 @@ def test_run_ocr_picks_best_of_three_candidates_and_skips_rotation(
     best = _result(good_line, good_line)
     calls = _patch_ocr_calls(monkeypatch, [weak, weak, best])
 
-    result = ocr.run_ocr(_png_bytes(800, 1200))
+    result = ocr.run_tesseract_ocr(_png_bytes(800, 1200))
 
     assert result is best
     # 0도에서 세 전처리(enhance·plain·local_threshold)만 읽고 회전 재시도는 하지 않는다.
     assert len(calls) == 3
 
 
-def test_run_ocr_stops_rotating_when_time_budget_is_spent(
+def test_tesseract_stops_rotating_when_time_budget_is_spent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     weak = _result(("?", 30.0))
@@ -134,20 +134,93 @@ def test_run_ocr_stops_rotating_when_time_budget_is_spent(
     clock = iter([0.0] + [elapsed] * 5)
     monkeypatch.setattr(ocr.time, "monotonic", lambda: next(clock))
 
-    ocr.run_ocr(_png_bytes(800, 1200))
+    ocr.run_tesseract_ocr(_png_bytes(800, 1200))
 
     # 예산을 넘겼으므로 0도 세 번 이후 회전 재시도는 한 번도 하지 않는다.
     assert len(calls) == 3
 
 
-def test_run_ocr_tries_rotations_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tesseract_tries_rotations_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     weak = _result(("?", 30.0))
     calls = _patch_ocr_calls(monkeypatch, [weak] * 10)
     monkeypatch.setattr(ocr.time, "monotonic", lambda: 0.0)
 
-    ocr.run_ocr(_png_bytes(800, 1200))
+    ocr.run_tesseract_ocr(_png_bytes(800, 1200))
 
     assert len(calls) == 3 + len(ocr.RETRY_ROTATIONS)
+
+
+# ---- 엔진 선택: PP-OCRv5가 기본, 쓸 수 없거나 실패하면 Tesseract ----
+
+
+class _FakePaddleResult:
+    def __init__(self, texts, scores, boxes):
+        self.json = {"res": {"rec_texts": texts, "rec_scores": scores, "rec_boxes": boxes}}
+
+
+class _FakePaddle:
+    def __init__(self, results=None, error=None):
+        self.results, self.error, self.inputs = results or [], error, []
+
+    def predict(self, image):
+        self.inputs.append(image)
+        if self.error:
+            raise self.error
+        return iter(self.results)
+
+
+def test_run_ocr_uses_paddle_and_groups_boxes_into_receipt_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    # PP-OCR은 품목명·단가·수량을 따로 돌려준다. 같은 높이의 상자는 왼→오른 순서로 한 줄이 된다.
+    fake = _FakePaddle([_FakePaddleResult(
+        ["5,480", "베이컨토마토", "합계", "1", "29,210"],
+        [0.9, 0.8, 0.95, 0.7, 0.99],
+        [[300, 102, 360, 122], [10, 100, 120, 124], [10, 200, 60, 222], [400, 101, 410, 121], [300, 201, 380, 221]],
+    )])
+    monkeypatch.setattr(ocr, "_get_paddle_pipeline", lambda: fake)
+    monkeypatch.setattr(ocr, "run_tesseract_ocr", lambda _b: pytest.fail("Tesseract should not run"))
+
+    result = ocr.run_ocr(_png_bytes(500, 300))
+
+    assert [line.text for line in result.lines] == ["베이컨토마토 5,480 1", "합계 29,210"]
+    assert [line.index for line in result.lines] == [1, 2]
+    # 신뢰도는 0~1 → 0~100으로 바꾸고 글자 수로 가중 평균한다.
+    assert result.lines[1].confidence == pytest.approx((95 * 2 + 99 * 6) / 8)
+    assert (result.lines[0].left, result.lines[0].width) == (10, 400)
+    assert (result.image_width, result.image_height) == (500, 300)
+    # paddle에는 BGR 3채널 배열을 넘긴다.
+    assert fake.inputs[0].shape == (300, 500, 3)
+
+
+def test_run_ocr_falls_back_to_tesseract_when_paddle_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    fallback = _result(("합계 1,000", 90.0))
+    monkeypatch.setattr(ocr, "_get_paddle_pipeline", lambda: None)
+    monkeypatch.setattr(ocr, "run_tesseract_ocr", lambda _b: fallback)
+
+    assert ocr.run_ocr(_png_bytes(100, 100)) is fallback
+
+
+def test_run_ocr_falls_back_to_tesseract_when_paddle_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    fallback = _result(("합계 1,000", 90.0))
+    monkeypatch.setattr(ocr, "_get_paddle_pipeline", lambda: _FakePaddle(error=RuntimeError("boom")))
+    monkeypatch.setattr(ocr, "run_tesseract_ocr", lambda _b: fallback)
+
+    assert ocr.run_ocr(_png_bytes(100, 100)) is fallback
+
+
+def test_run_ocr_rejects_undecodable_bytes_before_any_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ocr, "_get_paddle_pipeline", lambda: pytest.fail("engine should not load"))
+
+    with pytest.raises(OcrUnavailableError):
+        ocr.run_ocr(b"not an image")
+
+
+def test_group_rows_keeps_rows_apart_when_vertical_gap_is_large() -> None:
+    lines = ocr._group_rows([
+        ("둘째 줄", 90.0, 0, 40, 50, 60),
+        ("첫째 줄", 90.0, 0, 0, 50, 20),
+    ])
+
+    assert [line.text for line in lines] == ["첫째 줄", "둘째 줄"]
 
 
 # ---- TSV 파싱 ----
