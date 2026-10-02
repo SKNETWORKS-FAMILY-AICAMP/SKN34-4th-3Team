@@ -122,6 +122,10 @@
   .rg2__prog b {
     color: var(--blue-deep);
   }
+  /* 반응형 웹앱 휴대폰 폭에서만 쓰는 화면 탭(할 일 · AI 코치). 보이는 규칙은 src/web/web.css. */
+  .rg2__mtabs {
+    display: none;
+  }
   .rg2__cols {
     display: grid;
     /* 할 일 목록 1 : AI 코치 대화창 2 */

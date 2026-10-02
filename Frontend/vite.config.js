@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -42,6 +43,15 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    // 기존 화면(index.html)과 반응형 웹앱(web.html)을 함께 빌드한다.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        web: fileURLToPath(new URL('./web.html', import.meta.url)),
+      },
+    },
+  },
   server: {
     port: 5173,
     open: true,

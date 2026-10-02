@@ -1,4 +1,9 @@
-"""영수증 이미지에서 글자·위치·신뢰도를 읽는 Tesseract OCR.
+"""영수증 이미지에서 글자·위치·신뢰도를 읽는 OCR.
+
+기본 엔진은 PaddleOCR PP-OCRv5 한국어 모델이다. 실제 영수증 5장 실측(2026-10-02)에서
+Tesseract보다 정확하고(정답 34개 중 33개 vs 28개) 빨랐다(5장 12.1초 vs 25.9초).
+paddle을 불러오지 못하면(설치 누락·모델 다운로드 실패 등) 종전 Tesseract 경로로 읽는다.
+측정 내용: Docs/OCR_PPOCRV5_BENCHMARK.md
 
 LLM은 이 결과(글자)만 받아 해석한다. 이미지를 직접 보고 값을 채우는 Vision 방식보다
 같은 이미지에 같은 결과가 나오고, 읽은 자리와 인식 신뢰도를 남길 수 있다.
@@ -6,10 +11,14 @@ LLM은 이 결과(글자)만 받아 해석한다. 이미지를 직접 보고 값
 
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
@@ -53,6 +62,24 @@ SCORE_MIN_LINE_CONFIDENCE = 60.0
 # 글자 수가 +23.8%(6장 합계 810→1003자) 늘었다.
 LOCAL_THRESHOLD_BLOCK = 35
 LOCAL_THRESHOLD_C = 10
+
+# ---- PP-OCRv5 한국어(기본 엔진) 설정: 실측(2026-10-02)에서 정확도를 유지하며 가장 빨랐던 조합 ----
+# 검출은 가벼운 mobile 모델(기본 server 모델과 정확도가 같고 1.8배 빠름). 한국어 인식 모델은 mobile뿐이다.
+PADDLE_DET_MODEL = "PP-OCRv5_mobile_det"
+PADDLE_REC_MODEL = "korean_PP-OCRv5_mobile_rec"
+# 검출에 쓰는 긴 변 상한. 1280px부터는 작은 품목명을 놓쳐 1600px로 둔다.
+PADDLE_DET_LIMIT_SIDE = 1600
+# 다른 컨테이너와 CPU를 나눠 쓰는 환경에서 4개가 2·6·8개보다 빨랐다. 서버 코어 수에 맞춰 바꿀 수 있다.
+PADDLE_CPU_THREADS = int(os.getenv("OCR_CPU_THREADS", "4"))
+# 같은 줄로 묶는 기준: 두 글자 상자의 세로 중심 차이가 글자 높이의 이 비율 이하면 한 줄로 본다.
+# PP-OCR은 "베이컨토마토", "5,480", "1"을 따로 돌려주므로, 영수증 한 줄로 묶어야 LLM이 품목과 금액을 짝짓는다.
+ROW_CENTER_RATIO = 0.5
+
+_logger = logging.getLogger(__name__)
+_paddle_pipeline: Any = None
+_paddle_failed = False
+# 파이프라인 생성과 추론을 한 번에 하나씩만 한다(모델 중복 로드 방지, 추론 객체는 스레드 안전이 보장되지 않음).
+_paddle_lock = threading.Lock()
 
 
 class OcrUnavailableError(RuntimeError):
@@ -99,7 +126,121 @@ class OcrResult:
 
 
 def run_ocr(image_bytes: bytes) -> OcrResult:
-    """영수증 이미지를 보정해 글자를 읽어 줄 단위로 돌려준다. 읽지 못하면 OcrUnavailableError.
+    """영수증 이미지의 글자를 줄 단위로 돌려준다. 읽지 못하면 OcrUnavailableError.
+
+    PP-OCRv5 한국어로 읽고, paddle을 쓸 수 없거나 실행에 실패하면 Tesseract로 읽는다.
+    """
+    image = _open_image(image_bytes)
+    pipeline = _get_paddle_pipeline()
+    if pipeline is not None:
+        try:
+            return _run_paddle(pipeline, image)
+        except Exception:  # paddle 내부 오류는 종류가 다양해 모두 Tesseract로 넘긴다
+            _logger.exception("PP-OCR failed; falling back to Tesseract")
+    return run_tesseract_ocr(image_bytes)
+
+
+def warm_up() -> bool:
+    """서버 시작 직후 모델을 미리 불러와 첫 영수증이 로딩 시간을 기다리지 않게 한다."""
+    pipeline = _get_paddle_pipeline()
+    if pipeline is None:
+        return False
+    try:
+        _run_paddle(pipeline, Image.new("RGB", (320, 120), "white"))
+    except Exception:
+        _logger.exception("PP-OCR warm-up failed")
+        return False
+    return True
+
+
+def _get_paddle_pipeline() -> Any:
+    """PP-OCR 파이프라인을 처음 한 번만 만든다. 만들 수 없으면 None(이후 다시 시도하지 않는다)."""
+    global _paddle_pipeline, _paddle_failed
+    if _paddle_pipeline is not None or _paddle_failed:
+        return _paddle_pipeline
+    with _paddle_lock:
+        if _paddle_pipeline is not None or _paddle_failed:
+            return _paddle_pipeline
+        os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+        try:
+            from paddleocr import PaddleOCR
+
+            _paddle_pipeline = PaddleOCR(
+                text_detection_model_name=PADDLE_DET_MODEL,
+                text_recognition_model_name=PADDLE_REC_MODEL,
+                # 옆으로 누운 사진이 많아 문서 방향 분류는 켠다. 글줄 방향 분류는 효과 없이 느려 끈다.
+                use_doc_orientation_classify=True,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
+                text_det_limit_type="max",
+                text_det_limit_side_len=PADDLE_DET_LIMIT_SIDE,
+                cpu_threads=PADDLE_CPU_THREADS,
+            )
+        except Exception:
+            _logger.exception("PP-OCR unavailable; using Tesseract")
+            _paddle_failed = True
+        return _paddle_pipeline
+
+
+def _run_paddle(pipeline: Any, image: Image.Image) -> OcrResult:
+    bgr = np.ascontiguousarray(np.asarray(image.convert("RGB"))[:, :, ::-1])
+    with _paddle_lock:
+        results = list(pipeline.predict(bgr))
+    words: list[tuple[str, float, float, float, float, float]] = []
+    for result in results:
+        data = result.json.get("res", result.json)
+        texts = data.get("rec_texts") or []
+        scores = data.get("rec_scores") or []
+        boxes = data.get("rec_boxes") or []
+        for text, score, box in zip(texts, scores, boxes):
+            text = str(text).strip()
+            if text:
+                x1, y1, x2, y2 = (float(v) for v in box)
+                words.append((text, float(score) * 100, x1, y1, x2, y2))
+    return OcrResult(
+        lines=_group_rows(words), image_width=image.width, image_height=image.height
+    )
+
+
+def _group_rows(words: list[tuple[str, float, float, float, float, float]]) -> list[OcrLine]:
+    """글자 상자(text, 신뢰도, x1, y1, x2, y2)를 세로 위치가 같은 것끼리 한 줄로 묶는다.
+
+    줄은 위→아래, 줄 안의 상자는 왼→오른 순서로 잇는다. 줄 신뢰도는 글자 수로 가중한 평균.
+    """
+    rows: list[list[tuple[str, float, float, float, float, float]]] = []
+    for word in sorted(words, key=lambda w: (w[3] + w[5]) / 2):
+        center, height = (word[3] + word[5]) / 2, word[5] - word[3]
+        if rows:
+            row = rows[-1]
+            row_center = sum((w[3] + w[5]) / 2 for w in row) / len(row)
+            row_height = sum(w[5] - w[3] for w in row) / len(row)
+            if abs(center - row_center) <= ROW_CENTER_RATIO * min(height, row_height):
+                row.append(word)
+                continue
+        rows.append([word])
+
+    lines: list[OcrLine] = []
+    for row in rows:
+        row.sort(key=lambda w: w[2])
+        chars = sum(len(w[0]) for w in row)
+        left, top = min(w[2] for w in row), min(w[3] for w in row)
+        right, bottom = max(w[4] for w in row), max(w[5] for w in row)
+        lines.append(
+            OcrLine(
+                index=len(lines) + 1,
+                text=" ".join(w[0] for w in row),
+                confidence=sum(w[1] * len(w[0]) for w in row) / chars,
+                left=round(left),
+                top=round(top),
+                width=round(right - left),
+                height=round(bottom - top),
+            )
+        )
+    return lines
+
+
+def run_tesseract_ocr(image_bytes: bytes) -> OcrResult:
+    """(대체 경로) 영수증 이미지를 보정해 Tesseract로 읽는다. 읽지 못하면 OcrUnavailableError.
 
     휴대폰 사진은 EXIF 회전 정보만 있고 실제 픽셀은 옆으로 누워 있는 경우가 많다. 회전을 적용하고,
     그래도 잘 읽히지 않으면 90/270/180도로 돌려 가며 가장 잘 읽힌 결과를 쓴다.
@@ -141,14 +282,7 @@ def _prepare_image(image_bytes: bytes) -> Image.Image:
     큰 휴대폰 사진은 줄이고(MAX_LONG_SIDE), 반대로 너무 작은 사진은 글자가 뭉개지므로
     키운다(MIN_LONG_SIDE).
     """
-    try:
-        image = Image.open(BytesIO(image_bytes))
-        image.load()
-        image = ImageOps.exif_transpose(image)
-    except Exception as exc:  # 손상된 파일, 지원하지 않는 형식, 지나치게 큰 이미지
-        raise OcrUnavailableError("image could not be decoded") from exc
-
-    gray = ImageOps.grayscale(image)
+    gray = ImageOps.grayscale(_open_image(image_bytes))
     long_side = max(gray.size)
     ratio = 0.0
     if long_side > MAX_LONG_SIDE:
@@ -158,6 +292,16 @@ def _prepare_image(image_bytes: bytes) -> Image.Image:
     if ratio:
         gray = gray.resize((round(gray.width * ratio), round(gray.height * ratio)), Image.LANCZOS)
     return gray
+
+
+def _open_image(image_bytes: bytes) -> Image.Image:
+    """이미지를 열고 휴대폰 사진의 EXIF 회전 정보를 실제 픽셀에 적용한다."""
+    try:
+        image = Image.open(BytesIO(image_bytes))
+        image.load()
+        return ImageOps.exif_transpose(image)
+    except Exception as exc:  # 손상된 파일, 지원하지 않는 형식, 지나치게 큰 이미지
+        raise OcrUnavailableError("image could not be decoded") from exc
 
 
 def _plain(gray: Image.Image) -> Image.Image:

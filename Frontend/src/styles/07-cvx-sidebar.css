@@ -11,6 +11,11 @@
     width: 100%;
     min-width: 0;
   }
+  /* 반응형 웹앱 휴대폰 폭에서만 쓰는 '이전 대화' 시트 버튼 · 뒤 배경. 보이는 규칙은 src/web/web.css. */
+  .cvx__dim,
+  .ai__histbtn {
+    display: none;
+  }
   .cvx__side {
     display: flex;
     flex-direction: column;

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { INDUSTRIES, REGIONS } from '../constants.js';
 import { linkBtn } from '../utils.js';
 import { GuideTour } from '../components/GuideTour.jsx';
+import { isWebApp } from '../web/env.js';
 import { GovDetailModal, PolicySummaryCard } from './AnnouncementAnalyzer.jsx';
 import { paginateSupplementFields, reassessSupplementFields, templateContext } from '../businessPlanSupplement.js';
 
@@ -541,6 +542,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [finalEvaluating, setFinalEvaluating] = useState(false);
   const [err, setErr] = useState('');
   const [savedNote, setSavedNote] = useState('');
+  const [barMore, setBarMore] = useState(false); // 휴대폰 액션 바의 '더보기'(이전 단계 · 임시저장 등)
   const [announcements, setAnnouncements] = useState([]);
   const [announcementError, setAnnouncementError] = useState('');
   const [selectedAnnouncementId, setSelectedAnnouncementId] = useState('');
@@ -1414,6 +1416,34 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     improve: '평가 내용을 참고해 항목을 수정하세요. 제목에 마우스를 올리거나 키보드로 선택하면 해당 평가를 볼 수 있습니다.',
   }[key] || '');
 
+  // 웹앱(/web.html): 단계별 버튼을 본문 아래 액션 바 하나로 모은다.
+  // 아직 안 한 단계 작업이 있으면 그 작업이, 끝났으면 다음 단계가 파란 주 버튼이 된다.
+  const web = isWebApp();
+  const stepAction = {
+    refine: {
+      run: runRefine, done: refinedDone, disabled: !basicReady || !ideaReady || refining,
+      label: refining ? '입력 정리 중…' : refinedDone ? 'AI로 다시 정리' : 'AI로 입력 정리하기',
+    },
+    setup: {
+      run: () => (templateInfo ? runTemplateAnalysis() : generatePlan()), done: !!plan,
+      disabled: inspectingTemplate || analyzingFields || (!!templateFile && !templateInfo)
+        || !basicReady || !ideaReady || !refinedDone || generating,
+      label: analyzingFields ? '양식 입력 영역 분석 중…' : generating ? '초안 작성 중…'
+        : templateInfo ? '양식 분석하고 초안 준비하기' : plan ? 'AI 초안 다시 만들기' : 'AI 초안 만들기',
+    },
+    supplement: { run: null, done: !!plan },
+    preview: plan ? {
+      run: runEvaluate, done: !!evalResult, disabled: evaluating,
+      label: evaluating ? '진단 중…' : evalResult ? '다시 진단받기' : '예비진단 시작하기',
+    } : { run: null, done: false },
+    improve: plan && evalResult ? {
+      run: regeneratePlan, done: !!finalPlan, disabled: generating, keepFocus: true,
+      label: generating ? '초안 생성 중…' : '보완 내용으로 초안 다시 만들기',
+    } : { run: null, done: false },
+    done: { run: null, done: true },
+  }[active] || { run: null, done: false };
+  const actionIsPrimary = !!stepAction.run && !stepAction.done;
+
   const renderBasic = (field) => (
     <label key={field.key} className={'bp-field' + (field.key === 'businessName' || field.multiline ? ' bp2__full' : '')}>
       <span className="bp-field__label">{field.label}</span>
@@ -1489,6 +1519,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
             </nav>
           )}
 
+          {!web && (
           <div className="bp2__actions">
             {active === 'refine' && (
               <button type="button" className="bp2__cta" data-tour="cta" onClick={runRefine}
@@ -1527,6 +1558,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               </button>
             )}
           </div>
+          )}
           {guideText && <p className="bp2__guide">{guideText}</p>}
         </aside>
 
@@ -1767,7 +1799,9 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               ) : evaluating ? (
                 <AnalyzingPanel title="AI가 예비진단을 하고 있어요" sub="항목별로 강점과 보완할 점을 살펴보고 있어요…" />
               ) : !evalResult ? (
-                <button type="button" className="exp-upload" onClick={runEvaluate}>🩺 예비진단 시작하기</button>
+                web
+                  ? <p className="bp2__empty">초안이 준비됐어요. 아래 <b>예비진단 시작하기</b>를 누르면 항목별 점수와 보완할 점을 알려드려요.</p>
+                  : <button type="button" className="exp-upload" onClick={runEvaluate}>🩺 예비진단 시작하기</button>
               ) : (
                 <React.Fragment>
                   <div className="bp-eval__summary">
@@ -1794,8 +1828,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                     실제 심사 결과가 아니라 AI가 초안과 적용된 기준으로 매긴 참고용 자체 점검이에요.
                     제출 전 관련 전문가의 검토를 함께 받아 보세요.
                   </p>
-                  <button type="button" className="exp-excel" onClick={runEvaluate}>🔄 다시 진단받기</button>
-                  <button type="button" className="exp-upload" onClick={() => goStep('improve')}>초안 수정하기 ›</button>
+                  {!web && <button type="button" className="exp-excel" onClick={runEvaluate}>🔄 다시 진단받기</button>}
+                  {!web && <button type="button" className="exp-upload" onClick={() => goStep('improve')}>초안 수정하기 ›</button>}
                 </React.Fragment>
               )}
             </section>
@@ -1861,10 +1895,12 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                       );
                     })}
                   </div>
-                  <button type="button" className="exp-upload" data-tour="regen" onMouseDown={(event) => event.preventDefault()}
-                    onClick={regeneratePlan} disabled={generating}>
-                    보완 내용으로 초안 다시 생성하기
-                  </button>
+                  {!web && (
+                    <button type="button" className="exp-upload" data-tour="regen" onMouseDown={(event) => event.preventDefault()}
+                      onClick={regeneratePlan} disabled={generating}>
+                      보완 내용으로 초안 다시 생성하기
+                    </button>
+                  )}
                 </React.Fragment>
               )}
             </section>
@@ -1917,6 +1953,46 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
             </section>
           )}
 
+          {web && (
+            <div className={'bp2__bar' + (barMore ? ' is-more-open' : '')} role="group" aria-label="사업계획서 작업">
+              {barMore && <div className="bp2__bar-dim" onClick={() => setBarMore(false)} aria-hidden="true" />}
+              <button type="button" className="bp2__bar-more" aria-expanded={barMore}
+                aria-label="더보기" onClick={() => setBarMore((v) => !v)}>⋯</button>
+              {/* 보조 버튼: PC · 태블릿은 바 왼쪽에 나란히, 휴대폰은 '더보기'를 누르면 위로 펼쳐진다 */}
+              <div className="bp2__bar-sub" onClick={() => setBarMore(false)}>
+                {prevStep && (
+                  <button type="button" className="bp2__bar-ghost" data-tour="prev" onClick={() => goStep(prevStep.key)}>
+                    ‹ 이전 단계
+                  </button>
+                )}
+                <button type="button" className="bp2__bar-ghost" data-tour="save" onClick={saveNow}>임시저장</button>
+                {stepAction.run && !actionIsPrimary && (
+                  <button type="button" className="bp2__bar-ghost" data-tour={active === 'improve' ? 'regen' : 'cta'} onClick={stepAction.run}
+                    onMouseDown={stepAction.keepFocus ? (event) => event.preventDefault() : undefined}
+                    disabled={stepAction.disabled}>
+                    {stepAction.label}
+                  </button>
+                )}
+                {nextStep && actionIsPrimary && (
+                  <button type="button" className="bp2__bar-ghost" data-tour="next" onClick={() => goStep(nextStep.key)}>
+                    건너뛰고 {nextStep.label} ›
+                  </button>
+                )}
+              </div>
+              {savedNote && <span className="bp2__saved" role="status">{savedNote}</span>}
+              {actionIsPrimary ? (
+                <button type="button" className="bp2__bar-main" data-tour={active === 'improve' ? 'regen' : 'cta'} onClick={stepAction.run}
+                  onMouseDown={stepAction.keepFocus ? (event) => event.preventDefault() : undefined}
+                  disabled={stepAction.disabled}>
+                  {stepAction.label}
+                </button>
+              ) : nextStep ? (
+                <button type="button" className="bp2__bar-main" data-tour="next" onClick={() => goStep(nextStep.key)}>
+                  다음 단계 · {nextStep.label} ›
+                </button>
+              ) : null}
+            </div>
+          )}
         </main>
       </div>
           {announcementPickerOpen && (
