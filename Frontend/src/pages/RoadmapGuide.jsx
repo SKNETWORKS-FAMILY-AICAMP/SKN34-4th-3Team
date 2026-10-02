@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { isWebApp } from '../web/env.js';
 import { useApi } from '../api.js';
 import {
   ROADMAP, ROADMAP_GOALS, ROADMAP_TASKS, RM_GRADES, RM_AS_OF,
@@ -13,6 +14,17 @@ const GRADE_ORDER = ['법령', '공공기관', '참고', '방법론', '미확인
 export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
   const [active, setActive] = useState('A');
   const [openTask, setOpenTask] = useState(null); // 근거를 펼친 목표(단계 안에서의 원래 순번)
+  // 반응형 웹앱 휴대폰 폭에서만 쓰는 화면 나눔(AI 코치 · 할 일). 대화 위주라 AI 코치를 먼저 연다.
+  // 다른 화면에서는 탭이 CSS로 숨겨지고 둘 다 보인다.
+  const [mTab, setMTab] = useState('chat');
+  // 웹앱: 체크 기록을 받으면 아직 단계를 고르지 않았을 때 '처음 안 끝난 단계'를 연다(다 끝낸 A단계부터 보이지 않게).
+  const picked = useRef(false);
+  useEffect(() => {
+    if (!isWebApp() || picked.current || !Object.keys(done).length) return;
+    const next = ROADMAP.find((s) => (ROADMAP_TASKS[s.k] || []).some((_, i) => !done[`${s.k}:${i}`]));
+    if (next) setActive(next.k);
+    picked.current = true;
+  }, [done]);
   // 추천 질문은 서버에서 받아오고, 없으면 화면 기본값을 쓴다
   const { data: roadmapSuggestions } = useApi(
     '/chat/categories/roadmap/suggested-questions',
@@ -22,6 +34,26 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
 
   const tasks = ROADMAP_TASKS[active] || [];
   const goal = ROADMAP_GOALS[active];
+  // 웹앱: 할 일과 AI 코치를 한 카드로 묶는다. 할 일의 '묻기'는 그 할 일 질문을 대화창으로 보낸다.
+  const web = isWebApp();
+  const askRef = useRef(null);
+  const [dockOpen, setDockOpen] = useState(false); // 휴대폰에서 대화창 위 할 일 패널을 펼쳤는지
+  const stage = ROADMAP.find((s) => s.k === active) || ROADMAP[0];
+  const stageDoneCount = tasks.filter((_, i) => done[`${active}:${i}`]).length;
+  const stagePct = tasks.length ? Math.round((stageDoneCount / tasks.length) * 100) : 0;
+  // 대화에는 지금 단계(roadmapStep)가 함께 전달되므로 질문은 할 일 이름만으로 짧게 만든다.
+  const taskQuestion = (t) => `'${t.t}' 어떻게 하면 되나요?`;
+  const askTask = (t) => {
+    setDockOpen(false);
+    if (askRef.current) askRef.current(taskQuestion(t));
+  };
+  // 추천 질문: 이 단계에서 아직 안 끝낸 할 일부터, 그다음 서버 추천 질문
+  const chatChips = web
+    ? [...new Set([
+      ...tasks.filter((_, i) => !done[`${active}:${i}`]).slice(0, 3).map(taskQuestion),
+      ...roadmapSuggestions,
+    ])].slice(0, 6)
+    : roadmapSuggestions;
   const totalTasks = ROADMAP.reduce((n, s) => n + (ROADMAP_TASKS[s.k] || []).length, 0);
   const totalDone = Object.values(done).filter(Boolean).length;
   const overallPct = totalTasks ? Math.round((totalDone / totalTasks) * 100) : 0;
@@ -39,7 +71,7 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
     .sort((a, b) => GRADE_ORDER.indexOf(a.t.grade) - GRADE_ORDER.indexOf(b.t.grade) || a.i - b.i);
 
   return (
-    <div className="rg2">
+    <div className={web ? 'rg2 rg2--web rg2--m-chat' + (dockOpen ? ' is-dock-open' : '') : 'rg2 rg2--m-' + mTab}>
       <div className="rz rz--nav is-in">
         <div className="rz__row" role="tablist" aria-label="창업 단계">
           {ROADMAP.map((s, i) => (
@@ -54,7 +86,7 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
                   (s.k === active ? ' is-active' : '') +
                   (stepDone(s.k) ? ' is-done' : '')
                 }
-                onClick={() => { setActive(s.k); setOpenTask(null); }}
+                onClick={() => { picked.current = true; setActive(s.k); setOpenTask(null); }}
               >
                 <span className="rz__ico">{stepDone(s.k) ? rmDoneIcon() : rmIcon(s.k)}</span>
                 <span className="rz__phase">{s.phase}</span>
@@ -69,8 +101,30 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
         전체 진행률 <b className="u-num">{overallPct}%</b> · {totalDone} / {totalTasks} 작업 완료
       </p>
 
+      {!web && (
+      <div className="rg2__mtabs" role="tablist" aria-label="로드맵 화면">
+        {[['chat', 'AI 코치'], ['tasks', '할 일']].map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={mTab === k}
+            className={'rg2__mtab' + (mTab === k ? ' is-on' : '')} onClick={() => setMTab(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      )}
       <div className="rg2__cols">
         <section className="rg2__list">
+          {web && (
+            <button type="button" className="rg2__dock" aria-expanded={dockOpen} onClick={() => setDockOpen((v) => !v)}>
+              <span className="rg2__dock-k" aria-hidden="true">{active}</span>
+              <span className="rg2__dock-txt">
+                <b>{stage.t} 단계 할 일</b>
+                <small>{stageDoneCount} / {tasks.length} 완료 · 전체 진행률 {overallPct}%</small>
+              </span>
+              <span className="rg2__dock-bar" aria-hidden="true"><i style={{ width: stagePct + '%' }} /></span>
+              <span className="rg2__dock-chev" aria-hidden="true">▾</span>
+            </button>
+          )}
+          <div className="rg2__listbody">
           {goal && (
             <div className="rg2__goal">
               <b className="rg2__goaltext">{goal.goal}</b>
@@ -124,6 +178,12 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
                         {t.grade}
                       </span>
                     </button>
+                    {web && !checked && (
+                      <button type="button" className="rg2__ask" onClick={() => askTask(t)}
+                        aria-label={`${t.t} AI 코치에게 묻기`}>
+                        묻기
+                      </button>
+                    )}
                   </div>
                   {open && (
                     <div className="rg2__taskinfo">
@@ -158,18 +218,20 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
             {RM_AS_OF} 기준으로 조사한 내용이에요. 금액·비율·요건은 개정될 수 있으니 실제 신청 전에 원문을
             확인하고, 세금 관련 판단은 세무사와 함께 확인해 주세요.
           </p>
+          </div>
         </section>
 
         <aside className="rg2__chat">
           <AiConsult
             user={user || { biz: DEFAULT_BIZ, region: DEFAULT_REGION }}
             rules={RG_CHAT_RULES}
-            suggestions={roadmapSuggestions}
+            suggestions={chatChips}
             title="로드맵 AI 코치"
             category="roadmap"
             roadmapStep={active}
             allowSampleFallback={false}
             onRequireLogin={onRequireLogin}
+            askRef={askRef}
             compact
           />
         </aside>

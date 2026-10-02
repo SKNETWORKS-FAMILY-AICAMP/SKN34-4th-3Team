@@ -3,6 +3,7 @@ import { GOV_RULES, GOV_CHIPS, DEFAULT_BIZ, DEFAULT_REGION, NO_EVENTS } from '..
 import { api, useApi } from '../api.js';
 import { eventsByDate, policyDday, policyDdayLabel, toPolicies } from '../utils.js';
 import { AiConsult } from '../components/AiConsult.jsx';
+import { isWebApp, takeHandoff } from '../web/env.js';
 import { Calendar } from './Home.jsx';
 
 function safeOriginalUrl(item) {
@@ -30,18 +31,29 @@ export function OriginalButton({ item, className }) {
   );
 }
 
-export function PolicySummaryCard({ item, children }) {
+// onOpen: 반응형 웹앱에서는 카드(제목 부분)를 누르면 상세가 열린다. 기본 페이지는 '상세 보기' 버튼을 쓴다.
+export function PolicySummaryCard({ item, children, onOpen }) {
   const sourceLabel = item.source && !safeOriginalUrl({ source: item.source })
     ? item.source
     : [item.region, item.industry].filter(Boolean).join(' · ') || '지원사업 공고';
+  const dday = policyDday(item.applyEndDate);
+  const ddayCls = dday === null ? '' : dday < 0 ? ' is-closed' : dday <= 7 ? ' is-urgent' : '';
+  const openable = !!onOpen && isWebApp();
   return (
-    <li>
-      <div className="az2__recinfo">
+    <li className={openable ? 'is-openable' : undefined}>
+      <div className="az2__recinfo"
+        {...(openable ? {
+          role: 'button',
+          tabIndex: 0,
+          'aria-label': `${item.title} 상세 보기`,
+          onClick: onOpen,
+          onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } },
+        } : {})}>
         <span className="az2__recmain">
           <span className="az2__rectitle" title={item.title}>{item.title}</span>
           <span className="az2__recmeta">{sourceLabel}</span>
         </span>
-        <b className="az2__recscore u-num">{policyDdayLabel(policyDday(item.applyEndDate))}</b>
+        <b className={'az2__recscore u-num' + ddayCls}>{policyDdayLabel(dday)}</b>
       </div>
       <div className="az2__recactions">{children}</div>
     </li>
@@ -174,6 +186,11 @@ export function GovDetailModal({ item, saved, saving, onToggleSave, onClose }) {
 
 export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [], onToggleSavedPolicy }) {
   const [openGov, setOpenGov] = useState(null); // 상세 모달로 열어 둔 공고
+  // 반응형 웹앱 휴대폰 폭에서만 쓰는 화면 나눔(추천 공고 · 일정 · 상담). 다른 화면에서는 탭이 CSS로 숨겨지고 셋 다 보인다.
+  const [mTab, setMTab] = useState('rec');
+  // 웹앱 홈 '공고 마감' 카드에서 왔으면 그 공고 상세를 연다(추천 목록을 받은 뒤 한 번).
+  const [handoff] = useState(() => (isWebApp() ? takeHandoff('gov') : null));
+  const handoffDone = React.useRef(false);
   const [savingId, setSavingId] = useState(null);
   const [saveErr, setSaveErr] = useState('');
   // 마이페이지 AI 추천 공고와 같은 API·개수·정렬 결과를 사용한다.
@@ -225,8 +242,23 @@ export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [],
     ].filter(Boolean);
   };
 
+  useEffect(() => {
+    if (!handoff || handoffDone.current || loading) return;
+    handoffDone.current = true;
+    const found = (recommended || []).find((p) => p.policyId === handoff.openPolicyId) || handoff.item;
+    if (found) setOpenGov({ ...found, why: recommendationWhy(found) });
+  }, [handoff, loading, recommended]);
+
   return (
-    <div className="az2">
+    <div className={'az2 az2--m-' + mTab}>
+      <div className="az2__mtabs" role="tablist" aria-label="공고지원 화면">
+        {[['rec', '추천 공고'], ['cal', '일정'], ['chat', '상담']].map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={mTab === k}
+            className={'az2__mtab' + (mTab === k ? ' is-on' : '')} onClick={() => setMTab(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="az2__cols">
         <div className="az2__card">
           <h3 className="az2__cardttl">추천 공고</h3>
@@ -249,7 +281,8 @@ export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [],
               {recommended.map((p) => {
                 const saved = savedIds.has(p.policyId);
                 return (
-                  <PolicySummaryCard key={p.policyId} item={p}>
+                  <PolicySummaryCard key={p.policyId} item={p}
+                    onOpen={() => setOpenGov({ ...p, why: recommendationWhy(p) })}>
                       <button
                         type="button"
                         className="az2__action"
@@ -266,7 +299,7 @@ export function AnnouncementAnalyzer({ user, onRequireLogin, savedPolicies = [],
                         disabled={savingId === p.policyId}
                         onClick={() => toggleSave(p)}
                       >
-                        {saved ? '★ 저장됨' : '☆ 저장'}
+                        {isWebApp() ? (saved ? '★' : '☆') : (saved ? '★ 저장됨' : '☆ 저장')}
                       </button>
                   </PolicySummaryCard>
                 );

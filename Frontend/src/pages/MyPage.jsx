@@ -11,6 +11,7 @@ import {
 } from '../utils.js';
 import { MenuDrawer } from '../components/MenuDrawer.jsx';
 import { GovDetailModal, OriginalButton } from './AnnouncementAnalyzer.jsx';
+import { isWebApp } from '../web/env.js';
 
 export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
   const today = new Date();
@@ -21,6 +22,8 @@ export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
   const [ftype, setFtype] = useState('tax');
   const [reload, setReload] = useState(0); // 등록·삭제 후 서버 일정을 다시 불러오기 위한 카운터
   const [calErr, setCalErr] = useState('');
+  // 반응형 웹앱: 일정 추가 입력칸은 '+ 일정 추가'를 눌렀을 때만 연다(기본 페이지는 항상 보임).
+  const [addOpen, setAddOpen] = useState(() => !isWebApp());
 
   // Backend: GET /api/calendar → 세금·정책 일정 + 내가 등록한 일정(USER).
   // 내 일정을 서버에 저장하므로 공고지원 AI 화면의 달력에서도 같은 일정이 보인다.
@@ -74,6 +77,7 @@ export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
         description: ftype === 'tax' ? '세금 일정' : '지원사업 일정',
       });
       setFtitle('');
+      if (isWebApp()) setAddOpen(false);
       setReload((n) => n + 1);
       onEventsChanged && onEventsChanged();
     } catch (err) {
@@ -157,24 +161,33 @@ export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
             ))
           )}
         </div>
+        {!addOpen ? (
+          <button type="button" className="cal__addbtn" onClick={() => setAddOpen(true)}>
+            + {selLabel}에 일정 추가
+          </button>
+        ) : (
         <form className="cal__add" onSubmit={addEvent}>
           <input type="text" value={ftitle} onChange={(e) => setFtitle(e.target.value)}
-            placeholder={`${selLabel}에 일정 추가`} aria-label="일정 제목" />
+            placeholder={`${selLabel}에 일정 추가`} aria-label="일정 제목" autoFocus={isWebApp()} />
           <button type="submit">추가</button>
           <div className="cal__add-row">
             <select value={ftype} onChange={(e) => setFtype(e.target.value)} aria-label="분류" style={{ flex: 'none' }}>
               <option value="tax">세금</option>
               <option value="policy">지원사업</option>
             </select>
+            {isWebApp() && (
+              <button type="button" className="cal__addcancel" onClick={() => { setAddOpen(false); setFtitle(''); }}>취소</button>
+            )}
           </div>
         </form>
+        )}
         {calErr && <p className="cal__err">{calErr}</p>}
       </div>
     </div>
   );
 }
 
-function UpcomingDeadlineCard({ savedPolicies = [], revision = 0 }) {
+function UpcomingDeadlineCard({ savedPolicies = [], revision = 0, onOpenGov }) {
   // 월말에도 다음 달 초의 D-3 일정을 놓치지 않도록 월 필터 없이 불러온 뒤 화면에서 범위를 자른다.
   const { data: fetched, loading } = useApi(`/calendar?r=${revision}`, NO_EVENTS, eventsByDate);
   const urgentEvents = useMemo(
@@ -191,7 +204,13 @@ function UpcomingDeadlineCard({ savedPolicies = [], revision = 0 }) {
       {loading ? (
         <p className="mp-deadline-empty">일정을 확인하고 있어요.</p>
       ) : urgentEvents.length === 0 ? (
-        <p className="mp-deadline-empty">3일 이내 마감 일정이 없어요.</p>
+        <div className="w-empty">
+          <p className="mp-deadline-empty">3일 이내 마감 일정이 없어요.</p>
+          {/* 웹앱: 빈 화면에 다음 행동 버튼 */}
+          {isWebApp() && onOpenGov && (
+            <button type="button" className="w-empty__btn" onClick={onOpenGov}>관심 공고 둘러보기</button>
+          )}
+        </div>
       ) : (
         <ul className="mp-deadline-list">
           {urgentEvents.map((item, index) => (
@@ -952,11 +971,72 @@ export function BizplanManager({ onOpenBizplan }) {
   );
 }
 
+// 웹앱(/web.html) 마이페이지 메뉴 아이콘 (24px 선 아이콘)
+const MP_ICON = {
+  home: 'M4 5h7v7H4zM13 5h7v4h-7zM13 11h7v8h-7zM4 14h7v5H4z',
+  profile: 'M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM5 20c.8-3.4 3.6-5.5 7-5.5s6.2 2.1 7 5.5',
+  billing: 'M4 7.5A1.5 1.5 0 0 1 5.5 6h13A1.5 1.5 0 0 1 20 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 16.5zM4 10h16M7.5 14.5h3',
+  saved: 'M7 4.5h10a1 1 0 0 1 1 1V20l-6-3.8L6 20V5.5a1 1 0 0 1 1-1z',
+  bizplans: 'M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20zM14 3.5V8h4M9.5 12h5M9.5 15.5h5',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3.9a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.6a7 7 0 0 0-2 1.2l-2.3-.9-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-.9a7 7 0 0 0 2 1.2l.4 2.6h4l.4-2.6a7 7 0 0 0 2-1.2l2.3.9 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z',
+  logout: 'M14 4.5h4a1.5 1.5 0 0 1 1.5 1.5v12a1.5 1.5 0 0 1-1.5 1.5h-4M10 8l-4 4 4 4M6 12h9',
+};
+function MpIcon({ k }) {
+  return (
+    <svg className="mp-ico" viewBox="0 0 24 24" aria-hidden="true">
+      <path d={MP_ICON[k]} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// 휴대폰 · 태블릿 웹앱: 대시보드 맨 아래 앱식 메뉴 목록 (PC는 왼쪽 메뉴를 쓴다)
+function MpMenuList({ onPick, onLogout, savedCount }) {
+  const groups = [];
+  MP_MENU.forEach((m) => {
+    if (m.key === 'home' || m.divider) return;
+    if (m.group) { groups.push({ title: m.group, items: [] }); return; }
+    if (!m.sub || !groups.length) groups.push({ title: '', items: [] });
+    groups[groups.length - 1].items.push(m);
+  });
+  const meta = { saved: savedCount ? `${savedCount}건` : '' };
+  return (
+    <nav className="mp-menulist" aria-label="마이페이지 메뉴">
+      {groups.map((g, i) => (
+        <section key={i} className="mp-menulist__group">
+          {g.title && <h2 className="mp-menulist__title">{g.title}</h2>}
+          <ul>
+            {g.items.map((m) => (
+              <li key={m.key}>
+                <button type="button" className="mp-menulist__row" onClick={() => onPick(m.key)}>
+                  <MpIcon k={m.key} />
+                  <span className="mp-menulist__label">{m.label}</span>
+                  {meta[m.key] && <span className="mp-menulist__meta">{meta[m.key]}</span>}
+                  <span className="mp-menulist__chev" aria-hidden="true">›</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      <button type="button" className="mp-menulist__logout" onClick={onLogout}>
+        <MpIcon k="logout" />
+        <span>로그아웃</span>
+      </button>
+    </nav>
+  );
+}
+
 export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onRequireLogin, roadmapDone = {}, savedPolicies = [], onToggleSavedPolicy, onOpenRoadmap, onOpenTax, onOpenGov, onProfileSaved }) {
   const [siteMenuOpen, setSiteMenuOpen] = useState(false);
   const [menu, setMenu] = useState('home');
   const [calendarRevision, setCalendarRevision] = useState(0);
   const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
+  const web = isWebApp();
+  // 휴대폰 웹앱은 메뉴 목록이 대시보드 아래에 있어서, 화면을 바꾸면 맨 위부터 보여 준다.
+  const goMenu = (key) => {
+    setMenu(key);
+    if (web) window.scrollTo(0, 0);
+  };
 
   // 대시보드 카드에 실제 상담 기록을 띄운다 (화면별 최근 질문 MP_RECENT_MAX 개)
   const [recentQ, setRecentQ] = useState({ tax: [], policy: [] });
@@ -1014,19 +1094,32 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
                   (menu === m.key ? ' mp-link--active' : '')
                 }
                 aria-current={menu === m.key ? 'page' : undefined}
-                onClick={() => setMenu(m.key)}
+                onClick={() => goMenu(m.key)}
               >
+                {web && <MpIcon k={m.key} />}
                 <span>{m.label}</span>
                 {m.tag && <span className="mp-tag">{m.tag}</span>}
               </button>
             );
           })}
         </nav>
+        {web && (
+          <button className="mp-side__logout" type="button" onClick={onLogout}>
+            <MpIcon k="logout" />
+            <span>로그아웃</span>
+          </button>
+        )}
       </aside>
 
       <main className={'mp-main' + (menu === 'home' ? ' mp-main--dash' : '')}>
         <div className="mp-head">
-          <div>
+          {web && menu !== 'home' && (
+            <button type="button" className="mp-back" onClick={() => goMenu('home')} aria-label="마이페이지로 돌아가기">
+              <span aria-hidden="true">‹</span>
+              <b>{activeLabel}</b>
+            </button>
+          )}
+          <div className="mp-head__hello">
             <h1 className="mp-hello">안녕하세요, {user.name}님</h1>
             <p className="mp-basis">사업자 정보 기준 · {user.biz} · {user.region}</p>
           </div>
@@ -1079,7 +1172,7 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
               </p>
             </section>
 
-            <UpcomingDeadlineCard savedPolicies={savedPolicies} revision={calendarRevision} />
+            <UpcomingDeadlineCard savedPolicies={savedPolicies} revision={calendarRevision} onOpenGov={onOpenGov} />
 
             <section
               className="mp-card mp-card--action"
@@ -1142,6 +1235,7 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
               savedPolicies={savedPolicies}
               onEventsChanged={() => setCalendarRevision((n) => n + 1)}
             />
+            {web && <MpMenuList onPick={goMenu} onLogout={onLogout} savedCount={savedPolicies.length} />}
           </div>
         ) : menu === 'profile' ? (
           <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />

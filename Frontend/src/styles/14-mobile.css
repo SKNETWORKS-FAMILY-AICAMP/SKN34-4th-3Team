@@ -1,0 +1,321 @@
+/* 모바일(웹앱) 전용 스타일. PC 화면에 영향을 주지 않도록 모든 규칙을 미디어 쿼리 안에 쓴다.
+   기준: 768px(모바일) · 480px(작은 휴대폰) · display-mode: standalone(설치 앱)
+   작성 규칙은 Docs/MOBILE_CSS_GUIDE.md 참고. styles.css 에서 반드시 맨 마지막에 불러온다. */
+
+/* ===== 공통: 화면 틀 · 머리글 · 떠 있는 버튼 · 입력칸 ===== */
+@media (max-width: 768px) {
+  /* PC 앱 화면은 한 화면 높이(100vh)에 가두고 패널 안에서 스크롤한다.
+     휴대폰에서는 주소창 때문에 아래가 잘리므로 가두지 않고 문서 전체를 세로로 스크롤한다. */
+  .slim-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .slim-shell .fp--wide {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  .slim-shell .fp__body {
+    padding: 12px 16px calc(84px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+  .fp--wide .fp__head--plain .fp__head-in {
+    padding: 14px 16px 2px;
+  }
+  .fp--wide .fp__title {
+    font-size: 18px;
+  }
+
+  /* 머리글: 높이 56px, 좌우 여백 16px */
+  .rmhead__in {
+    height: 56px;
+    padding: 0 16px;
+  }
+  .rmhead .brand,
+  .nav .brand {
+    font-size: 15px;
+  }
+  .rmhead .hamburger,
+  .nav .hamburger {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* 오른쪽 아래 떠 있는 버튼(다크모드 · 사용 가이드): 조금 작게, 홈 바 위로 */
+  .theme-fab,
+  .tour-fab {
+    width: 40px;
+    height: 40px;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    font-size: 16px;
+  }
+  .theme-fab {
+    right: 14px;
+  }
+  .tour-fab {
+    right: 62px;
+  }
+
+  /* iOS Safari는 16px 미만 입력칸을 누르면 화면을 확대한다 */
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  input[type='number'],
+  input:not([type]),
+  textarea,
+  select {
+    font-size: 16px !important; /* 페이지별 입력칸 글자 크기 규칙보다 우선해야 확대가 막힌다 */
+  }
+
+  /* AI 채팅 입력줄: 입력칸이 남은 폭을 쓰고 전송 버튼이 밀려나지 않게 */
+  .ai__foot {
+    padding: 10px 12px;
+  }
+  .ai__foot input {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .ai__send {
+    flex: none;
+  }
+  .ai__chips {
+    flex-wrap: wrap;
+  }
+}
+
+/* ===== 메인 ===== */
+@media (max-width: 768px) {
+  /* PC에서는 본문을 90%로 줄여 보여주지만 휴대폰에서는 원래 크기로 */
+  .home-scale {
+    zoom: 1;
+  }
+  .nav .rmhead__in {
+    padding: 0 16px;
+  }
+  /* 본문 좌우 여백 16px(머리글과 맞춤). 위아래 여백만 줄이고 좌우는 .wrap 값을 쓴다 */
+  .wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .hero__inner {
+    padding-top: 28px;
+    padding-bottom: 40px;
+  }
+  .hero__actions {
+    flex-direction: column;
+  }
+  .hero__actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* ===== 창업 로드맵 (.rz · .rg2) ===== */
+@media (max-width: 768px) {
+  /* 7단계는 한 줄로 두고 가로로 넘겨 본다 */
+  .rz {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .rz::-webkit-scrollbar {
+    display: none;
+  }
+  /* 기존 860px 규칙(가운데 정렬 · 한 칸 33%)을 한 줄 · 왼쪽 정렬 · 고정 폭으로 덮어쓴다 */
+  .rz .rz__row {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: max-content;
+    gap: 0;
+  }
+  .rz .rz__step {
+    flex: 0 0 96px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+  .rg2__cols {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  /* AI 코치 대화창: 할 일 목록 아래에 화면 높이에 맞춰 */
+  .rg2__chat {
+    height: min(72dvh, 620px);
+  }
+}
+
+/* ===== 공고지원 AI (.az2) ===== */
+@media (max-width: 768px) {
+  /* 기존 .fp--wide .az2(왼쪽 348px | 채팅) 규칙과 같은 강도로 덮어써 1열로 쌓는다 */
+  .az2,
+  .fp--wide .az2 {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    height: auto;
+    overflow: visible;
+  }
+  .az2__cols,
+  .fp--wide .az2__cols {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    gap: 16px;
+    overflow: visible;
+  }
+  .az2__chat,
+  .fp--wide .az2__chat {
+    height: min(76dvh, 640px);
+  }
+}
+
+/* ===== AI 세무 Assistant (.cvx) ===== */
+@media (max-width: 768px) {
+  /* 대화 목록(왼쪽)을 위로, 채팅창을 아래로 */
+  .cvx,
+  .fp--wide .cvx {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    height: auto;
+  }
+  .cvx__side,
+  .fp--wide .cvx__side {
+    max-height: 168px;
+    overflow-y: auto;
+  }
+  .cvx__main,
+  .fp--wide .cvx__main {
+    height: min(74dvh, 640px);
+    display: flex;
+    flex-direction: column;
+  }
+  .cvx__main > * {
+    flex: 1;
+    min-height: 0;
+  }
+}
+
+/* ===== 지출관리 (.exp2 · .exp-row) ===== */
+@media (max-width: 768px) {
+  .exp2__layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  /* 영수증 한 건: 1줄(사진 · 상호 · 메뉴) + 2줄(판정 · 금액) */
+  .exp-row__grid {
+    grid-template-columns: 48px minmax(0, 1fr) auto 32px;
+    grid-template-areas:
+      'thumb info info menu'
+      'thumb badge amount amount';
+    gap: 6px 12px;
+    padding: 12px 14px;
+  }
+  .exp-row__grid > .exp-row__thumb { grid-area: thumb; width: 100%; height: 56px; align-self: start; }
+  .exp-row__grid > .exp-row__info { grid-area: info; }
+  .exp-row__grid > .exp-badge { grid-area: badge; justify-self: start; }
+  .exp-row__grid > .exp-row__amount { grid-area: amount; justify-self: end; }
+  .exp-row__grid > .exp-menu { grid-area: menu; }
+}
+
+/* ===== 사업계획서 (.bp2) ===== */
+@media (max-width: 768px) {
+  .bp2 .bp2__crumbs-in {
+    padding: 0 16px;
+    scrollbar-width: none;
+  }
+  .bp2 .bp2__body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+    gap: 16px;
+  }
+  .bp2 .bp2__side {
+    position: static;
+  }
+  .bp2 .bp2__card-head {
+    padding: 14px 16px;
+  }
+  .bp2 .bp2__card-body,
+  .bp2 .bp2__panel {
+    padding: 16px;
+  }
+}
+
+/* ===== 마이페이지 (.mp) ===== */
+@media (max-width: 768px) {
+  .mp {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  /* 왼쪽 메뉴 → 상단 가로 탭 */
+  .mp-side {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 10px 16px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+  .mp-side .mp-brand {
+    display: none;
+  }
+  .mp-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    scrollbar-width: none;
+  }
+  .mp-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .mp-nav .mp-group,
+  .mp-nav .mp-side__div {
+    display: none;
+  }
+  .mp-nav .mp-link {
+    flex: none;
+    width: auto;
+    margin: 0;
+    padding: 8px 14px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .mp-main {
+    padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+  .mp-head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .mp-hello {
+    font-size: 20px;
+  }
+  .mp-dash,
+  .mp-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+}
+
+/* ===== 작은 휴대폰 ===== */
+@media (max-width: 480px) {
+  .exp-row__grid {
+    grid-template-columns: 40px minmax(0, 1fr) auto 28px;
+    padding: 10px 12px;
+  }
+  .exp-row__grid > .exp-row__thumb { height: 48px; }
+}
+
+/* ===== 설치 앱(PWA)으로 실행했을 때 ===== */
+@media (display-mode: standalone) and (max-width: 768px) {
+  /* 브라우저 주소창이 없으므로 머리글을 화면 위에 붙여 둔다 */
+  .rmhead,
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+}

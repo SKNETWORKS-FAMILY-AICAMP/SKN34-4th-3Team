@@ -1,0 +1,1810 @@
+/* 반응형 웹앱(/web.html) 전용: 기존 PC 디자인(5173)을 그대로 두고 폭에 맞춰 배치만 바꾼다.
+   모든 규칙은 html.is-web 아래에서만 동작하므로 index.html(기존 PC 화면 · 모바일 앱)에는 영향이 없다.
+   - 휴대폰(768px 이하): styles/14-mobile.css의 1단 배치를 그대로 쓴다.
+   - 태블릿(769~1023px): 아래 규칙으로 1단/2단을 섞는다.
+   - PC(1024px 이상): 기존 PC 화면 그대로. */
+
+/* ---- 모든 폭 ---- */
+
+/* 홈의 각 구역은 세로 flex라서 가운데 정렬된 .wrap이 내용 폭만큼 줄어든다(태블릿에서 좁게 몰림). 폭을 채운다. */
+html.is-web .home-flow > section > .wrap {
+  width: 100%;
+}
+
+/* 오른쪽 아래 ?(사용 가이드) · ◐(다크모드) 버튼은 채팅 입력칸 · 추천 질문 · 목록을 가리므로
+   모든 폭에서 숨기고 메뉴(햄버거) 안의 도구 줄로 옮긴다. */
+html.is-web .theme-fab,
+html.is-web .tour-fab {
+  display: none;
+}
+html.is-web .drawer__tools {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 18px;
+}
+html.is-web .drawer__tool {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+html.is-web .drawer__tool:hover {
+  border-color: var(--blue);
+}
+html.is-web .drawer__tool span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue);
+  font-weight: 800;
+}
+
+/* 사업계획서의 '테스트용 프리셋 적용'은 개발 확인용이라 웹앱 사용자에게는 숨긴다 */
+html.is-web .bp2__preset {
+  display: none;
+}
+/* 하단 탭바는 휴대폰 폭에서만 쓴다 */
+.wtab {
+  display: none;
+}
+
+/* ---- 휴대폰 (768px 이하): 모바일 친화 ---- */
+@media (max-width: 768px) {
+  /* 하단 탭바: 6칸 고정, 홈 바(safe area) 위 */
+  html.is-web .wtab {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    padding: 4px 4px env(safe-area-inset-bottom);
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface-solid) 92%, transparent);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+  html.is-web .wtab__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 56px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ink-faint);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html.is-web .wtab__item svg {
+    width: 24px;
+    height: 24px;
+  }
+  html.is-web .wtab__item.is-on {
+    color: var(--blue);
+  }
+  html.is-web .wtab__item:active {
+    transform: scale(0.95);
+  }
+  /* 탭바에 가리지 않게 문서 아래 여백 */
+  html.is-web body {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---- 태블릿 (769~1023px) ---- */
+@media (min-width: 769px) and (max-width: 1023px) {
+  /* 홈: 첫 화면은 1단으로 쌓이므로 마감 임박 카드가 너무 넓어지지 않게 */
+  html.is-web .hero__inner .panel {
+    max-width: 620px;
+  }
+  /* 960px 이하 규칙(11-mypage.css)의 .hero__inner padding이 같은 요소의 .wrap 좌우 여백까지 0으로 덮어쓴다 */
+  html.is-web .wrap.hero__inner {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* 마이페이지: 왼쪽 메뉴를 위쪽 가로 탭으로, 대시보드는 카드 2칸 + 아래 달력 */
+  html.is-web .mp {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  html.is-web .mp-side {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 12px 28px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--ground);
+    overflow: visible;
+  }
+  html.is-web .mp-side .mp-brand {
+    display: none;
+  }
+  html.is-web .mp-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 12px;
+    scrollbar-width: none;
+  }
+  html.is-web .mp-nav::-webkit-scrollbar {
+    display: none;
+  }
+  html.is-web .mp-nav .mp-group,
+  html.is-web .mp-nav .mp-side__div {
+    display: none;
+  }
+  html.is-web .mp-nav .mp-link {
+    flex: none;
+    width: auto;
+    margin: 0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  html.is-web .mp-main {
+    height: auto;
+    padding: 24px 28px 96px;
+    overflow: visible;
+  }
+  html.is-web .mp-dash {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  html.is-web .mp-main--dash .mp-dash {
+    flex: none;
+    min-height: 0;
+  }
+  html.is-web .mp-dash .mp-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+  }
+  html.is-web .mp-dash .cal {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* ==== 휴대폰 (768px 이하): 화면별 모바일 친화 배치 ==== */
+@media (max-width: 768px) {
+  /* --- 대화 화면 공통(AI 세무 · 공고지원 상담 탭): 앱처럼 한 화면 높이에 맞추고,
+         대화 내용만 안에서 스크롤 · 입력칸은 항상 하단(탭바 바로 위)에 보인다 --- */
+  html.is-web .slim-shell:has(.cvx),
+  html.is-web .slim-shell:has(.az2--m-chat) {
+    height: calc(100dvh - 64px - env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow: hidden;
+  }
+  html.is-web .slim-shell:has(.cvx) .fp--wide,
+  html.is-web .slim-shell:has(.az2--m-chat) .fp--wide {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  html.is-web .slim-shell:has(.cvx) .fp__body,
+  html.is-web .slim-shell:has(.az2--m-chat) .fp__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 12px 10px;
+    overflow: hidden;
+  }
+  html.is-web .ai__foot input,
+  html.is-web .ai__foot textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  html.is-web .ai__send {
+    min-width: 56px;
+    min-height: 44px;
+  }
+  html.is-web .ai__chip {
+    min-height: 40px;
+  }
+
+  /* --- 02 AI 세무: 페이지 제목은 대화창 머리와 겹치므로 숨기고 대화창을 꽉 채운다 --- */
+  html.is-web .slim-shell:has(.cvx) .fp__head {
+    display: none;
+  }
+  html.is-web .fp--wide .cvx {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+  }
+  html.is-web .fp--wide .cvx__main {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+  }
+  html.is-web .cvx__main > .ai {
+    flex: 1;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+  }
+  html.is-web .ai__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  html.is-web .ai__histbtn {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--surface-solid);
+    color: var(--ink);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  /* 이전 대화 목록 → 아래에서 올라오는 시트 */
+  html.is-web .fp--wide .cvx__side {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 81;
+    max-height: 72dvh;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 20px 20px 0 0;
+    background: var(--surface-solid);
+    box-shadow: 0 -12px 40px rgba(20, 26, 58, 0.18);
+    overflow-y: auto;
+    transform: translateY(105%);
+    transition: transform 0.25s ease;
+  }
+  html.is-web .cvx.is-side-open .cvx__side {
+    transform: none;
+  }
+  html.is-web .cvx.is-side-open .cvx__dim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: rgba(15, 20, 40, 0.45);
+  }
+  html.is-web .cvx__new,
+  html.is-web .cvx__conv {
+    min-height: 44px;
+  }
+
+  /* --- 05 공고지원: [추천 공고 | 일정 | 상담] 탭으로 나눠 한 번에 하나만 --- */
+  html.is-web .az2__mtabs {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 4px;
+    border-radius: 14px;
+    background: var(--line);
+  }
+  html.is-web .az2__mtab {
+    min-height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  html.is-web .az2__mtab.is-on {
+    background: var(--surface-solid);
+    color: var(--ink);
+    box-shadow: 0 2px 8px rgba(20, 26, 58, 0.08);
+  }
+  html.is-web .az2--m-rec .az2__cols > :not(.az2__card),
+  html.is-web .az2--m-rec .az2__chat,
+  html.is-web .az2--m-cal .az2__card,
+  html.is-web .az2--m-cal .az2__chat,
+  html.is-web .az2--m-chat .az2__cols {
+    display: none;
+  }
+  html.is-web .fp--wide .az2--m-chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  html.is-web .fp--wide .az2--m-chat .az2__chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+  }
+  html.is-web .az2__chat > .ai {
+    flex: 1;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+  }
+  /* 공고 카드의 버튼 3개(상세 · 원문 · 저장): 누르기 쉽게 */
+  html.is-web .az2__action {
+    min-height: 40px;
+  }
+
+  /* --- 홈: 첫 화면을 짧게, 마감 임박 공고는 옆으로 넘기는 카드 --- */
+  html.is-web .hero__inner {
+    gap: 22px;
+    padding-top: 20px;
+    padding-bottom: 28px;
+  }
+  html.is-web .hero .badge {
+    margin-bottom: 14px;
+  }
+  html.is-web .hero .lede {
+    margin-bottom: 18px;
+    font-size: 14.5px;
+  }
+  html.is-web .hero__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  html.is-web .hero__actions .btn {
+    min-height: 48px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  html.is-web .hero__actions .btn:only-child {
+    grid-column: 1 / -1;
+  }
+  html.is-web .hero .stats {
+    margin-top: 20px;
+  }
+  /* 마감 임박 공고: 옆으로 넘기는 큰 카드 대신 [D-day | 제목 · 설명 | ☆] 세로 목록 */
+  html.is-web .hero .panel {
+    padding: 16px 16px 10px;
+  }
+  html.is-web .hero .deadline {
+    grid-template-columns: 52px minmax(0, 1fr) 40px;
+    gap: 10px;
+    padding: 12px 0;
+  }
+  html.is-web .hero .deadline__dday {
+    justify-self: start;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--ground);
+    font-size: 12px;
+    text-align: center;
+  }
+  html.is-web .hero .deadline__title {
+    overflow: hidden;
+    font-size: 14.5px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  html.is-web .hero .deadline__meta {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+  html.is-web .hero .panel__foot {
+    margin-top: 4px;
+  }
+  html.is-web .star {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* ==== 휴대폰 (768px 이하): 로드맵 · 지출관리 · 마이페이지 · 사업계획서 ==== */
+@media (max-width: 768px) {
+  /* --- 01 로드맵: [할 일 | AI 코치] 탭(공고지원 탭과 같은 모양) --- */
+  html.is-web .rg2__mtabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    margin: 4px 0 12px;
+    padding: 4px;
+    border-radius: 14px;
+    background: var(--line);
+  }
+  html.is-web .rg2__mtab {
+    min-height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  html.is-web .rg2__mtab.is-on {
+    background: var(--surface-solid);
+    color: var(--ink);
+    box-shadow: 0 2px 8px rgba(20, 26, 58, 0.08);
+  }
+  html.is-web .rg2--m-tasks .rg2__chat,
+  html.is-web .rg2--m-chat .rg2__list,
+  html.is-web .rg2--m-chat .rg2__prog {
+    display: none;
+  }
+  /* AI 코치 탭: 한 화면 높이에 맞추고 입력칸을 탭바 바로 위에 */
+  html.is-web .slim-shell:has(.rg2--m-chat) {
+    height: calc(100dvh - 64px - env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow: hidden;
+  }
+  html.is-web .slim-shell:has(.rg2--m-chat) .fp--wide {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  html.is-web .slim-shell:has(.rg2--m-chat) .fp__head {
+    display: none;
+  }
+  html.is-web .slim-shell:has(.rg2--m-chat) .fp__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 12px 10px;
+    overflow: hidden;
+  }
+  html.is-web .fp--wide .rg2--m-chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+  html.is-web .fp--wide .rg2--m-chat .rg2__cols {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+  html.is-web .fp--wide .rg2--m-chat .rg2__chat {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+  }
+  html.is-web .rg2__chat > .ai {
+    flex: 1;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+  }
+  html.is-web .rg2__taskbtn,
+  html.is-web .rg2__task input[type='checkbox'] {
+    min-height: 40px;
+  }
+
+  /* --- 03 지출관리: 올리기 칸 → 하단 고정 버튼, 판정 필터 → 가로 칩 --- */
+  html.is-web .exp-drop {
+    position: fixed;
+    right: 16px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    z-index: 55;
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    min-height: 0;
+    height: 52px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 26px;
+    background: var(--blue);
+    box-shadow: 0 8px 20px rgba(47, 111, 224, 0.35);
+  }
+  html.is-web .exp-drop__icon {
+    width: auto;
+    height: auto;
+    margin: 0;
+    border: 0;
+    background: none;
+    color: #fff;
+    font-size: 20px;
+  }
+  html.is-web .exp-drop__title {
+    margin: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  html.is-web .exp-drop__hint {
+    display: none;
+  }
+  html.is-web .exp-filter {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    scrollbar-width: none;
+  }
+  html.is-web .exp-filter::-webkit-scrollbar {
+    display: none;
+  }
+  html.is-web .exp-filter__item {
+    flex: none;
+    width: auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-solid);
+  }
+  html.is-web .exp-filter__item.is-on {
+    border-color: var(--blue);
+  }
+  html.is-web .exp-filter__count {
+    margin-left: 6px;
+  }
+  html.is-web .exp-export {
+    min-height: 44px;
+  }
+
+  /* --- 06 마이페이지: 위쪽 탭이 잘리지 않게 줄바꿈 칩으로 --- */
+  html.is-web .mp-side {
+    position: static;
+  }
+  html.is-web .mp-nav {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  html.is-web .mp-nav .mp-link {
+    min-height: 36px;
+  }
+
+  /* --- 04 사업계획서: 왼쪽 섹션 목록(A · B · C)을 가로 칩으로 --- */
+  html.is-web .bp2__secnav ul {
+    display: flex;
+    gap: 6px;
+    border-left: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  html.is-web .bp2__secnav ul::-webkit-scrollbar {
+    display: none;
+  }
+  html.is-web .bp2__secnav li {
+    flex: none;
+  }
+  html.is-web .bp2__secnav button {
+    width: auto;
+    min-height: 40px;
+    margin-left: 0;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  html.is-web .bp2__secnav button.is-on {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+}
+
+/* ==== 01 창업 로드맵: AI 코치 대화 위주 ==== */
+/* 태블릿 · PC: 대화를 왼쪽에 넓게, 할 일은 오른쪽 좁은 체크리스트로 */
+@media (min-width: 769px) {
+  html.is-web .fp--wide .rg2__cols {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  html.is-web .fp--wide .rg2__chat {
+    order: -1;
+  }
+  /* 단계 막대는 한 줄로 낮게 */
+  html.is-web .fp--wide .rz--nav .rz__d {
+    display: none;
+  }
+  /* 오른쪽 할 일: 근거 설명 · 안내문은 줄이고 체크리스트만 또렷하게 */
+  html.is-web .fp--wide .rg2__list {
+    padding-right: 2px;
+  }
+  html.is-web .fp--wide .rg2__taskrow {
+    padding: 9px 12px;
+  }
+  html.is-web .fp--wide .rg2__tasktitle {
+    font-size: 13px;
+  }
+}
+@media (min-width: 769px) and (max-width: 1023px) {
+  html.is-web .fp--wide .rg2__cols {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 16px;
+  }
+  /* 860px 이하 규칙이 7단계를 3줄로 접어 대화 칸을 줄이므로, 한 줄로 두고 옆으로 넘겨 본다 */
+  html.is-web .rz--nav {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  html.is-web .rz--nav::-webkit-scrollbar {
+    display: none;
+  }
+  html.is-web .rz--nav .rz__row {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    width: max-content;
+  }
+  html.is-web .rz--nav .rz__step {
+    flex: 0 0 104px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+}
+/* 휴대폰: AI 코치 탭이 먼저 열리고, 그때는 단계 막대를 작게 줄여 대화 칸을 넓힌다 */
+@media (max-width: 768px) {
+  html.is-web .rg2--m-chat .rz--nav {
+    margin-bottom: 6px;
+  }
+  html.is-web .rg2--m-chat .rz .rz__step {
+    flex-basis: 76px;
+    gap: 2px;
+    padding: 4px 2px;
+  }
+  html.is-web .rg2--m-chat .rz__ico {
+    width: 28px;
+    height: 28px;
+  }
+  html.is-web .rg2--m-chat .rz__phase,
+  html.is-web .rg2--m-chat .rz__d {
+    display: none;
+  }
+  html.is-web .rg2--m-chat .rz__t {
+    font-size: 11.5px;
+  }
+}
+
+/* ==== 홈: 오늘 챙길 일(로그인 사용자) ==== */
+html.is-web .wtoday {
+  padding: 28px 0 8px;
+  background: var(--ground);
+}
+html.is-web .wtoday__title {
+  margin: 0 0 14px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+html.is-web .wtoday__title span {
+  color: var(--blue);
+}
+html.is-web .wtoday__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+html.is-web .wtoday__card {
+  --tone: var(--blue);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 148px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--tone);
+  border-radius: 16px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+html.is-web .wtoday__card:hover {
+  transform: translateY(-2px);
+}
+html.is-web .wtoday__card.is-violet { --tone: #6d4ae0; }
+html.is-web .wtoday__card.is-amber { --tone: #e8890c; }
+html.is-web .wtoday__card.is-green { --tone: #1f9d55; }
+html.is-web .wtoday__card.is-red { --tone: #e5484d; }
+html.is-web .wtoday__kicker {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--tone);
+}
+html.is-web .wtoday__card-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+html.is-web .wtoday__meta {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+html.is-web .wtoday__cta {
+  margin-top: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue);
+}
+@media (max-width: 1023px) {
+  html.is-web .wtoday__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 768px) {
+  html.is-web .wtoday {
+    padding: 18px 0 4px;
+  }
+  html.is-web .wtoday__title {
+    font-size: 18px;
+  }
+  html.is-web .wtoday__grid {
+    gap: 8px;
+  }
+  html.is-web .wtoday__card {
+    min-height: 132px;
+    padding: 12px 12px 10px;
+  }
+  html.is-web .wtoday__card-title {
+    font-size: 14px;
+  }
+}
+
+/* ==== 03 지출관리: 목록 한 줄은 상호 · 날짜 · 판정 · 금액만, 나머지는 눌러서 여는 상세에서 ==== */
+html.is-web .exp-row__info {
+  cursor: pointer;
+}
+html.is-web .exp-row:not(.is-open) .exp-row__vedit,
+html.is-web .exp-row:not(.is-open) .exp-dd {
+  display: none;
+}
+html.is-web .exp-row__todo {
+  display: inline;
+  color: var(--blue);
+  font-weight: 700;
+  white-space: nowrap;
+}
+html.is-web .exp-row:hover {
+  background: color-mix(in srgb, var(--blue) 3%, transparent);
+}
+@media (max-width: 768px) {
+  /* 휴대폰: 사진 칸을 빼고 상호를 넓게 */
+  html.is-web .exp-row__grid {
+    grid-template-columns: minmax(0, 1fr) auto 32px;
+    grid-template-areas:
+      'info info menu'
+      'badge amount amount';
+  }
+  html.is-web .exp-row__grid > .exp-row__thumb {
+    display: none;
+  }
+}
+
+/* 홈: 오늘 챙길 일이 있으면 아래 첫 화면(소개)은 화면 높이를 꽉 채우지 않는다(위에 빈 공간이 생김) */
+html.is-web .wtoday ~ .home-scale .home-flow > .hero {
+  min-height: 0;
+}
+
+/* ==== 05 공고지원: 카드 전체를 누르면 상세, 저장은 ☆ 하나, D-day는 배지 ==== */
+html.is-web .az2__reclist li.is-openable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+html.is-web li.is-openable .az2__recinfo {
+  margin: -6px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+html.is-web li.is-openable .az2__recinfo:hover,
+html.is-web li.is-openable .az2__recinfo:focus-visible {
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+  outline: none;
+}
+html.is-web li.is-openable .az2__rectitle {
+  display: -webkit-box;
+  white-space: normal;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+html.is-web li.is-openable .az2__recactions {
+  display: block;
+  width: auto;
+  margin: 0;
+  overflow: visible;
+}
+html.is-web li.is-openable .az2__action:not(.az2__save) {
+  display: none;
+}
+html.is-web li.is-openable .az2__save {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 18px;
+}
+html.is-web li.is-openable .az2__save.is-saved {
+  color: #e8a10c;
+}
+html.is-web .az2__recscore {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue);
+  font-size: 12.5px;
+}
+html.is-web .az2__recscore.is-urgent {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+html.is-web .az2__recscore.is-closed {
+  background: var(--line);
+  color: var(--ink-faint);
+}
+
+/* ==== 02 AI 세무: 입력칸 위 추천 질문 ==== */
+html.is-web .ai__qchips {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px 14px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+html.is-web .ai__qchips::-webkit-scrollbar {
+  display: none;
+}
+html.is-web .ai__qchip {
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.is-web .ai__qchip:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+/* ==== 04 사업계획서: 단계 안내를 눈에 띄게, 버튼은 액션 바 하나로 ==== */
+html.is-web .bp2__guide {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+html.is-web .bp2__guide::before {
+  content: '지금 할 일';
+  flex: none;
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+/* 버튼은 본문 아래 액션 바 하나에만 둔다: 왼쪽 보조(이전 단계 · 임시저장 · 다시 하기), 오른쪽 파란 주 버튼 하나 */
+html.is-web .bp2__bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--bp-card-border, var(--line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bp-card, var(--surface-solid)) 94%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 28px rgba(20, 26, 58, 0.12);
+}
+html.is-web .bp2__bar-more,
+html.is-web .bp2__bar-dim {
+  display: none;
+}
+html.is-web .bp2__bar-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  min-width: 0;
+}
+html.is-web .bp2__bar-ghost {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--bp-ink-2, var(--ink));
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.is-web .bp2__bar-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bp-primary, var(--blue)) 8%, transparent);
+  color: var(--bp-primary, var(--blue));
+}
+html.is-web .bp2__bar-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+html.is-web .bp2__bar .bp2__saved {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+html.is-web .bp2__bar-main {
+  flex: none;
+  min-height: 46px;
+  margin-left: auto;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bp-primary, var(--blue));
+  color: #fff;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.is-web .bp2__bar-main:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+html.is-web .bp2__bar-main:disabled {
+  background: var(--bp-disabled, var(--ink-faint));
+  cursor: not-allowed;
+}
+@media (max-width: 768px) {
+  /* 휴대폰: 탭바 바로 위에 [⋯ | 주 버튼]. 보조 버튼은 ⋯를 누르면 위로 펼쳐진다 */
+  html.is-web .bp2__bar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(64px + 10px + env(safe-area-inset-bottom));
+    z-index: 55;
+    padding: 6px;
+    /* blur는 고정 위치 자식(배경 어둡게)의 기준을 바 자신으로 바꿔 버려서 휴대폰에서는 끈다 */
+    background: var(--bp-card, var(--surface-solid));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  html.is-web .bp2__bar-more {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--bp-card-border, var(--line));
+    border-radius: 12px;
+    background: var(--bp-card, var(--surface-solid));
+    color: var(--ink);
+    font: inherit;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  html.is-web .bp2__bar-sub {
+    display: none;
+  }
+  html.is-web .bp2__bar.is-more-open .bp2__bar-sub {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(100% + 8px);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    border: 1px solid var(--bp-card-border, var(--line));
+    border-radius: 16px;
+    background: var(--bp-card, var(--surface-solid));
+    box-shadow: 0 12px 30px rgba(20, 26, 58, 0.18);
+  }
+  html.is-web .bp2__bar.is-more-open .bp2__bar-ghost {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+  }
+  html.is-web .bp2__bar.is-more-open .bp2__bar-dim {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    display: block;
+    background: rgba(10, 14, 30, 0.28);
+  }
+  html.is-web .bp2__bar-main {
+    flex: 1;
+    min-width: 0;
+    height: 48px;
+    margin-left: 0;
+    padding: 0 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* 저장 알림은 바 위에 잠깐 뜨는 말풍선으로 */
+  html.is-web .bp2__bar .bp2__saved {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--ground);
+    transform: translateX(-50%);
+  }
+  /* 마지막 단계처럼 주 버튼이 없으면 보조 버튼을 바에 바로 펼친다 */
+  html.is-web .bp2__bar:not(:has(.bp2__bar-main)) .bp2__bar-more {
+    display: none;
+  }
+  html.is-web .bp2__bar:not(:has(.bp2__bar-main)) .bp2__bar-sub {
+    display: flex;
+    flex: 1;
+    flex-wrap: nowrap;
+  }
+  html.is-web .bp2__bar:not(:has(.bp2__bar-main)) .bp2__bar-ghost {
+    flex: 1;
+    justify-content: center;
+    min-height: 48px;
+  }
+  /* 고정 바에 내용이 가리지 않게 */
+  html.is-web body:has(.bp2) {
+    padding-bottom: calc(64px + 76px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ==== 06 마이페이지: 일정 추가는 버튼으로 열기, 휴대폰 · 태블릿은 로드맵 → 마감 임박 → 일정 → AI 카드 순서 ==== */
+html.is-web .cal__addbtn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+html.is-web .cal__addbtn:hover {
+  border-color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 5%, transparent);
+}
+html.is-web .cal__addcancel {
+  margin-left: auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--ink-faint);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+@media (max-width: 1023px) {
+  html.is-web .mp-dash {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  html.is-web .mp-dash > .mp-grid {
+    display: contents;
+  }
+  html.is-web .mp-dash > .mp-grid > :nth-child(1) { order: 1; }
+  html.is-web .mp-dash > .mp-grid > :nth-child(2) { order: 2; }
+  html.is-web .mp-dash > .cal { order: 3; width: auto; max-width: none; align-self: stretch; }
+  html.is-web .mp-dash > .mp-grid > :nth-child(3) { order: 4; }
+  html.is-web .mp-dash > .mp-grid > :nth-child(4) { order: 5; }
+}
+
+/* ==== 공통: 빈 화면 · 불러오는 중 · 오류 문구를 같은 모양으로 ==== */
+html.is-web :is(.gov__empty, .cvx__empty, .cal__empty, .mp-deadline-empty, .bp2__empty, .mp-bp__empty, .exp-empty) {
+  padding: 18px 12px;
+  color: var(--ink-faint);
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+html.is-web .w-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 14px;
+}
+html.is-web .w-empty > p {
+  margin: 0;
+  padding-bottom: 4px;
+}
+html.is-web .w-empty__btn {
+  min-height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+html.is-web :is(.cal__err, .ai__err) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--red);
+  font-size: 13px;
+  line-height: 1.5;
+}
+html.is-web :is(.cal__err, .ai__err)::before {
+  content: '!';
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* 태블릿도 판정 필터는 가로 칩, 올리기 칸은 낮게 */
+@media (min-width: 769px) and (max-width: 1023px) {
+  html.is-web .exp-filter {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  html.is-web .exp-filter__item {
+    flex: none;
+    width: auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-solid);
+  }
+  html.is-web .exp-filter__item.is-on {
+    border-color: var(--blue);
+  }
+  html.is-web .exp-filter__count {
+    margin-left: 6px;
+  }
+  html.is-web .exp-drop {
+    min-height: 0;
+    padding: 16px;
+  }
+}
+
+/* ==== 로그인 전: 홈 안내 카드 · 화면별 로그인 버튼을 눈에 띄게 ==== */
+html.is-web .wtoday__login {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+}
+html.is-web .wtoday__login span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+html.is-web .wtoday__login b {
+  font-size: 15px;
+}
+html.is-web .wtoday__login small {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+html.is-web .wtoday__login button,
+html.is-web .cvx__empty > button[type='button'] {
+  flex: none;
+  min-height: 42px;
+  padding: 0 20px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: var(--blue) !important;
+  color: #fff !important;
+  font: inherit;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  cursor: pointer;
+}
+html.is-web .cvx__empty > button[type='button'] {
+  display: block;
+  margin: 12px auto 0 !important;
+}
+@media (max-width: 768px) {
+  html.is-web .wtoday__login {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+}
+
+/* ==== 06 마이페이지 메뉴: PC는 아이콘 달린 왼쪽 메뉴 + 맨 아래 로그아웃,
+        휴대폰 · 태블릿은 위쪽 칩 대신 대시보드 아래 메뉴 목록 + 하위 화면 '‹ 뒤로' 머리줄 ==== */
+html.is-web .mp-ico {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+html.is-web .mp-nav .mp-link {
+  justify-content: flex-start;
+  gap: 10px;
+}
+html.is-web .mp-nav .mp-link .mp-tag {
+  margin-left: auto;
+}
+html.is-web .mp-nav .mp-link--sub {
+  padding-left: 12px;
+}
+html.is-web .mp-head .mp-logout {
+  display: none;
+}
+html.is-web .mp-head {
+  align-items: center;
+}
+html.is-web .mp-back,
+html.is-web .mp-menulist {
+  display: none;
+}
+@media (min-width: 1024px) {
+  html.is-web .mp-side {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    align-self: start;
+    box-sizing: border-box;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  html.is-web .mp-side__logout {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: auto;
+    padding: 10px 12px;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+  }
+  html.is-web .mp-side__logout:hover {
+    color: var(--red);
+  }
+}
+@media (max-width: 1023px) {
+  html.is-web .mp-side {
+    display: none;
+  }
+  /* 하위 화면: 인사말 대신 '‹ 화면 이름' 뒤로 가기 */
+  html.is-web .mp-main:not(.mp-main--dash) .mp-head__hello {
+    display: none;
+  }
+  html.is-web .mp-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin-left: -8px;
+    padding: 0 10px 0 6px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+  }
+  html.is-web .mp-back span {
+    font-size: 26px;
+    line-height: 1;
+    color: var(--ink-soft);
+  }
+  html.is-web .mp-back b {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  html.is-web .mp-back:hover {
+    background: var(--blue-wash);
+  }
+  html.is-web .mp-main {
+    padding-top: 18px;
+  }
+  /* 대시보드 맨 아래 메뉴 목록 */
+  html.is-web .mp-menulist {
+    order: 6;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  html.is-web .mp-menulist__group {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface-solid);
+  }
+  html.is-web .mp-menulist__title {
+    margin: 0;
+    padding: 14px 18px 4px;
+    color: var(--ink-faint);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  html.is-web .mp-menulist ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  html.is-web .mp-menulist li + li {
+    border-top: 1px solid var(--line);
+  }
+  html.is-web .mp-menulist__row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 54px;
+    padding: 0 16px 0 18px;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    cursor: pointer;
+  }
+  html.is-web .mp-menulist__row .mp-ico {
+    width: 20px;
+    height: 20px;
+    color: var(--blue);
+  }
+  html.is-web .mp-menulist__row:active {
+    background: var(--ground);
+  }
+  html.is-web .mp-menulist__label {
+    flex: 1;
+    min-width: 0;
+  }
+  html.is-web .mp-menulist__meta {
+    color: var(--ink-faint);
+    font-size: 13px;
+  }
+  html.is-web .mp-menulist__chev {
+    color: var(--ink-faint);
+    font-size: 20px;
+  }
+  html.is-web .mp-menulist__logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 50px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-solid);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 14.5px;
+    cursor: pointer;
+  }
+  html.is-web .mp-menulist__logout .mp-ico {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* ==== 01 창업 로드맵: 할 일 + AI 코치를 한 카드로 ====
+   PC · 태블릿: 왼쪽 '이번 단계 할 일' | 오른쪽 대화. 휴대폰: 대화창 위에 접히는 할 일 패널.
+   할 일의 '묻기'는 그 질문을 대화창으로 보내고, 추천 질문도 이 단계의 남은 할 일에서 만든다. */
+html.is-web .rg2--web .rg2__prog {
+  display: none;
+}
+html.is-web .fp--wide .rg2--web .rg2__cols {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-sm);
+}
+html.is-web .rg2--web .rg2__list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: color-mix(in srgb, var(--blue) 4%, var(--surface-solid));
+}
+html.is-web .rg2--web .rg2__chat .ai {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* 단계 머리줄: [B] 사업자 등록 단계 할 일 · 3/5 완료 ▬▬ */
+html.is-web .rg2__dock {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+html.is-web .rg2__dock-k {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+html.is-web .rg2__dock-txt {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+html.is-web .rg2__dock-txt b {
+  overflow: hidden;
+  font-size: 14.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+html.is-web .rg2__dock-txt small {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+html.is-web .rg2__dock-bar {
+  flex: none;
+  width: 56px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+html.is-web .rg2__dock-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+}
+html.is-web .rg2__dock-chev {
+  display: none;
+}
+html.is-web .rg2--web .rg2__listbody {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 14px 16px;
+  overflow-y: auto;
+}
+/* 할 일 줄의 '묻기' */
+html.is-web .rg2--web .rg2__taskrow {
+  align-items: center;
+}
+html.is-web .rg2__ask {
+  flex: none;
+  min-height: 30px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: 999px;
+  background: var(--blue-wash);
+  color: var(--blue-deep);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.is-web .rg2__ask:hover {
+  background: var(--blue);
+  color: #fff;
+}
+@media (min-width: 769px) {
+  html.is-web .fp--wide .rg2--web .rg2__cols {
+    grid-template-columns: 340px minmax(0, 1fr);
+    align-items: stretch;
+    height: clamp(480px, calc(100dvh - 290px), 780px);
+  }
+  html.is-web .fp--wide .rg2--web .rg2__chat {
+    order: 0;
+    min-height: 0;
+    border-left: 1px solid var(--line);
+  }
+  html.is-web .rg2--web .rg2__chat .ai {
+    height: 100%;
+  }
+  html.is-web .rg2__dock {
+    cursor: default;
+  }
+}
+@media (min-width: 769px) and (max-width: 1023px) {
+  html.is-web .fp--wide .rg2--web .rg2__cols {
+    grid-template-columns: 290px minmax(0, 1fr);
+  }
+}
+@media (max-width: 768px) {
+  html.is-web .fp--wide .rg2--web .rg2__cols {
+    border-radius: 18px;
+  }
+  html.is-web .rg2--web .rg2__list {
+    flex: none;
+    border-bottom: 1px solid var(--line);
+  }
+  html.is-web .rg2__dock {
+    padding: 10px 12px;
+    border-bottom: 0;
+    cursor: pointer;
+  }
+  html.is-web .rg2__dock-chev {
+    display: block;
+    color: var(--ink-faint);
+    font-size: 13px;
+    transition: transform 0.2s;
+  }
+  html.is-web .rg2--web.is-dock-open .rg2__dock-chev {
+    transform: rotate(180deg);
+  }
+  html.is-web .rg2--web .rg2__listbody {
+    display: none;
+  }
+  html.is-web .rg2--web.is-dock-open .rg2__listbody {
+    display: block;
+    max-height: 48dvh;
+    padding: 4px 12px 12px;
+    border-top: 1px solid var(--line);
+  }
+  html.is-web .rg2--web .rg2__chat .ai {
+    border-radius: 0;
+  }
+  /* 위 단계 머리줄이 이미 있으니 'AI 코치' 머리줄은 빼고, 기록 지우기 줄은 얇게 */
+  html.is-web .rg2--web .ai__bar {
+    display: none;
+  }
+  html.is-web .rg2--web .ai__histrow {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}
+
+/* ==== 홈: 창업 A → Z ====
+   웹앱은 단계마다 한 줄 설명을 붙인다. 휴대폰은 7단계를 옆으로 넘기면 잘려 보여서
+   [아이콘 | 단계 · 제목 · 설명] 세로 타임라인으로 펼친다. */
+html.is-web .rz--home .rz__d {
+  max-width: 16ch;
+}
+@media (max-width: 768px) {
+  html.is-web .rz--home {
+    margin-top: 28px;
+    overflow: visible;
+  }
+  html.is-web .rz--home .rz__row {
+    flex-direction: column;
+    width: auto;
+  }
+  html.is-web .rz--home .rz__sep {
+    display: none;
+  }
+  html.is-web .rz--home .rz__step {
+    position: relative;
+    display: grid;
+    flex: none;
+    grid-template-columns: 48px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 2px;
+    align-items: start;
+    padding: 0 0 22px;
+    text-align: left;
+  }
+  /* 단계를 잇는 세로선 */
+  html.is-web .rz--home .rz__step:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    top: 54px;
+    bottom: 4px;
+    left: 23px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--line-strong);
+  }
+  html.is-web .rz--home .rz__ico {
+    grid-row: 1 / span 3;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  html.is-web .rz--home .rz__ico svg {
+    width: 22px;
+    height: 22px;
+  }
+  html.is-web .rz--home .rz__phase {
+    margin-top: 2px;
+    font-size: 11.5px;
+  }
+  html.is-web .rz--home .rz__t {
+    font-size: 16px;
+  }
+  html.is-web .rz--home .rz__d {
+    max-width: none;
+    font-size: 13px;
+  }
+}
+
+/* ==== 메뉴(햄버거): 설명을 메뉴 이름 아래 한 줄로 ====
+   오른쪽 44% 칸에 작은 글씨로 넣으면 두 줄로 줄바꿈돼 읽기 어렵다. */
+html.is-web .drawer__link {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 3px;
+  align-items: center;
+  padding: 12px 2px;
+}
+html.is-web .drawer__num {
+  grid-row: 1 / span 2;
+}
+html.is-web .drawer__desc {
+  grid-column: 2;
+  max-width: none;
+  margin-left: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+/* ==== 홈: AI 어시스턴트 소개의 기능 칩 줄은 뺀다 ==== */
+html.is-web .chat__tags {
+  display: none;
+}
+
+/* ==== 홈 맨 아래 카드: 수치는 작은 타일로 모으고, 시작 문구는 한 단계 작게 ==== */
+html.is-web .closing__stats .metric b {
+  font-size: clamp(24px, 3vw, 34px);
+}
+html.is-web .closing__stats .metric span {
+  font-size: 12.5px;
+}
+html.is-web .closing__cta .eyebrow {
+  letter-spacing: 0.08em;
+}
+html.is-web .closing__cta h2 {
+  font-size: clamp(21px, 2.8vw, 30px);
+}
+@media (max-width: 768px) {
+  html.is-web .closing {
+    padding: 22px 16px 26px;
+    border-radius: 22px;
+  }
+  html.is-web .closing__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 22px;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  html.is-web .closing__stats .metric {
+    gap: 2px;
+    padding: 14px 8px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-solid);
+  }
+  html.is-web .closing__stats .metric b {
+    font-size: 22px;
+  }
+  html.is-web .closing__stats .metric span {
+    font-size: 12px;
+  }
+  html.is-web .closing__cta .eyebrow {
+    font-size: 11px;
+  }
+  html.is-web .closing__cta h2 {
+    margin-bottom: 16px;
+    font-size: 20px;
+  }
+  html.is-web .closing__cta .btn {
+    width: 100%;
+  }
+}

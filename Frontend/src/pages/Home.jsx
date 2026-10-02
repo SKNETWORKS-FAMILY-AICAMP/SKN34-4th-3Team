@@ -5,6 +5,7 @@ import { pad2, dayKey, CAL_EVENTS, eventsByDate } from '../utils.js';
 import { useInView, useCountUp, prefersReducedMotion, useInstallPrompt } from '../hooks.js';
 import { Reveal, Metric } from '../components/common.jsx';
 import { rmIcon, rmDoneIcon } from '../components/roadmapIcons.jsx';
+import { isWebApp } from '../web/env.js';
 
 export function DeadlinePanel({ user, savedPolicies = [], onToggleSavedPolicy, onLoginClick }) {
   // Backend: GET /api/announcements → 마감 임박 공고 (DB의 실제 공고)
@@ -400,6 +401,7 @@ export function ChatDemo() {
 export function Roadmap() {
   const [ref, inView] = useInView({ threshold: 0.2 }, true);
   const on = inView || prefersReducedMotion;
+  const web = isWebApp();
   return (
     <section className="sec">
       <div className="wrap">
@@ -407,7 +409,8 @@ export function Roadmap() {
         <Reveal as="h2" className="sec__title" delay={80}>
           아이디어부터 스케일업까지
         </Reveal>
-        <div className={'rz' + (on ? ' is-in' : '')} ref={ref}>
+        {/* 웹앱(/web.html)은 단계별 한 줄 설명을 함께 보여 주고, 휴대폰에서는 세로 타임라인으로 펼친다(web.css) */}
+        <div className={'rz rz--home' + (on ? ' is-in' : '')} ref={ref}>
           <div className="rz__row">
             {ROADMAP.map((s, i) => (
               <React.Fragment key={s.k}>
@@ -421,6 +424,7 @@ export function Roadmap() {
                   <span className="rz__ico">{rmIcon(s.k)}</span>
                   <span className="rz__phase">{s.phase}</span>
                   <span className="rz__t">{s.t}</span>
+                  {web && <span className="rz__d">{s.d}</span>}
                 </div>
               </React.Fragment>
             ))}
