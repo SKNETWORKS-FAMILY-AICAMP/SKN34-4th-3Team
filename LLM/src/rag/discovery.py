@@ -237,7 +237,9 @@ class PolicyDiscoveryService:
 
 
 @traceable(name="build_personalized_query", run_type="chain")
-def build_personalized_query(question: str, user: UserProfile) -> str:
+def build_personalized_query(
+    question: str, user: UserProfile, *, normalize: bool = True
+) -> str:
     """사용자 질문과 제공된 프로필 정보를 의미 검색용 Query로 결합한다.
 
     Args:
@@ -248,9 +250,15 @@ def build_personalized_query(question: str, user: UserProfile) -> str:
         질문과 누락되지 않은 프로필 필드를 결합한 검색 Query.
     """
     business_profile = user["business"]
-    stripped_question = strip_personalization_phrases(question)
+    stripped_question = (
+        strip_personalization_phrases(question) if normalize else question
+    )
     broad_query = _is_broad_policy_query(stripped_question)
-    normalized_question = normalize_policy_search_query(stripped_question)
+    normalized_question = (
+        normalize_policy_search_query(stripped_question)
+        if normalize
+        else stripped_question
+    )
     profile_descriptions = [
         (
             _format_profile_value("나이", user["age"], suffix="세")
@@ -315,15 +323,19 @@ def normalize_policy_search_query(question: str) -> str:
     return normalized or question.strip()
 
 
-def build_policy_initial_search_queries(question: str) -> list[str]:
+def build_policy_initial_search_queries(
+    question: str, *, normalize: bool = True
+) -> list[str]:
     """명확한 정책 질문에 필요한 독립 근거를 첫 검색어로 만든다."""
-    normalized = normalize_policy_search_query(question)
+    normalized = normalize_policy_search_query(question) if normalize else question
     queries = [normalized]
     if any(
         keyword in normalized
         for keyword in ("정책", "지원사업", "지원금", "보조금", "융자", "바우처")
     ):
-        facet_base = normalized.removesuffix(" 알려줘")
+        facet_base = (
+            normalized.removesuffix(" 알려줘") if normalize else normalized
+        )
         queries.extend(
             f"{facet_base} {facet}"
             for facet in (

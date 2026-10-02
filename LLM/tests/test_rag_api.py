@@ -3,10 +3,12 @@ from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from src.core.config import Settings
+from src.core.database import DatabaseConfigurationError
 from src.rag.backend_tasks import (
     AnnouncementSummaryGeneration,
     DeductibilityGeneration,
@@ -24,6 +26,7 @@ from src.rag.roadmap import (
 )
 from src.rag.tax import TaxIntentDecision
 from src.vectorstores.hybrid import HybridSearch
+from src.vectorstores.postgres import PostgresVectorSearch
 from tests.fakes import FakeStructuredChatModel, make_default_fake_model
 from tests.django_client import DjangoTestClient
 
@@ -243,8 +246,8 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
     monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", sync_source_index)
     monkeypatch.setattr(
         rag_routes,
-        "reindex_postgres_to_elasticsearch",
-        lambda settings: received.update(es_settings=settings),
+        "load_elasticsearch_source_documents",
+        lambda settings: received.update(bm25_settings=settings) or [],
     )
     client = build_client(
         tmp_path / "index.json",
@@ -267,22 +270,43 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
     assert received["document_ids"] == [9, 7]
     assert received["force"] is True
     assert received["source_synced"] is True
-    assert received["es_settings"] is received["settings"]
+    assert received["bm25_settings"] is received["settings"]
     assert client.app.state.rag_runtime.document_count == 12
     assert client.app.state.rag_runtime.chunk_count == 34
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
 
-    def fail_es(_settings):
-        raise RuntimeError("Elasticsearch unavailable")
+    runtime = client.app.state.rag_runtime
+    old_hybrid = runtime.require_hybrid_index(client.settings)
 
-    monkeypatch.setattr(rag_routes, "reindex_postgres_to_elasticsearch", fail_es)
+    def fail_after_partial_update(**_kwargs):
+        raise RuntimeError("Source synchronization failed after partial update")
+
+    monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", fail_after_partial_update)
     failed = client.post("/rag/reindex", json={"documentIds": [9]})
     assert failed.status_code == 502
-    assert client.app.state.rag_runtime.elasticsearch_synced is False
+    assert client.get("/internal/rag/ready").json()["index_ready"] is False
+    blocked = client.post("/rag/chat", json={"question": "청년 지원사업", "category": "policy"})
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "RAG_INDEX_NOT_READY"
+
+    monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", sync_source_index)
+    recovered = client.post("/rag/reindex", json={"documentIds": [9]})
+    assert recovered.status_code == 200
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+    assert runtime.require_hybrid_index(client.settings) is not old_hybrid
+
+    def fail_source_load(_settings):
+        raise RuntimeError("Source documents unavailable")
+
+    monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", fail_source_load)
+    failed = client.post("/rag/reindex", json={"documentIds": [9]})
+    assert failed.status_code == 502
+    assert client.get("/internal/rag/ready").json()["index_ready"] is False
 
 
-def test_backend_full_reindex_updates_elasticsearch(monkeypatch, tmp_path: Path) -> None:
+def test_backend_full_reindex_rebuilds_source_bm25(monkeypatch, tmp_path: Path) -> None:
     received = []
-    search = object()
+    search = object.__new__(PostgresVectorSearch)
     monkeypatch.setattr(
         rag_routes,
         "load_or_build_postgres_index",
@@ -295,8 +319,11 @@ def test_backend_full_reindex_updates_elasticsearch(monkeypatch, tmp_path: Path)
     )
     monkeypatch.setattr(
         rag_routes,
-        "reindex_postgres_to_elasticsearch",
-        lambda settings: received.append(settings),
+        "load_elasticsearch_source_documents",
+        lambda settings: received.append(settings) or [{
+            "document_id": "policy-1", "policy_id": 1, "source_type": "policy",
+            "source_id": 1, "title": "청년 지원", "source": "test", "content": "청년 지원",
+        }],
     )
     client = build_client(
         tmp_path / "index.json",
@@ -308,6 +335,43 @@ def test_backend_full_reindex_updates_elasticsearch(monkeypatch, tmp_path: Path)
     assert response.status_code == 200
     assert response.json()["document_count"] == 3
     assert received == [client.settings]
+    runtime = client.app.state.rag_runtime
+    first_bm25 = runtime.require_hybrid_index(client.settings).bm25_search
+    assert len(first_bm25.get_chunks()) == 1
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+
+    def fail_source_load(_settings):
+        raise DatabaseConfigurationError("Source document database unavailable")
+
+    monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", fail_source_load)
+    failed = client.post("/rag/reindex", json={"documentIds": []})
+    assert failed.status_code == 503
+    assert client.get("/internal/rag/ready").json()["index_ready"] is False
+
+    monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", lambda settings: [])
+    recovered = client.post("/internal/rag/index")
+    assert recovered.status_code == 200
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+    assert runtime.require_hybrid_index(client.settings).bm25_search is not first_bm25
+
+
+@pytest.mark.parametrize("route", ["policy", "tax", "notice"])
+@pytest.mark.parametrize("fields", [{}, {"search_query": None}, {"search_query": ""}, {"search_query": "  "}])
+def test_chat_recovers_missing_router_search_query(tmp_path, route, fields):
+    model = FakeStructuredChatModel({
+        RouteDecision: {"route": route, "personalized": False, **fields},
+        TaxIntentDecision: {
+            "calculation_required": False, "calculation_type": None, "reason": "법령 설명",
+        },
+    })
+    client = build_client(tmp_path / "index.json", llm_factory=lambda: model)
+    response = client.post("/rag/chat", json={
+        "question": "청년 창업 지원사업 알려줘",
+        "category": "tax" if route == "tax" else "policy",
+    })
+    assert response.status_code == 200
+    assert response.json()["answer"]
+    assert response.json()["route"] == route
 
 
 def test_backend_partial_reindex_rejects_in_memory_backend(tmp_path: Path) -> None:

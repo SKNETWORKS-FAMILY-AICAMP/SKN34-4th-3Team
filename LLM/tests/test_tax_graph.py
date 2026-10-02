@@ -389,7 +389,7 @@ def test_independent_tax_question_skips_unrelated_history_contextualization() ->
     assert contextualizer_calls == 0
     assert result["standalone_query"] == "청년창업 세액감면 대상인지 확인"
     assert set(search.queries) == set(
-        build_tax_initial_search_queries("청년창업 세액감면 대상인지")
+        build_tax_initial_search_queries(result["standalone_query"], normalize=False)
     )
 
 
@@ -459,7 +459,9 @@ def test_tax_follow_up_with_reference_still_uses_contextualization(
 
     assert contextualizer_calls == 1
     assert result["standalone_query"] == standalone_question
-    assert search.queries[0] == standalone_question
+    assert set(search.queries) == set(
+        build_tax_initial_search_queries(normalize_tax_search_query(standalone_question))
+    )
 
 
 def _input_plan_payload(

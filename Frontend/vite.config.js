@@ -7,7 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   plugins: [
     react(),
-    // PWA: 빌드 시 manifest·sw.js 를 생성한다. 설계는 Docs/reports/PWA_PLAN.md.
+    // PWA: 빌드 시 manifest·sw.js 를 생성한다. HTTPS 배포 절차는 Docs/AWS_DEPLOY_GUIDE.md 12절.
     VitePWA({
       // 새 배포(main 병합 → 재빌드)가 감지되면 사용자 조작 없이 SW 를 교체한다.
       registerType: 'autoUpdate',

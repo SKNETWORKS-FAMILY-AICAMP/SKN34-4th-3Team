@@ -9,7 +9,7 @@
 재작성한 뒤 Structured Output Router에서 `policy`, `notice`, `tax`, `out_of_scope` 중
 하나로 분류한다. Backend `category`는 허용 route 제약으로 적용된다.
 
-- Policy: 패싯 검색어별 Dense + BM25 → RRF → Cohere Rerank → Unified Answer
+- Policy: 패싯 검색어별 Dense + BM25(Postgres 모드는 Elasticsearch Nori) → RRF → Cohere Rerank → Unified Answer
 - Notice: Backend가 전달한 실제 공고 결과 → Unified Answer
 - Tax: Tax Intent → (계산 시 Planner) → Semantic Cache 조회 → miss면 Hybrid Retrieval →
   비율 정규화 → Evidence 평가 → 필요 시 Multi-hop → 선택적 deterministic 계산 →
@@ -30,17 +30,23 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 | `src/rag/history.py` | 대화 이력 정규화와 Prompt용 절삭 |
 | `src/rag/context_builder.py` | 검색 결과를 Answer Context로 직렬화 |
 | `src/rag/discovery.py` | Policy 검색어 정규화·패싯 검색어·개인화 Query |
-| `src/rag/backend_tasks.py` | legal-basis·deductibility·공고 요약·영수증 추출 단일 작업 |
+| `src/rag/backend_tasks.py` | legal-basis·deductibility·공고 요약·영수증 추출·사업계획서 초안/진단/정리 단일 작업 |
+| `src/rag/bizplan_coach.py` | 사업계획서 아이디어 어시스턴트 단일 호출 |
 | `src/serving/tax_calculators_docstring.py` | 세금 계산기 5종과 `calculate_tax()` dispatcher |
 | `src/rag/answer.py` | 공통 Structured Answer와 안전한 fallback |
 | `src/rag/roadmap.py` | 로드맵 범위·압축 Context·단일 호출 코치 |
 | `src/data/tax_normalization.py` | `N분의 M` 비율의 deterministic 추출/표현 |
-| `src/vectorstores/hybrid.py` | BM25, RRF, Dense+BM25 orchestration |
+| `src/vectorstores/hybrid.py` | 메모리 BM25, RRF, Dense+BM25 orchestration(in-memory 모드, 법령 참조 정확 검색) |
+| `src/vectorstores/nori_hybrid.py` | `NoriHybridSearch`: pgvector Dense + ES Nori BM25 RRF(Postgres 모드 기본) |
+| `src/vectorstores/elasticsearch.py` | `ElasticsearchBM25Search`: Nori 분석기 BM25 검색·준비 확인 |
+| `src/features/elasticsearch_indexing.py` | pgvector 청크 → 새 ES 인덱스 Bulk 적재 후 alias 교체 |
 | `src/vectorstores/postgres.py` | pgvector 저장·Dense 검색 |
 | `src/rag/reranker.py` | Cohere Rerank와 공통 결과 schema 유지 |
 | `src/features/indexing.py` | DB/PDF 문서 Chunking 및 검색기 준비 |
 | `src/data/postgres_repository.py` | PostgreSQL 원천 데이터의 읽기·정제 |
-| `src/serving/rag_routes.py` | 실제 HTTP 진입점과 Graph 실행 |
+| `src/serving/django_config/` | Django 설정·URL(`urls.py`)·ASGI 진입점(`asgi.py`, 프로세스 첫 요청 워밍업) |
+| `src/serving/django_views.py` | HTTP 요청 파싱·응답(스트리밍 포함) |
+| `src/serving/rag_routes.py` | 처리 함수, `RagRuntime`, Graph 실행 |
 | `src/serving/schemas.py` | Backend↔LLM 및 내부 API Pydantic 계약 |
 | `src/serving/errors.py` | HTTP 오류 코드·응답 형식 |
 | `src/core/config.py` | 모델, 검색, DB, Cohere, MAX_HOPS, Tax Cache 설정 |
@@ -53,6 +59,7 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 - `GET /rag/ready`
 - `POST /rag/reindex`
 - `POST /rag/chat`
+- `POST /rag/chat/stream` — 같은 Graph를 실행하며 답변 갱신(`on_answer_update`)을 `{type:"draft"}` NDJSON으로 흘리고 `{type:"done", result}`로 끝낸다(`adapter_chat_stream`)
 
 `POST /rag/chat`의 핵심 입력은 다음과 같다.
 
@@ -107,8 +114,8 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 `build_graph()`는 다음 의존성을 주입받는다.
 
 - `llm`: Router, Tax Intent, 입력 Planner, Evidence, Next Query, Answer Structured Output
-- `policy_search`: Policy용 `HybridSearch`
-- `tax_search`: Tax용 `HybridSearch`; 없으면 `policy_search`를 공유
+- `policy_search`: Policy용 검색기. Postgres 모드는 `NoriHybridSearch`, in-memory 모드는 `HybridSearch`
+- `tax_search`: Tax용 검색기(같은 종류); 없으면 `policy_search`를 공유
 - `notice_search`: Backend가 전달한 공고 결과를 반환하는 일반 callable
 - `rerank`: 테스트 대역 또는 Cohere reranker
 - `tax_intent_classifier`, `tax_calculation_planner`, `tax_evidence_evaluator`,
@@ -118,7 +125,7 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
   `PostgresVectorSearch`일 때만 `RagRuntime.require_graph()`가 만든다. 없으면 cache node는 miss로 통과
 - `settings`: top-k, Cohere, `TAX_MAX_HOPS`, Tax Cache 임계값 등
 
-`RagRuntime`(`src/serving/rag_routes.py`)은 채팅 모델, `HybridSearch`, 컴파일된 Graph를
+`RagRuntime`(`src/serving/rag_routes.py`)은 채팅 모델, 검색기(`NoriHybridSearch`/`HybridSearch`), 컴파일된 Graph를
 프로세스 안에 캐시하고 인덱스가 바뀔 때만 다시 만든다. 요청마다 `build_graph()`를
 호출하지 않는다.
 
@@ -252,7 +259,7 @@ personalized: bool
 1. `build_policy_initial_search_queries()`가 정규화된 질문에서 패싯 검색어 목록을 만든다.
    `personalized=True`이고 `user_context`가 있으면 `build_personalized_query()` 결과를
    목록에 **추가**한다.
-2. 검색어마다 `HybridSearch.search_stages()`를 병렬 실행한다. 검색 단계에서
+2. 검색어마다 검색기의 `search_stages()`를 병렬 실행한다. 검색 단계에서
    `source_types=("policy", "announcement")`, `require_policy_id=True`로 사전 필터한다.
 3. `reciprocal_rank_fusion()`이 모든 Dense·BM25 목록을 `chunk_id` 기준으로 결합한다.
 4. Cohere가 RRF 후보를 재정렬한다. Cohere 설정/API 오류 시 RRF 상위 결과를 사용한다.
@@ -532,14 +539,17 @@ PostgreSQL 원천:
 파생 캐시 저장소는 `tax_rag_cache`다(10.3).
 
 현재 `RagRuntime.ready`는 DB에 Embedding이 존재한다는 뜻이 아니라 현재 프로세스에
-검색 객체가 조립됐다는 뜻이다. 서버를 재시작하면 pgvector 데이터는 남지만
-메모리의 BM25/HybridSearch는 다시 준비해야 한다.
+검색 객체가 조립됐다는 뜻이다. 서버를 재시작하면 pgvector 데이터와 ES 인덱스는 남지만
+프로세스의 검색 객체는 다시 준비해야 한다. Postgres 모드에서는 `elasticsearch_synced`까지
+참이어야 `/rag/ready`가 `ready`이며, 동기화 전에는 Nori BM25를 건너뛰고 Dense만 쓴다.
 
-LLM 프로세스는 기동 시 검색기를 스스로 로드하지 않는다. `/rag/reindex` 또는
-`/internal/rag/index`가 검색기를 준비하며, 청크 content의 SHA-256이 같으면 Embedding을
-재사용한다(`index_source: cache`, reindex 응답 status `already_ready`). Compose 기동에서는
-Backend의 `llm-warmup` 스레드가 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를
-한 번 호출하므로 수동 작업이 필요 없다. LLM 컨테이너만 재시작했으면 수동 reindex가 필요하다.
+LLM 프로세스는 첫 HTTP 요청(헬스체크 포함) 때 `django_config/asgi.py`의 워밍업 task로
+검색기를 백그라운드 준비한다. `/rag/reindex` 또는 `/internal/rag/index`도 검색기를 준비하며,
+청크 content의 SHA-256이 같으면 Embedding을 재사용한다(`index_source: cache`, reindex 응답
+status `already_ready`). 명시적 `/rag/reindex`는 pgvector 갱신 뒤 ES 인덱스도 다시 만든다.
+Backend의 `llm-warmup` 스레드도 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를
+한 번 호출한다. 배포 환경에서는 GitHub Actions `collect.yml`이 주간 수집 후 `/rag/reindex`를
+호출한다.
 준비되지 않은 상태의 `/rag/chat`은 200 + `integration_unavailable`로 응답한다.
 
 ## 14. 주요 환경변수
@@ -554,7 +564,12 @@ OPENAI_API_KEY=...
 RETRIEVAL_MODE=hybrid
 HYBRID_DENSE_CANDIDATE_K=20
 HYBRID_BM25_CANDIDATE_K=20
+NORI_RETRIEVAL_POOL_K=40
 HYBRID_RRF_K=60
+ELASTICSEARCH_URL=http://elasticsearch:9200
+ELASTICSEARCH_INDEX_ALIAS=rag-documents
+ELASTICSEARCH_REQUEST_TIMEOUT=30
+ELASTICSEARCH_BULK_CHUNK_SIZE=500
 COHERE_API_KEY=...
 COHERE_RERANK_MODEL=rerank-v4.0-fast
 COHERE_RERANK_CANDIDATE_K=20
@@ -569,13 +584,13 @@ TAX_CACHE_DECISION_SIMILARITY_THRESHOLD=0.98
 
 ## 15. 현재 알려진 제한사항
 
-1. LLM 프로세스 자체의 startup load는 없다. Backend 워밍업이 대신하므로 LLM만 재시작하면 수동 reindex가 필요하다.
+1. LLM 워밍업은 첫 HTTP 요청에서 시작하므로, 요청이 한 번도 없으면 검색기가 준비되지 않는다(compose 헬스체크가 첫 요청 역할을 한다).
 2. Notice의 실제 조회/필터는 Backend가 `noticeResults`를 전달해야 동작한다(현재 `category=policy`에서 전달).
 3. Tax와 Policy가 같은 Hybrid corpus를 공유하며 `source_type`으로 검색 단계에서 사전 분리된다.
 4. Tax Ratio Normalizer는 값만 추출하며 비율의 법적 의미는 Evidence 단계가 판단한다.
 5. Semantic Cache는 첫 질문의 지연을 줄이지 못한다.
 6. Cohere가 없거나 실패하면 RRF로 동작하므로 결과 품질 차이를 평가해야 한다.
-7. 원본 PDF는 Git에서 제외되어 있으며 일부 PDF 테스트는 로컬 파일이 있어야 한다.
+7. 원본 PDF는 Git에서 제외되어 있다. PDF 전제 테스트는 2026-09-22에 제거했다.
 8. `category=tax`·`expense`는 route가 이미 확정되지만 Router LLM 호출은 그대로 실행된다(결함 45).
 
 ## 16. 테스트
@@ -585,8 +600,7 @@ cd LLM
 uv run pytest -q
 ```
 
-테스트 파일 32개, 354건이다. 2026-09-15 로컬 실행 결과는 `346 passed, 8 failed`이며, 실패는
-원본 PDF(`src/data/RAG_data`) 등 로컬 데이터가 필요한 테스트다. 주요 테스트:
+테스트 파일 42개, 테스트 함수 385개다(2026-10-01 기준). 주요 테스트:
 
 - `tests/test_graph.py`: Router, Policy/Notice branch, isolation
 - `tests/test_tax_graph.py`: single/multi-hop, 3-way edge, Reference 우선, MAX_HOPS,
@@ -594,6 +608,7 @@ uv run pytest -q
 - `tests/test_tax_document_preprocessing.py`: 비율 추출, 원문 보존
 - `tests/test_tax_cache.py`: cache key·판정 서명·모드별 복원, 무효화 조건
 - `tests/test_reranker.py`: Cohere metadata 보존
+- `tests/test_nori_hybrid_live.py`, `tests/test_elasticsearch_indexing.py`: Nori Hybrid 결합·ES 재색인(대역 사용)
 - `tests/test_rag_api.py`: 실제 HTTP entry와 Backend adapter 계약
 - `tests/test_evaluator.py`, `tests/test_evaluation_metrics.py`: 평가 호환성
 

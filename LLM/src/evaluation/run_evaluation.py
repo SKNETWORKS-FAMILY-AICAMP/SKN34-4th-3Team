@@ -214,8 +214,10 @@ def _fingerprint(value: object) -> str:
 
 
 def validate_holdout_database(settings: Settings | None = None) -> dict[str, object]:
-    """현재 DB가 holdout250을 만든 고정 snapshot과 일치하는지 읽기 전용 검증한다."""
+    """최초 snapshot과 추가 정답 문서의 존재/청크를 읽기 전용으로 검증한다."""
     from evaluation.holdout_cases_250 import (
+        BASELINE_SELECTED_POLICY_IDS,
+        HOLDOUT250_TAX_SCENARIOS,
         POLICY_SOURCE_FINGERPRINT,
         SELECTED_POLICY_IDS,
         USER_PROFILE_FINGERPRINT,
@@ -244,13 +246,22 @@ def validate_holdout_database(settings: Settings | None = None) -> dict[str, obj
     missing_policy_ids = sorted(selected_ids - found_ids)
     if missing_policy_ids:
         raise ValueError(f"holdout250 policies missing from DB: {missing_policy_ids}")
-    policy_fingerprint = _fingerprint(selected_policies)
+    policy_fingerprint = _fingerprint([
+        policy for policy in selected_policies
+        if policy["id"] in BASELINE_SELECTED_POLICY_IDS
+    ])
     if policy_fingerprint != POLICY_SOURCE_FINGERPRINT:
         raise ValueError(
             "holdout250 policy fingerprint mismatch: "
             f"expected={POLICY_SOURCE_FINGERPRINT}, actual={policy_fingerprint}"
         )
 
+    tax_document_ids = {
+        document_id
+        for scenario in HOLDOUT250_TAX_SCENARIOS
+        for turn in scenario["turns"]
+        for document_id in turn.get("reference", {}).get("relevant_tax_document_ids", [])
+    }
     with connect_database(resolved_settings) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SET TRANSACTION READ ONLY")
@@ -263,15 +274,36 @@ def validate_holdout_database(settings: Settings | None = None) -> dict[str, obj
                 (sorted(selected_ids),),
             )
             chunk_policy_ids = {int(row[0]) for row in cursor.fetchall()}
+            cursor.execute(
+                "SELECT id FROM tax_documents WHERE id = ANY(%s)",
+                (sorted(tax_document_ids),),
+            )
+            found_tax_document_ids = {int(row[0]) for row in cursor.fetchall()}
+            cursor.execute(
+                "SELECT DISTINCT source_id FROM rag_documents "
+                "WHERE source_type = 'tax_document' AND source_id = ANY(%s)",
+                (sorted(tax_document_ids),),
+            )
+            chunk_tax_document_ids = {int(row[0]) for row in cursor.fetchall()}
     missing_chunk_ids = sorted(selected_ids - chunk_policy_ids)
     if missing_chunk_ids:
         raise ValueError(
             f"holdout250 policies missing rag_documents chunks: {missing_chunk_ids}"
         )
+    missing_tax_ids = sorted(tax_document_ids - found_tax_document_ids)
+    if missing_tax_ids:
+        raise ValueError(f"holdout250 tax documents missing from DB: {missing_tax_ids}")
+    missing_tax_chunk_ids = sorted(tax_document_ids - chunk_tax_document_ids)
+    if missing_tax_chunk_ids:
+        raise ValueError(
+            f"holdout250 tax documents missing rag_documents chunks: {missing_tax_chunk_ids}"
+        )
     return {
         "users": len(profiles),
         "policies": len(selected_policies),
         "policy_ids_with_chunks": len(chunk_policy_ids),
+        "tax_documents": len(found_tax_document_ids),
+        "tax_document_ids_with_chunks": len(chunk_tax_document_ids),
         "user_profile_fingerprint": profile_fingerprint,
         "policy_source_fingerprint": policy_fingerprint,
     }

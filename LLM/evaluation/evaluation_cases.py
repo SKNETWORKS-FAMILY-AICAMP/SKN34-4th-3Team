@@ -17,6 +17,8 @@ from collections import Counter
 from pathlib import Path
 
 from evaluation.holdout_cases_250 import (
+    BASELINE_POLICY_IDS_BY_CASE,
+    BASELINE_SELECTED_POLICY_IDS,
     HOLDOUT250_GRAPH_SCENARIOS,
     HOLDOUT250_GUARDRAIL_CASES,
     HOLDOUT250_POLICY_CASES,
@@ -591,13 +593,29 @@ def validate_holdout250() -> None:
     assert user_totals == Counter({1: 84, 2: 84, 4: 82})
     assert Counter(item["user_id"] for item in policy_cases) == Counter({1: 21, 2: 21, 4: 21})
 
-    answer_sizes = Counter(len(item["relevant_policy_ids"]) for item in policy_cases)
+    # 최초 설계 분포는 보존하되, 확인된 정답 추가는 허용한다.
+    for item in policy_cases:
+        baseline_ids = BASELINE_POLICY_IDS_BY_CASE[item["case_id"]]
+        ids = item["relevant_policy_ids"]
+        assert ids[:len(baseline_ids)] == baseline_ids
+        assert len(ids) == len(set(ids))
+        assert all(isinstance(value, int) and value > 0 for value in ids)
+    answer_sizes = Counter(len(ids) for ids in BASELINE_POLICY_IDS_BY_CASE.values())
     assert answer_sizes == Counter({1: 42, 2: 21})
     policy_id_usage = Counter(
         policy_id for item in policy_cases for policy_id in item["relevant_policy_ids"]
     )
     assert set(policy_id_usage) == set(SELECTED_POLICY_IDS)
-    assert len(policy_id_usage) == 63 and max(policy_id_usage.values()) <= 3
+    baseline_usage = Counter(
+        policy_id for ids in BASELINE_POLICY_IDS_BY_CASE.values() for policy_id in ids
+    )
+    assert set(baseline_usage) == set(BASELINE_SELECTED_POLICY_IDS)
+    assert len(baseline_usage) == 63 and max(baseline_usage.values()) <= 3
+    for scenario in tax_scenarios:
+        for turn in scenario["turns"]:
+            ids = turn.get("reference", {}).get("relevant_tax_document_ids", [])
+            assert len(ids) == len(set(ids))
+            assert all(isinstance(value, int) and value > 0 for value in ids)
 
     guardrail_groups = Counter(item["tags"][1] for item in guardrail_cases)
     assert guardrail_groups == Counter({

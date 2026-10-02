@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | **창업 로드맵** | 창업 단계별 할 일을 **근거(법령·공공자료)와 함께** 보여주고 체크리스트로 진행률을 관리 | 완료 |
 | **지출관리** | 영수증 사진을 올리면 **경비 처리가 되는지** 판단하고, 판단 이유와 근거 법령을 보여줌 | 완료 (지원금 대상 판정은 예정) |
-| **사업계획서** | 아이디어를 입력하면 AI가 **정부 지원사업 양식에 맞춘 사업계획서 초안**을 써 주고 점수를 매겨 줌 | 완료 (양식 파일 업로드, 한글·PDF 다운로드는 예정) |
+| **사업계획서** | 아이디어를 입력하면 AI가 **정부 지원사업 양식에 맞춘 사업계획서 초안**을 써 주고 점수를 매겨 줌 | 완료 (양식 파일 업로드, 한글(HWPX)·PDF 다운로드, 보관함 포함) |
 
 > 공통 원칙: AI가 답을 내놓을 때 **"왜 그런지"와 "근거가 무엇인지"를 같이 보여준다.** 모든 판단은 참고용이며, 세금 관련 최종 판단은 세무사 확인이 필요합니다.
 
@@ -32,18 +32,19 @@
 
 **체크리스트**
 - 목표마다 체크박스가 있어 전체·단계별 진행률을 보여주고, 마이페이지에도 같은 진행률이 나옵니다.
-- 지금은 **브라우저에만 저장**되어 다른 기기에서는 보이지 않습니다(서버 저장은 예정).
+- 체크 상태는 **서버에 저장**되어(`user_roadmap_progress`) 다른 기기에서도 보입니다. 예전에 브라우저에만 있던 값은 로그인할 때 한 번 서버로 옮깁니다.
 
 **엔드포인트 · API**
-로드맵 목표와 체크 상태는 화면(프런트엔드)에서만 처리해 API 호출이 없고, **AI 코치와 대화 기록만** 서버를 씁니다.
+로드맵 목표 내용은 화면(프런트엔드)에 있고, **체크 상태·AI 코치·대화 기록**은 서버를 씁니다.
 
 | 구분 | 메서드 · 경로 | 설명 |
 | --- | --- | --- |
 | Backend | `GET /chat/categories/roadmap/suggested-questions` | 추천 질문 목록 (로그인 불필요) |
-| Backend | `POST /chat/messages` | AI 코치에게 질문 `{question, category: "roadmap", roadmapStep}` |
-| Backend | `GET /chat/messages` · `DELETE /chat/messages` | 대화 기록 조회 · 삭제 |
+| Backend | `GET /users/me/roadmap-progress` · `PUT /users/me/roadmap-progress` | 체크 상태 조회 · 항목 체크/해제 |
+| Backend | `POST /chat/messages/stream` | AI 코치에게 질문 `{question, category: "roadmap", roadmapStep, roomId?}` (답변 스트리밍) |
+| Backend | `GET /chat/messages` · `/chat/rooms` | 대화 기록 · 대화방 조회, 대화방 이름 변경·삭제 |
 | Backend | `GET /chat/messages/{id}/sources` | 답변 근거 문서 조회 |
-| LLM 서비스 | `POST /rag/chat` | Backend가 호출해 코치 답변 생성 |
+| LLM 서비스 | `POST /rag/chat/stream` | Backend가 호출해 코치 답변 생성 |
 | 외부 API | OpenAI Chat API | 답변 생성 |
 
 법령·공공기관 링크는 새 창으로 여는 **일반 링크**라 API 호출이 아닙니다.
@@ -168,16 +169,16 @@ Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합
 | --- | --- |
 | **준비** | 사업명, 한 줄 소개, 목표 고객, 해결하려는 문제, 차별점, 팀 구성 등을 입력 |
 | **AI 설계** | AI가 초안을 작성. 결과는 화면에서 바로 고쳐 쓸 수 있음 |
-| **마무리** | AI가 0~100점으로 채점하고 항목별 강점·보완점을 알려줌. 초안은 .md 파일로 다운로드 |
+| **마무리** | AI가 0~100점으로 채점하고 항목별 강점·보완점을 알려줌. 결과는 한글(HWPX)·PDF 파일로 다운로드 |
 
 **어떤 양식으로 쓰나요?**
-- **기본값은 PSST** — 정부 지원사업 심사에서 흔히 쓰는 4항목 구조입니다: Problem(문제인식) · Solution(실현가능성) · Scale-up(성장전략) · Team(팀 구성).
-- **지원하려는 공고의 양식 목차를 붙여넣으면** 그 항목 제목·순서를 그대로 따라 작성합니다. (예: "1. 창업아이템 개요 / 2. 개발 동기 / 3. 시장분석")
+- **기본 양식은 입력 칸 13개** — 신청현황·일반현황·창업아이템 개요와 PSST 흐름(1. 문제인식 → 2. 실현가능성 → 3. 성장전략 → 4. 팀 구성)의 세부 항목입니다(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`).
+- **지원하려는 공고의 양식 목차를 붙여넣거나 제출 양식 파일(한글 HWPX·PDF)을 올리면** 그 항목 제목·순서를 그대로 따라 작성하고, 파일 양식이면 그 양식에 채워 출력합니다. (예: "1. 창업아이템 개요 / 2. 개발 동기 / 3. 시장분석")
 
 **오른쪽 AI 어시스턴트**
 작성 중인 내용을 참고해 질문에 답해 주는 채팅창입니다. 세금·지원사업 질문은 해당 전용 AI 메뉴로 안내합니다. 대화 기록은 저장하지 않습니다.
 
-입력한 내용과 초안은 브라우저에 임시 저장됩니다.
+입력한 내용과 초안은 "임시저장" 버튼으로 서버에 저장됩니다. 여러 개를 만들면 마이페이지 `사업계획서` 메뉴(보관함)에서 열기·이름 변경·삭제할 수 있습니다.
 
 **엔드포인트 · API**
 Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합니다.
@@ -187,12 +188,16 @@ Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합
 | `POST /bizplan/generate` | 입력한 정보로 사업계획서 초안 생성 | `POST /rag/business-plan` |
 | `POST /bizplan/evaluate` | 초안 예비진단 (점수·강점·보완점) | `POST /rag/business-plan-evaluate` |
 | `POST /bizplan/coach` | AI 어시스턴트 질문·답변 (기록 미저장) | `POST /rag/business-plan-coach` |
+| `POST /bizplan/refine` | 입력 문장 다듬기 | `POST /rag/business-plan-refine` |
+| `POST /bizplan/template-inspect` | 제출 양식 파일(HWPX·PDF) 입력 칸 검사 | `POST /rag/business-plan-template-inspect` |
+| `POST /bizplan/render` | 한글(HWPX)·PDF 파일 출력 | `POST /rag/business-plan-render` |
+| `GET`·`PUT`·`DELETE /bizplan/draft`, `/bizplan/plans*` | 임시저장 · 보관함 | (LLM 호출 없음) |
 
 **사용하는 API·서비스**
 
 | 구분 | 이름 | 용도 |
 | --- | --- | --- |
-| LLM 서비스(자체) | `/rag/business-plan`, `/rag/business-plan-evaluate`, `/rag/business-plan-coach` | 초안 작성, 채점, 어시스턴트 |
+| LLM 서비스(자체) | `/rag/business-plan`, `-evaluate`, `-coach`, `-refine`, `-template-inspect`, `-render` | 초안 작성, 채점, 어시스턴트, 문장 정리, 양식 검사, 파일 출력 |
 | 외부 API | OpenAI | 초안·채점·어시스턴트 답변 생성 |
 
 로드맵 코치처럼 **세법 검색(RAG) 없이 한 번의 LLM 호출**로 동작합니다.
@@ -204,14 +209,16 @@ Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합
 | 항목 | 상태 |
 | --- | --- |
 | 로드맵 35개 목표 근거·등급 | ✅ 완료 |
-| 로드맵 체크리스트·진행률 | ✅ 완료 (브라우저 저장) |
+| 로드맵 체크리스트·진행률 | ✅ 완료 (서버 저장) |
 | 영수증 읽기(OCR + LLM)·경비 판정·근거 법령 | ✅ 완료 |
 | 사업계획서 초안 생성(PSST / 공고 양식 붙여넣기) | ✅ 완료 |
-| 사업계획서 AI 예비진단·어시스턴트·.md 다운로드 | ✅ 완료 |
+| 사업계획서 AI 예비진단·어시스턴트 | ✅ 완료 |
 | **지원금 대상 여부 판정** | ⏳ 예정 |
-| 체크리스트 서버 저장 | ⏳ 예정 |
-| 사업계획서 공고 양식 **파일 업로드**(한글·PDF) | ⏳ 예정 |
-| 사업계획서 **한글·PDF 다운로드** | ⏳ 예정 |
+| 체크리스트 서버 저장 | ✅ 완료 (`/users/me/roadmap-progress`) |
+| 사업계획서 공고 양식 **파일 업로드**(한글·PDF) | ✅ 완료 (`/bizplan/template-inspect`) |
+| 사업계획서 **한글·PDF 다운로드** | ✅ 완료 (`/bizplan/render`) |
+| 사업계획서 서버 임시저장·보관함 | ✅ 완료 (`/bizplan/draft`, `/bizplan/plans`) |
+| 지출 엑셀 보고서(요약·지출 내역·품목 상세) | ✅ 완료 |
 
 **남은 확인 사항**
 - 로드맵의 "미확인" 2건과 일부 숫자(노란우산공제 구간, 청년창업 감면율)는 원문 대조가 필요합니다.

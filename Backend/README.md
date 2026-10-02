@@ -1,10 +1,10 @@
 # Backend
 
 청년·1인 창업 지원 플랫폼의 REST API 서버입니다.  
-프론트(화면)와 LLM(8001) 사이에서 **회원·정책·세무·지출·관리자 API**를 담당합니다.
+프론트(화면)와 LLM(8001) 사이에서 **회원·상담·정책·세무·지출·사업계획서·구독·관리자 API**를 담당합니다.
 
 설계 명세: `Docs/Design/API_SPEC.md`  
-기능 명세: `Docs/Design/FUNCTIONAL_SPEC.md` (FS-01~28)
+기능 명세: `Docs/Design/FUNCTIONAL_SPEC.md` (FS-01~31)
 
 ---
 
@@ -16,6 +16,7 @@
 | LLM | 8001 | `http://127.0.0.1:8001` (선택) |
 | Frontend | 5173 | `http://127.0.0.1:5173` → `/api`를 8000으로 프록시 |
 | Postgres | 5432 | 필수 |
+| Elasticsearch | 9200 | Backend는 직접 쓰지 않음(LLM 검색용) |
 
 - API 시험 화면: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) (서버를 켠 뒤에만 열림)
 - 연결 상태: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
@@ -32,7 +33,7 @@ uv run uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --lifespan o
 
 Docker Compose에서는 `Backend/Dockerfile`이 같은 명령(`uv run uvicorn ... --host 0.0.0.0`)으로 뜬다.
 
-켜는 순서: (선택) DB → (선택) LLM 8001 → **Backend 8000** → Frontend 5173
+켜는 순서: **DB(필수)** → (선택) Elasticsearch·LLM 8001 → **Backend 8000** → Frontend 5173
 
 ---
 
@@ -78,7 +79,7 @@ Content-Type: application/json
 | `LLM_API_URL` | `http://127.0.0.1:8001` | LLM 내부 API |
 | `LLM_TIMEOUT_SECONDS` | `25` | 개별 제한이 없는 LLM 호출의 기본 제한 시간 |
 | `LLM_TIMEOUT_READY` / `_CHAT_POLICY` / `_CHAT_TAX` | `3` / `45` / `120` | `/rag/ready`, `/rag/chat`(policy·roadmap / tax·expense·saving) |
-| `LLM_TIMEOUT_LEGAL_BASIS` / `_DEDUCTIBILITY` / `_SUMMARIZE` / `_OCR` / `_REINDEX` | `30` / `30` / `45` / `60` / `180` | 나머지 LLM 엔드포인트별 제한(초) |
+| `LLM_TIMEOUT_LEGAL_BASIS` / `_DEDUCTIBILITY` / `_SUMMARIZE` / `_BIZPLAN` / `_OCR` / `_REINDEX` | `30` / `30` / `45` / `120` / `40` / `180` | 나머지 LLM 엔드포인트별 제한(초). `_BIZPLAN`은 `/rag/business-plan*` 6개 |
 | `TOKEN_SECRET` | **없음 (필수)** | 토큰 서명 키. 미설정 시 기동 실패 |
 | `TOKEN_TTL_SECONDS` | `604800` (7일) | 토큰 만료 |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@demo.com` / 없음 | 관리자 계정. 비밀번호가 있으면 기동 시 생성하거나 그 값으로 갱신 |
@@ -93,7 +94,7 @@ Content-Type: application/json
 |------|------|
 | Postgres 없음 | 1.5초 간격 8회 재시도 후 RuntimeError로 기동 중단 |
 | Postgres 연결됨 | 기동 시 `DB/app_extras.sql`이 있으면(로컬 실행) 파일 전체를 적용하고 데모 데이터 시드. 적용 실패 시 경고 로그만 남기고 기동은 계속한다. Docker에서는 파일이 컨테이너에 없어 compose의 `db-migrate` 서비스가 적용한다 |
-| LLM 꺼짐 / OpenAI 키 없음 | 챗봇은 **목업 문구**, 세액감면 근거는 고정 문구. 공고 요약은 캐시가 없으면 404, 붙여넣기 요약은 503. RAG 재색인은 **502** |
+| LLM 꺼짐 / OpenAI 키 없음 | 챗봇은 **목업 문구**, 세액감면 근거는 고정 문구, 영수증은 목 값. 공고 요약은 캐시가 없으면 404, 붙여넣기 요약·사업계획서 생성/진단/정리/양식 검사/출력은 503. RAG 재색인은 **502** |
 | SMTP 없음 | 메일 실발송 없이 알림함 API만 동작 |
 
 `GET /health`의 `postgres`, `llm`, `ragReady`로 실제 연결 여부를 구분하면 됩니다.  
@@ -109,7 +110,7 @@ Content-Type: application/json
 
 ---
 
-## 구현 기능 (FS-01~28)
+## 구현 기능 (FS-01~31)
 
 | FS | 기능 | API |
 |----|------|-----|
@@ -118,7 +119,7 @@ Content-Type: application/json
 | 03 | 개인정보 | `GET/PUT /users/me` |
 | 04 | 사업자 정보 | `GET/PUT /users/me/business-profile` |
 | UX1 | 창업 로드맵 진행 상태 | `GET/PUT /users/me/roadmap-progress` |
-| 05~07 | AI 챗봇 (세금/경비/절세/정책) | `POST /chat/messages` |
+| 05~07 | AI 챗봇 (세금/경비/절세/정책) | `POST /chat/messages/stream`(화면), `POST /chat/messages` |
 | 08 | 답변 근거 | `GET /chat/messages/{id}/sources` |
 | 09 | 사업자 유형 진단 | `POST /tax/business-type/diagnosis` |
 | 10 | 세금 정보 | `GET/PUT /tax/info` |
@@ -128,7 +129,7 @@ Content-Type: application/json
 | 14 | 영수증 등록 | `POST /expenses/receipts` |
 | 15 | OCR 결과 조회 | `GET /expenses/receipts/{id}` |
 | 16 | 지출 목록 | `GET /expenses?from&to&category` |
-| 17 | 경비 가능성 | `GET /expenses/{id}/deductibility` |
+| 17 | 경비 가능성 | `GET /expenses/{id}/analysis`, `GET /expenses/{id}/deductibility` |
 | 18 | 정책 검색 | `GET /policies` |
 | 19 | 정책 추천 | `GET /policies/recommendations` |
 | 20 | 자격 확인 | `GET /policies/{id}/eligibility` |
@@ -140,8 +141,12 @@ Content-Type: application/json
 | 26 | 세법·정책·공고 등록 | `GET/POST /admin/tax-documents`, `/admin/policies`, `/admin/announcements` |
 | 27 | RAG 재색인 | `POST /admin/rag-documents/reindex` |
 | 28 | 모니터링 | `GET /admin/monitoring` |
+| 29 | 사업계획서 초안 | `POST /bizplan/generate`, `/refine`, `/template-inspect`, `/render`, `GET/PUT/DELETE /bizplan/draft`, `/bizplan/plans*` |
+| 30 | 사업계획서 예비진단 | `POST /bizplan/evaluate` |
+| 31 | 사업계획서 어시스턴트 | `POST /bizplan/coach` |
+| UX6 | 구독 플랜(목업 결제) | `GET/PUT /users/me/subscription` |
 
-명세에 없는 **추가 API:** 추천 질문, 대화 기록 조회/삭제, 개인 캘린더 등록/삭제, 지출 분류 수정/삭제, 회원 정지(`PATCH /admin/users/{id}`), 알림함 `/notifications`, 홈 통계 `/stats`.
+명세에 없는 **추가 API:** 추천 질문, 대화 기록 조회/삭제, 대화방 목록·이름 변경·삭제(`/chat/rooms`), 개인 캘린더 등록/삭제, 지출 분류·품목·상호 수정/삭제, 영수증 원본 이미지, 회원 정지(`PATCH /admin/users/{id}`), 알림함 `/notifications`, 홈 통계 `/stats`, 사업계획서 서류 보관(`/bizplan/documents*`, 현재 화면 미사용).
 
 ---
 
@@ -162,15 +167,19 @@ Content-Type: application/json
 | GET, PUT | `/users/me` | Bearer |
 | GET, PUT | `/users/me/business-profile` | Bearer |
 | GET, PUT | `/users/me/roadmap-progress` | Bearer |
+| GET, PUT | `/users/me/subscription` | Bearer |
 
 ### 상담
 
 | Method | Path | 인증 | 비고 |
 |--------|------|------|------|
 | GET | `/chat/categories/{category}/suggested-questions` | 불필요 | `{ category, questions }` |
-| POST | `/chat/messages` | Bearer | `{ category, question, roadmapStep? }` — `tax` \| `expense` \| `saving` \| `policy` \| `roadmap` |
+| POST | `/chat/messages/stream` | Bearer | `/chat/messages`와 같은 body. NDJSON `{type:"draft",answer}` … `{type:"done",result}` (화면이 쓰는 경로) |
+| POST | `/chat/messages` | Bearer | `{ category, question, roadmapStep?, roomId? }` — `tax` \| `expense` \| `saving` \| `policy` \| `roadmap` |
 | GET | `/chat/messages?category` | Bearer | 내 대화 기록 |
-| DELETE | `/chat/messages?category` \| `?ids` | Bearer | `ids`(쉼표 구분 메시지 id)를 주면 그 메시지만(대화방 하나), 없으면 카테고리 또는 전체 삭제 |
+| DELETE | `/chat/messages?category` | Bearer | 카테고리 또는 전체 대화방 삭제. 예전 `?ids`는 400 |
+| GET | `/chat/rooms?category` | Bearer | 대화방 목록 |
+| PATCH, DELETE | `/chat/rooms/{roomId}` | Bearer | 이름 변경 `{ title }` / 대화방 삭제 |
 | GET | `/chat/messages/{messageId}/sources` | Bearer | |
 
 ### 캘린더·세무
@@ -194,10 +203,33 @@ Content-Type: application/json
 |--------|------|------|------|
 | POST | `/expenses/receipts` | Bearer | `multipart` 필드명 `image` |
 | GET | `/expenses/receipts/{receiptId}` | Bearer | |
+| GET | `/expenses/receipts/{receiptId}/image` | Bearer | 업로드 원본 이미지 |
 | GET | `/expenses?from&to&category` | Bearer | |
 | PATCH | `/expenses/{expenseId}` | Bearer | 분류 수정 |
 | DELETE | `/expenses/{expenseId}` | Bearer | 지출·영수증 삭제 |
+| GET | `/expenses/{expenseId}/analysis` | Bearer | 읽은 항목·판단 단계·관련 법령(LLM 호출 없음) |
+| POST | `/expenses/{expenseId}/items` | Bearer | 품목 추가 `{ name, price? }` |
+| DELETE | `/expenses/{expenseId}/items/{itemIndex}` | Bearer | 품목 삭제 |
+| PATCH | `/expenses/{expenseId}/vendor` | Bearer | 상호 수정 `{ vendor }` |
 | GET | `/expenses/{expenseId}/deductibility` | Bearer | |
+
+### 사업계획서
+
+| Method | Path | 인증 | 비고 |
+|--------|------|------|------|
+| POST | `/bizplan/generate` | Bearer | 초안 생성 |
+| POST | `/bizplan/refine` | Bearer | 입력 문장 정리 |
+| POST | `/bizplan/template-inspect` | Bearer | 제출 양식(PDF·HWPX) 검사 |
+| POST | `/bizplan/render` | Bearer | PDF·HWPX 출력 |
+| POST | `/bizplan/evaluate` | Bearer | AI 예비진단 |
+| POST | `/bizplan/coach` | Bearer | 아이디어 어시스턴트 |
+| GET, PUT, DELETE | `/bizplan/draft` | Bearer | 작성 화면 임시저장(유저당 1건) |
+| GET, POST | `/bizplan/plans` | Bearer | 보관함 목록 / 새로 보관 |
+| POST | `/bizplan/plans/new` | Bearer | 새 사업계획서 시작(임시저장 비움) |
+| PUT, PATCH, DELETE | `/bizplan/plans/{planId}` | Bearer | 덮어쓰기 / 이름 변경 / 삭제 |
+| POST | `/bizplan/plans/{planId}/open` | Bearer | 보관한 건을 작성 화면으로 불러오기 |
+
+요청·응답 상세는 `Docs/Design/API_SPEC.md` bizplan 절.
 
 ### 사업계획서 파일 보관
 
@@ -212,7 +244,7 @@ Content-Type: application/json
 
 정상 응답은 모두 `200`. ‘문서 저장’ 한 번으로 기본 문서는 PDF·HWPX를 함께 저장하고, 제출 양식은 원본 형식만 저장한다.
 대표 파일은 `bizplan_documents.file_data`, 추가 형식은 `bizplan_document_files.file_data`(BYTEA)에 저장한다. 두 형식은 한 문서로 계산하고 한 트랜잭션에서 저장·삭제한다.
-`files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이다. 기존 단일 파일은 해당 형식만 제공한다. 마이페이지에서 형식을 선택해 다운로드하며, 없는 형식은 `404`이다.
+`files`는 다운로드 가능한 `{ format, fileName, sizeBytes }` 목록이다. 기존 단일 파일은 해당 형식만 제공한다. 없는 형식은 `404`이다.
 사용자당 8개(초과 `409`), 파일당 50MiB(초과 `413`)이며 중복 저장은 허용한다.
 렌더링 전에 개수를 확인하고, 렌더링 후 한 DB 연결에서 사용자 행 잠금·개수 재확인·INSERT를 수행해 동시 요청에도 8개를 넘지 않는다.
 다른 사용자 또는 없는 파일의 조회·삭제는 `404`, 미인증은 `401`이다. 임시저장(`/bizplan/draft`)과는 별개다.
@@ -228,7 +260,7 @@ Content-Type: application/json
 
 | Method | Path | 인증 |
 |--------|------|------|
-| GET | `/policies?keyword&region&industry&page&size` | Bearer |
+| GET | `/policies?keyword&region&industry&page&size&only_announcements` | Bearer |
 | GET | `/policies/recommendations` | Bearer |
 | GET | `/policies/saved` | Bearer |
 | GET | `/policies/{policyId}` | Bearer |
@@ -281,7 +313,7 @@ Backend/
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
   core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  tests/           # 표준 unittest 12개 파일
+  tests/           # 표준 unittest 16개 파일
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```
@@ -296,6 +328,6 @@ LLM 구현 코드는 이 폴더에 없습니다. `core/llm_client.py`가 `LLM_AP
 
 1. 로그인 후 `accessToken` + `userRole` 저장
 2. 보호 API마다 `Authorization: Bearer ...`
-3. `role === "admin"` 이면 `/admin` 화면
+3. `role === "admin"`이면 관리자 API 사용 가능(관리자 화면은 없어 `/docs`로 호출)
 4. 401 → 로그인으로
 5. OpenAI 키·`.env` 실값은 GitHub에 올리지 말 것

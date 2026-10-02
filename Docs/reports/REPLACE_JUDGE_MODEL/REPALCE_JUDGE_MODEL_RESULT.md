@@ -29,7 +29,7 @@
 
 ### 1) 초기 수치형 Feature 모델: 노트북에 저장된 출력
 
-아래는 [실험 노트북](<../ML/info copy.ipynb>)의 **현재 저장된 출력**에서 읽은 Validation 결과다. 이 실험은 기본 `predict()` 판정이며 HPO 안전 임계값 표와 비교 조건이 다르다. 노트북은 여러 번 수정·재실행되어 [이전 인수인계 로그](WORK_LOG_0920_JUDGE_ML_EXPERIMENT_HANDOFF.md)에 적힌 초기 XGBoost 수치(정확도 약 `0.81`, FP `17`)와 현재 저장된 기본 모델 출력(정확도 `0.76`, FP `21`)이 일치하지 않는다. 여기서는 현재 파일의 출력만 인용하고, 당시 수치는 별도 실험 기록으로 취급한다. 행렬은 저장된 classification report의 클래스별 support·recall·accuracy로 복원했다.
+아래는 실험 노트북(`LLM/ML/info copy.ipynb`, 저장소에 없음)의 **현재 저장된 출력**에서 읽은 Validation 결과다. 이 실험은 기본 `predict()` 판정이며 HPO 안전 임계값 표와 비교 조건이 다르다. 노트북은 여러 번 수정·재실행되어 이전 인수인계 로그(`WORK_LOG_0920_JUDGE_ML_EXPERIMENT_HANDOFF.md`, 저장소에 없음)에 적힌 초기 XGBoost 수치(정확도 약 `0.81`, FP `17`)와 현재 저장된 기본 모델 출력(정확도 `0.76`, FP `21`)이 일치하지 않는다. 여기서는 현재 파일의 출력만 인용하고, 당시 수치는 별도 실험 기록으로 취급한다. 행렬은 저장된 classification report의 클래스별 support·recall·accuracy로 복원했다.
 
 | 모델·판정 방식 | Train 정확도 | Val 정확도 | Val Macro F1 | Val 불충분 Recall | Val FP/FPR | 혼동행렬 `[[TN,FP],[FN,TP]]` | 채택이 어려운 이유 |
 |---|---:|---:|---:|---:|---:|---|---|
@@ -46,7 +46,7 @@
 
 ### 2) XGBoost·CatBoost 안전 임계값 재검증
 
-다음은 [HPO 전체 보고서](../data/processed/judge_v2/hpo_v1/search_results.md)의 동일 5-fold·Train OOF 임계값 절차를 적용한 결과다. 탐색마다 Train OOF에서 FPR ≤ `0.10`인 임계값을 선정하고, Validation에는 그대로 적용했다. **Train에서 제한을 만족해도 Validation에서 FPR을 보장하지는 않는다.** 행렬은 보고서의 정책·세금별 행렬을 합산했다.
+다음은 HPO 전체 보고서(`LLM/data/processed/judge_v2/hpo_v1/search_results.md`, 저장소에 없음)의 동일 5-fold·Train OOF 임계값 절차를 적용한 결과다. 탐색마다 Train OOF에서 FPR ≤ `0.10`인 임계값을 선정하고, Validation에는 그대로 적용했다. **Train에서 제한을 만족해도 Validation에서 FPR을 보장하지는 않는다.** 행렬은 보고서의 정책·세금별 행렬을 합산했다.
 
 | 모델 | 탐색 | CV 정확도 | Train–CV 격차 | Val 정확도 | Val Macro F1 | Val FP/FPR | Val 혼동행렬 `[[TN,FP],[FN,TP]]` | 미달 사유 |
 |---|---|---:|---:|---:|---:|---:|---|---|
@@ -68,7 +68,7 @@
 
 ### 3) TF-IDF + Linear SVM / Logistic Regression
 
-점수만으로 근거의 관련성을 표현하기 어려워 [TF-IDF 전체 보고서](../data/processed/judge_v2/tfidf_v2/search_results.md)에서 질문 원문과 실제 Top-5 근거를 이용했다. A=질문만, B=질문+근거·유사도, C=B+기존 수치형 36개다. 같은 12개 후보 조합·5-fold, Train OOF 안전 임계값을 사용했다. SVM 임계값은 확률이 아닌 **decision margin**이다.
+점수만으로 근거의 관련성을 표현하기 어려워 TF-IDF 전체 보고서(`LLM/data/processed/judge_v2/tfidf_v2/search_results.md`, 저장소에 없음)에서 질문 원문과 실제 Top-5 근거를 이용했다. A=질문만, B=질문+근거·유사도, C=B+기존 수치형 36개다. 같은 12개 후보 조합·5-fold, Train OOF 안전 임계값을 사용했다. SVM 임계값은 확률이 아닌 **decision margin**이다.
 
 | 입력 | 모델 | CV 정확도 | Train–CV 격차 | Val 정확도 | Val Macro F1 | Val 불충분 Recall | Val FP/FPR | Val 혼동행렬 `[[TN,FP],[FN,TP]]` |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -110,10 +110,10 @@ CatBoost Judge는 46회의 Multi-hop 판정 중 충분을 4회, 불충분을 42�
 
 ## 근거 파일
 
-- [ML 실험 상세 기록](WORK_LOG_0920_JUDGE_ML_EXPERIMENT_HANDOFF.md)
-- [전통 ML 실험 노트북](<../ML/info copy.ipynb>) 및 [XGBoost·CatBoost 안전 기준 탐색 보고서](../data/processed/judge_v2/hpo_v1/search_results.md)
-- [TF-IDF + SVM/LR 전체 탐색 보고서](../data/processed/judge_v2/tfidf_v2/search_results.md)
+- ML 실험 상세 기록(`WORK_LOG_0920_JUDGE_ML_EXPERIMENT_HANDOFF.md`, 저장소에 없음)
+- 전통 ML 실험 노트북(`LLM/ML/info copy.ipynb`, 저장소에 없음) 및 XGBoost·CatBoost 안전 기준 탐색 보고서(`LLM/data/processed/judge_v2/hpo_v1/search_results.md`, 저장소에 없음)
+- TF-IDF + SVM/LR 전체 탐색 보고서(`LLM/data/processed/judge_v2/tfidf_v2/search_results.md`, 저장소에 없음)
 - [CatBoost Judge 운영 그래프 E2E 비교](CATBOOST_JUDGE_COMPARISON.md)
-- [학습용 Judge 그래프](../ML/judge_training_graph.py), [운영 그래프](../src/rag/graph.py)
+- 학습용 Judge 그래프(`LLM/ML/judge_training_graph.py`, 저장소에 없음), [운영 그래프](../../../LLM/src/rag/graph.py)
 
 `LLM/work_log`와 `LLM/data/processed`는 현재 Git 무시 대상이다. 다른 환경에 인수인계할 때는 이 문서와 결과 보고서를 별도로 전달해야 한다.

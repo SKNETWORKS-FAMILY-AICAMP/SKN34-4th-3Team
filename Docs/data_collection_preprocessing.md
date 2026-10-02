@@ -6,7 +6,7 @@
 
 데이터는 크게 두 축으로 구성된다.
 
-- **세법 자료**: 국가법령정보센터 API로 수집한 법령 전체 조문
+- **세법 자료**: 국가법령정보센터 API로 수집한 법령 전체 조문, 국세청 법령해석례, 생활법령정보(창업 분야) 본문
 - **지원정책·공고 데이터**: 정부24·K-Startup·기업마당·온통청년 4개 API로 수집한 정책·공고 정보
 
 ---
@@ -21,8 +21,17 @@
 | 수집 방식 | 법령 마스터(MST) 코드 기준으로 전체 조문 API 호출 |
 | 수집 범위 | 조세특례제한법 / 소득세법 / 부가가치세법 / 국세기본법 / 법인세법 / 조세범 처벌법 / 관세법 및 각 시행령·시행규칙 (총 19개 법령) |
 | 저장 단위 | 조문 단위 (법령명 + 조문번호 + 조문제목 + 조문내용 + 항 내용) |
-| 수집 건수 | **총 4,459건** |
+| 수집 건수 | **총 4,459건** (2026-09-18 집계) |
 | 저장 테이블 | `tax_documents` |
+
+법령 조문 외에 아래 두 소스도 `tax_documents`에 함께 저장한다(건수는 위 집계에 포함되지 않음).
+
+| 스크립트 | 출처 | 수집 내용 | 중복 기준 |
+| --- | --- | --- | --- |
+| `11_collect_nts_interpretation.py` | 국가법령정보센터 Open API(`LAW_API_KEY`) | 국세청 법령해석례. 제목 `[국세청 법령해석] 안건명 (안건번호)`(최대 500자) | 제목 |
+| `13_collect_life_law.py` | [생활법령정보](https://www.easylaw.go.kr) 크롤링 | 창업 카테고리 전체 업종(26개)과 사업 카테고리 중 "1인 창조기업"·"중소·벤처기업 창업" 본문 | `source` |
+
+일회성 보정 스크립트도 있다. `12_add_production_date.py`는 이미 저장된 법령해석례 본문 앞에 생산일자를 붙이고, `10_backfill_bizinfo_region.py`는 지역이 비어 있던 기업마당 정책의 `region`을 채운다. 둘 다 정기 수집 순서(`run_collection.py`)에는 들어 있지 않다.
 
 내용이 비어있는 조문(삭제된 조문 등)은 저장 대상에서 제외했다. 중복 수집 방지를 위해 저장 전 같은 제목(`title`)의 행이 이미 있는지 확인 후 신규 건만 저장한다.
 
@@ -37,12 +46,35 @@
 
 | 항목 | 건수 |
 | --- | --- |
-| 정책(`policies`) 총계 | **2,931건** |
-| 공고(`announcements`) 총계 | **2,187건** |
+| 정책(`policies`) 총계 | **2,931건** (2026-09-18 집계) |
+| 공고(`announcements`) 총계 | **2,187건** (2026-09-18 집계) |
 
 정책과 공고의 건수가 다른 이유: `policies`는 정책 정보 자체를 담는 테이블이고, `announcements`는 그중 신청 마감일 등 구체적인 모집 정보가 확인되는 것만 별도로 담는 하위 테이블이다. 정부24처럼 공고 없이 정책 정보만 수집되는 소스가 있어 정책 수가 공고 수보다 많다.
 
 같은 정책이 여러 소스에서 중복 수집되는 것을 막기 위해, 저장 전 정책 제목(`title`) 기준으로 기존 행을 조회하고 없을 때만 신규로 등록한다.
+
+### 2.3 수집 실행과 자동화
+
+정기 수집은 `DB/run_collection.py`가 아래 순서로 실행한다. DB 접속은 `DB_HOST`·`DB_PORT`·`POSTGRES_*` 환경변수를 쓰며, SQL도 `docker exec` 없이 psycopg2로 직접 실행하므로 DB가 다른 호스트(AWS Data EC2)에 있어도 동작한다.
+
+```text
+02_collect_tax_law → 11_collect_nts_interpretation → 13_collect_life_law
+→ 03_collect_gov24 → 04_collect_kstartup → 05_collect_bizinfo → 06_collect_ontong_youth
+→ 07_generate_calendar_events → 08_link_policy_calendar.sql
+```
+
+| 실행 경로 | 내용 |
+| --- | --- |
+| 로컬 | `cd DB && uv run python run_collection.py`. 예전 `run_all.sh`·`run_all.bat`도 남아 있으나 순서가 다르고(02→03~07→08.sql→11→13) SQL을 `docker exec startup_db`로 실행해 같은 호스트의 compose DB에서만 쓸 수 있다 |
+| AWS 주간 수집 | GitHub Actions `collect.yml`(매주 월 03:00 KST)이 App EC2에서 `docker compose -f docker-compose.app.yml run --rm collector`로 실행한 뒤 `POST /rag/reindex`로 임베딩·ES를 갱신한다 |
+| AWS 실패 재시도 | `collect-retry.yml`(3시간마다)이 `run_collection.py --retry`로 재시도 시각이 지난 스크립트만 다시 실행하고 재색인한다. 대상이 없으면 종료 코드 3 |
+
+**실패 분류와 기록** (`DB/scripts/collect_common.py`)
+
+- 외부 요청 실패를 일시 장애(`transient`: timeout·연결 오류·5xx·429·트래픽 초과)와 영구 장애(`permanent`: 키 만료·권한·응답 구조 변경)로 나눠 `collection_failures`에 실패 단위(페이지·키워드·법령 등)로 남긴다
+- 스크립트 종료 코드: 일시 장애만 있으면 `75`, 영구 장애가 있으면 `76`. `run_collection.py`는 이 값으로 결과를 구분하고, 실패를 기록하지 못한 비정상 종료는 `permanent`로 기록한다
+- `transient`는 다음 재시도 시각(`next_retry_at`, 기본 2시간 뒤, 공공데이터포털 일일 트래픽 초과는 다음 날 0시 KST) 이후 `--retry`가 다시 실행한다. 그 밖의 4xx(403 포함)는 요청 내 재시도 후에도 실패하면 `permanent`다. 재시도 3회를 넘기면 `permanent`로 바뀐다
+- 스크립트를 다시 실행하면 그 스크립트의 이전 미해결 실패는 `resolved_at`으로 닫힌다. 남은 `permanent`는 담당자가 확인한다
 
 ---
 
@@ -146,9 +178,15 @@ DB 원천 조회 → 텍스트 노이즈 정제 → 의미 라벨을 붙여 검�
 
 #### 3.2.4 임베딩 및 Vector DB 적재
 
-정제·청킹이 끝난 본문을 OpenAI 임베딩 모델(`text-embedding-3-small`)로 벡터화해 `rag_documents.embedding`(pgvector)에 저장한다. 재색인 시에는 청크 본문의 SHA-256 해시를 비교해 **변경된 청크만** 다시 임베딩하여 불필요한 API 비용과 처리 시간을 줄인다(전체 강제 재임베딩은 `--force` 옵션으로 수행).
+정제·청킹이 끝난 본문을 OpenAI 임베딩 모델(`text-embedding-3-small`)로 벡터화해 `rag_documents.embedding`(pgvector)에 저장한다. 재색인 시에는 청크 본문의 SHA-256 해시를 비교해 **변경된 청크만** 다시 임베딩하여 불필요한 API 비용과 처리 시간을 줄인다(전체 강제 재임베딩은 `--force` 옵션 또는 `/rag/reindex`의 `force=true`로 수행).
 
 관련 코드: `LLM/src/vectorstores/postgres.py`
+
+#### 3.2.5 Elasticsearch(Nori) 키워드 인덱스
+
+pgvector 적재가 끝나면 같은 청크를 Elasticsearch로 옮겨 Nori 형태소 분석 BM25 인덱스를 만든다. 새 물리 인덱스에 Bulk 적재가 모두 성공한 뒤에만 검색 alias(`rag-documents`)를 교체하고, 쓰지 않는 이전 인덱스는 정리한다. 하이브리드 검색에서 Dense(pgvector) 결과와 RRF로 합쳐진다. `POST /rag/reindex`가 pgvector 갱신 직후 자동으로 수행하므로 수집 후 재색인 한 번이면 두 인덱스가 함께 갱신된다.
+
+관련 코드: `LLM/src/features/elasticsearch_indexing.py`, `LLM/src/vectorstores/nori_hybrid.py`, 분석기 설치 `elasticsearch/Dockerfile`
 
 ---
 
@@ -163,6 +201,7 @@ DB 원천 조회 → 텍스트 노이즈 정제 → 의미 라벨을 붙여 검�
 | LLM | 검색용 본문 구성 | 필드에 한글 라벨을 붙여 임베딩 모델이 의미 구분 가능하게 함 |
 | LLM | 청크 단위 분할 | 한국어 문장 경계를 고려해 1,000자(overlap 150자) 단위로 분할 |
 | LLM | 임베딩·Vector DB 적재 | 변경된 청크만 재임베딩하여 `rag_documents`에 적재 |
+| LLM | Elasticsearch 재색인 | pgvector 청크를 Nori BM25 인덱스로 옮겨 하이브리드 검색에 사용 |
 
 | 데이터 | 건수 |
 | --- | --- |

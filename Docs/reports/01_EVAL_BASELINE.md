@@ -26,7 +26,7 @@ uv run --no-sync python -m src.evaluation.run_evaluation --mode policy --suite h
 uv run --no-sync python -m src.evaluation.run_evaluation --mode graph --suite holdout250 --user-source db --output evaluation/results/tax_roadmap_holdout250_0912.json
 ```
 
-원시 결과: [정책·Guardrail](../../LLM/evaluation/results/policy_guardrail_holdout250_0912.json), [세금·로드맵](../../LLM/evaluation/results/tax_roadmap_holdout250_0912.json). 전체 250단위는 정책·Guardrail 126문항과 그래프 124턴이다. 아래의 **전체 통과 195/250(78.0%)**은 Guardrail 정분류 63건, 정책 정답 *전부*가 상위 5개에 포함된 34건, 그래프 통과 98턴을 합친 보고용 합성 지표다. 정책 검색의 공식 연속형 지표 및 그래프 시나리오 통과율과 혼동해서는 안 된다. 합성 기준의 실패는 정책 부분/완전 누락 29건과 그래프 실패 26턴, 총 55단위다.
+원시 결과: 정책·Guardrail(`LLM/evaluation/results/policy_guardrail_holdout250_0912.json`, 로컬 생성물, git 미추적), 세금·로드맵(`LLM/evaluation/results/tax_roadmap_holdout250_0912.json`, 로컬 생성물, git 미추적). 전체 250단위는 정책·Guardrail 126문항과 그래프 124턴이다. 아래의 **전체 통과 195/250(78.0%)**은 Guardrail 정분류 63건, 정책 정답 *전부*가 상위 5개에 포함된 34건, 그래프 통과 98턴을 합친 보고용 합성 지표다. 정책 검색의 공식 연속형 지표 및 그래프 시나리오 통과율과 혼동해서는 안 된다. 합성 기준의 실패는 정책 부분/완전 누락 29건과 그래프 실패 26턴, 총 55단위다.
 
 ## 상세 결과 1 — Guardrail과 정책 검색
 

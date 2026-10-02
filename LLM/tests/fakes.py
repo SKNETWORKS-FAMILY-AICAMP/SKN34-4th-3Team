@@ -60,7 +60,8 @@ class FakeStructuredChatModel:
             self.call_count += 1
             self.last_prompt_text = prompt_input.to_string()
             self.last_config = config
-            return schema.model_validate(self._outputs_by_schema[schema])
+            output = dict(self._outputs_by_schema[schema])
+            return schema.model_validate(output)
 
         return RunnableLambda(return_structured_output)
 
