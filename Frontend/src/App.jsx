@@ -40,18 +40,26 @@ export function App({ variant } = {}) {
   const [savedPolicies, setSavedPolicies] = useState([]);
   // 화면 폭 768px 이하에서는 모바일 전용 웹앱(src/mobile)을 보여준다. 데이터·API는 PC와 같이 쓴다.
   const isMobile = useIsMobile();
+  // 모바일 앱 여부는 첫 로딩 때 한 번만 정한다(회전·창 크기 변경으로 화면이 바뀌어 입력이 사라지지 않게).
+  const [mobileApp] = useState(isMobile);
 
   // 웹앱: 화면이 바뀌면 주소에 남기고, 뒤로 가기 · 앞으로 가기로 화면을 되돌린다.
   useEffect(() => {
     if (!isWeb) return undefined;
     const onPop = () => {
       const next = viewFromHash();
+      // 저장하지 않은 사업계획서를 떠나려다 취소하면 주소를 사업계획서로 되돌린다.
+      const toBizplan = next.view === 'page' && next.pageKey === 'bizplan';
+      if (!toBizplan && !confirmLeaveBizplan()) {
+        window.history.pushState(null, '', '#/bizplan');
+        return;
+      }
       setView(next.view);
       setPageKey(next.pageKey);
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [isWeb]);
+  }, [isWeb, view, pageKey]);
   useEffect(() => {
     if (!isWeb) return;
     const hash = view === 'page' ? `#/${pageKey}` : view === 'mypage' ? '#/mypage' : '';
@@ -218,7 +226,7 @@ export function App({ variant } = {}) {
     />
   );
 
-  if (isMobile && !isWeb) {
+  if (mobileApp && !isWeb) {
     return (
       <React.Fragment>
         <MobileApp

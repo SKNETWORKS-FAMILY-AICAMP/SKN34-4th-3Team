@@ -69,8 +69,9 @@ PADDLE_DET_MODEL = "PP-OCRv5_mobile_det"
 PADDLE_REC_MODEL = "korean_PP-OCRv5_mobile_rec"
 # 검출에 쓰는 긴 변 상한. 1280px부터는 작은 품목명을 놓쳐 1600px로 둔다.
 PADDLE_DET_LIMIT_SIDE = 1600
-# 다른 컨테이너와 CPU를 나눠 쓰는 환경에서 4개가 2·6·8개보다 빨랐다. 서버 코어 수에 맞춰 바꿀 수 있다.
-PADDLE_CPU_THREADS = int(os.getenv("OCR_CPU_THREADS", "4"))
+# 다른 컨테이너와 CPU를 나눠 쓰는 환경에서 4개가 2·6·8개보다 빨랐다. 코어가 그보다 적은 서버(t3.medium 2개)에서는
+# 코어 수만큼만 쓴다. OCR_CPU_THREADS 환경변수로 바꿀 수 있다.
+PADDLE_CPU_THREADS = int(os.getenv("OCR_CPU_THREADS", str(min(4, os.cpu_count() or 1))))
 # 같은 줄로 묶는 기준: 두 글자 상자의 세로 중심 차이가 글자 높이의 이 비율 이하면 한 줄로 본다.
 # PP-OCR은 "베이컨토마토", "5,480", "1"을 따로 돌려주므로, 영수증 한 줄로 묶어야 LLM이 품목과 금액을 짝짓는다.
 ROW_CENTER_RATIO = 0.5
