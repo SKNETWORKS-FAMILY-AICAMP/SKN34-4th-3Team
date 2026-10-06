@@ -409,7 +409,7 @@ export function Roadmap() {
         <Reveal as="h2" className="sec__title" delay={80}>
           아이디어부터 스케일업까지
         </Reveal>
-        {/* 웹앱(/web.html)은 단계별 한 줄 설명을 함께 보여 주고, 휴대폰에서는 세로 타임라인으로 펼친다(web.css) */}
+        {/* 웹앱은 단계별 한 줄 설명을 함께 보여 주고, 휴대폰에서는 세로 타임라인으로 펼친다(web.css) */}
         <div className={'rz rz--home' + (on ? ' is-in' : '')} ref={ref}>
           <div className="rz__row">
             {ROADMAP.map((s, i) => (

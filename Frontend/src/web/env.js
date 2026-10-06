@@ -1,4 +1,4 @@
-// 반응형 웹앱(/web.html)에서 실행 중인지. web/main.jsx가 <html>에 is-web을 붙인다.
+// 반응형 웹앱에서 실행 중인지. web/main.jsx가 <html>에 is-web을 붙인다.
 // 공통 화면 부품이 웹앱에서만 동작을 조금 바꿀 때 쓴다(기본 페이지 동작은 그대로).
 export const isWebApp = () => typeof document !== 'undefined' && document.documentElement.classList.contains('is-web');
 

@@ -262,6 +262,18 @@
 - 업로드 전 canvas로 긴 변 2000px JPEG 변환(OCR이 어차피 2000px로 축소하므로 인식률 영향 없음)
 - 판정 저장 API(`PATCH /expenses/{id}` 등) 추가 전까지 판정 버튼 비노출 또는 "저장되지 않음" 안내
 
+**해결**
+- `Frontend/src/receiptImage.js` 추가: `prepareReceiptImage()`가 긴 변 2000px 초과 또는 4MB 초과 이미지를 긴 변 2000px JPEG(품질 0.85)로 변환, 그 외는 원본 그대로. 변환 후에도 4MB 초과거나 디코드 불가한 4MB 초과 파일은 실패 처리
+- 모바일(`MExpenses.jsx`)·데스크톱(`ExpenseTracker.jsx`) 업로드 모두 적용(데스크톱도 같은 4MB 제한 존재). 업로드 전 크기 거부 제거, 형식(JPEG·PNG·WebP) 검사만 유지
+- 모바일 인정·불인정 버튼 제거(저장되지 않는 판정). 판정은 지출항목 변경(기존 `PATCH /expenses/{id}`, 저장 후 재판정)으로 변경. 데스크톱은 원래 수동 판정 기능 없음
+- `/`와 `/web.html` 통합: 휴대폰 `/`(모바일 전용 앱 `MExpenses`)와 `/web.html`(PC 화면 `ExpenseTracker`)의 지출관리 기능이 달라, `/`를 web.html과 같은 반응형 웹앱(`src/web/main.jsx`, `<App variant="web" />`)으로 변경
+  - 휴대폰에서도 `ExpenseTracker` 사용(판정 근거·품목 추가/삭제·상호 수정·엑셀). 인정·불인정 버튼 없음
+  - `App.jsx`에서 모바일 전용 앱(`src/mobile`) 연결 해제, 코드는 유지
+  - `web.html`·`src/main.jsx` 삭제, `vite.config.js` 다중 입력 제거
+  - `/web.html`은 nginx 301 → `/`(해시 유지). 서비스워커 캐시로 열린 경우 `web/main.jsx`가 주소를 `/`로 정리
+- 그대로 둔 것: Backend 4MB 제한, nginx `client_max_body_size 16m`. 수동 판정 저장 API는 미구현
+- 확인: `fitWithin` 테스트 추가, Frontend 테스트·빌드 통과(`dist`에 `web.html` 없음). 브라우저에서 4032×3024 PNG(약 49MB) → 2000×1500 JPEG(약 1.1MB), 작은 이미지 원본 유지, 디코드 불가 5MB 파일 실패 처리 확인. 폭 767px에서 `/web.html#/expenses` → `/#/expenses`로 바뀌고 반응형 지출관리·하단 탭바 표시. nginx 컨테이너에서 `nginx -t` 통과, `/web.html` 301 `Location: /` 확인
+
 **검증** 최신 휴대폰 원본 사진(4MB 초과) 업로드 성공, 판정 후 새로고침 시 유지 확인.
 
 ### ⑫ 장애 감지·자동 복구 없음
@@ -511,6 +523,8 @@
 
 **해결 방안** 정규식에 `web\.html` 추가: `^/(sw\.js|registerSW\.js|manifest\.webmanifest|index\.html|web\.html)$`
 
+**해결** ⑪ 작업에서 `web.html`을 없애고 `/`로 통합, `/web.html`은 nginx 301 → `/`. 캐시 대상 파일 자체가 사라져 해당 없음
+
 **검증** `curl -I https://<DOMAIN>/web.html` 응답에 `Cache-Control: no-cache` 확인.
 
 ### ㉘ nginx 압축·HTTP/2·보안 헤더 없음, 상태 API 정보 노출
@@ -600,6 +614,6 @@
 | --- | --- | --- |
 | 1 | ③ ④ ⑨(해결) ⑭ ⑮ | 설정 몇 줄 수준, 영향 큼 |
 | 2 | ① ⑤(해결) ⑥(해결) ⑦(해결) ⑫(해결) ⑳ | 배포 안정화. 레지스트리 빌드 전환으로 ①·⑤·⑦·⑳ 함께 해결 가능 |
-| 3 | ② ⑧(해결) ⑩(해결) ⑪ ⑬(해결) | 기능 정확성, 코드 변경 필요 |
+| 3 | ② ⑧(해결) ⑩(해결) ⑪(해결) ⑬(해결) | 기능 정확성, 코드 변경 필요 |
 | 4 | ⑯ ⑰ ⑱ ⑲ ㉑ ㉒ | 보안 강화 |
 | 5 | ㉓~㉚ | 성능·정리 |
