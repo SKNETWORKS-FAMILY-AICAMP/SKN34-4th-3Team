@@ -59,7 +59,7 @@
 | 24 | P3 | 빌드 비결정성 | 예고 없는 빌드 실패 | 하 |  |
 | 25 | P3 | 무중단 배포 불가 | 배포마다 502·RAG 불가 구간 | 상 |  |
 | 26 | P3 | Elasticsearch 미사용 상시 구동 | 자원 낭비, 문서와 실제 동작 불일치 | 하 |  |
-| 27 | P3 | `/web.html` 캐시 헤더 누락 | Service Worker 미동작 환경에서 빈 화면 | 하 |  |
+| 27 | P3 | `/web.html` 캐시 헤더 누락 | Service Worker 미동작 환경에서 빈 화면 | 하 | `4b1e88e`(⑪에서 해소) |
 | 28 | P3 | nginx 압축·HTTP/2·보안 헤더 없음, 상태 API 정보 노출 | 첫 로딩 지연, 내부 주소 노출 | 하 |  |
 | 29 | P3 | 배포 후 열린 탭의 동적 import 실패 | Excel 내보내기 실패 | 하 |  |
 | 30 | P3 | 외부 API 시간 제한·품질 저하 감지 없음 | 응답 지연, 검색 품질 저하 무감지 | 하 |  |
@@ -634,7 +634,7 @@
 
 **해결** ⑪ 작업에서 `web.html`을 없애고 `/`로 통합, `/web.html`은 nginx 301 → `/`. 캐시 대상 파일 자체가 사라져 해당 없음
 
-**검증** `curl -I https://<DOMAIN>/web.html` 응답에 `Cache-Control: no-cache` 확인.
+**검증** `curl -I https://<DOMAIN>/web.html` 응답 `301`·`Location: /`, `curl -I https://<DOMAIN>/` 응답에 `Cache-Control: no-cache` 확인.
 
 ### ㉘ nginx 압축·HTTP/2·보안 헤더 없음, 상태 API 정보 노출
 
