@@ -150,6 +150,8 @@ aws s3 cp ~/startup_platform.dump s3://<버킷>/migration/   # 원본 보관
 
 복원 후 App EC2에서 스키마를 최신 `main` 기준으로 맞춤
 
+App용 compose는 8절의 `APP_IMAGE_REGISTRY`·`APP_IMAGE_TAG`·실측한 `LLM_MEM_LIMIT`이 있어야 해석된다. migration만 실행할 때도 먼저 해당 설정을 작성한다.
+
 ```bash
 # App EC2
 cd ~/SKN34-4th-3Team
@@ -173,6 +175,9 @@ COMPOSE_DB_HOST=<DATA_IP>
 COMPOSE_DB_PORT=5432
 COMPOSE_ES_PORT=9200
 COMPOSE_PROFILES=presentation   # 발표자료가 필요 없으면 비움
+APP_IMAGE_REGISTRY=ghcr.io/sknetworks-family-aicamp/skn34-4th-3team
+APP_IMAGE_TAG=<main CI에서 게시 완료한 40자리 커밋 SHA>
+LLM_MEM_LIMIT=<운영 실측으로 정한 한도, 예: 단위 m 또는 g>
 ADMIN_PASSWORD=<관리자 비밀번호>   # 필수. 없으면 compose 실행 실패
 LAW_API_KEY=<국가법령정보 OC>       # collector(수집)용. 9-1절
 GOV24_API_KEY=<공공데이터포털 serviceKey>
@@ -186,12 +191,19 @@ ONTONG_YOUTH_API_KEY=<온통청년 API 키>
 > frontend는 항상 `nginx.https.conf`(443, `/etc/letsencrypt/live/changeup/`)로 뜬다. 인증서가 없으면 12-1~12-3절을 먼저 수행한다.
 
 ```bash
+docker compose -f docker-compose.app.yml pull backend frontend llm
+# COMPOSE_PROFILES=presentation이면 presentation도 먼저 pull한다.
 docker compose -f docker-compose.app.yml run --rm db-migrate
-docker compose -f docker-compose.app.yml up -d --build
+docker compose -f docker-compose.app.yml up -d --no-build --wait --wait-timeout 300
 docker compose -f docker-compose.app.yml ps
 ```
 
-backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재생성함. 임베딩은 `rag_documents`의 기존 값을 재사용하므로 추가 비용 없음.
+LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은 재사용하고 신규·변경 청크만 임베딩한다. 실제 준비 여부는 `ragReady`로 확인한다.
+
+- App EC2에서는 이미지를 빌드하지 않는다. main CI가 Linux amd64 이미지를 GHCR에 게시한 뒤 배포한다. 최초 GHCR 이미지는 private이므로 수동 pull에는 패키지 읽기 권한으로 `docker login ghcr.io`가 필요하다. 자동 배포는 일시적인 `GITHUB_TOKEN`을 사용하고 Docker 인증 디렉터리를 종료 시 제거한다.
+- `LLM_MEM_LIMIT`은 필수이며 임의의 기본값은 두지 않는다. 기존 기동/OCR/수집 사용량과 새 BM25를 만드는 재색인 피크를 측정하고 OS·다른 컨테이너 여유를 남겨 지정한다. 필요하면 App EC2 증설 또는 수집 환경 분리 후 진행한다. 다른 서비스 한도는 `.env.example`의 `*_MEM_LIMIT`으로 지정할 수 있다.
+- 인덱스 warm-up 다음 OCR warm-up을 순차 실행한다. 실제 OCR 요청·Backend의 재색인과 겹치는 피크는 별도로 확인해야 한다. `docker inspect <llm-container> --format '{{.HostConfig.Memory}}'`가 0보다 크고 `docker stats` 및 호스트 메모리에 여유가 있는지 확인한다.
+- `up --wait`와 HTTP 200은 RAG 정상 동작을 보장하지 않는다. `/api/health`의 `ragReady=true`, `postgres=connected`, `llm=connected`와 실제 상담·OCR를 확인한다.
 
 ## 9. GitHub 설정 (자동 배포)
 
@@ -211,9 +223,11 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 3. Settings → Branches → `main` 보호 규칙: PR 필수, 상태 검사 `test` 통과 필수
 4. Actions → deploy → **Run workflow**로 수동 실행해 동작 확인
 
-이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, Frontend `node --test` + `npm run build`) → `git pull` → `db-migrate` → `up -d --build` → `docker image prune -f` 순서로 자동 배포.
+이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트 → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
+- PR 테스트는 운영 대기열에 들어가지 않는다. deploy job·수집·재시도는 `ec2-app` 그룹과 `queue: max`로 직렬 실행한다(대기 최대 100개).
+- 서버 작업은 `$HOME/.ec2-app.lock`을 사용한다. 수동 배포·수집도 같은 잠금 아래 실행한다. SSH 취소 후 collector가 남아 있으면 다음 작업은 실패하므로, 실행 상태를 확인하고 정리한 뒤 재실행한다.
 - 자동 배포 대상은 App EC2뿐. Data EC2 변경은 10-1단계로 수동 반영
 
 ## 9-1. 데이터 수집 자동화
@@ -233,11 +247,19 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 ```bash
 bash ~/SKN34-4th-3Team/scripts/backup_db.sh   # 1회 수동 실행으로 확인
 crontab -e
+PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin
 # 매일 04:00 (서버 시간대 기준. UTC면 한국 13:00)
 0 4 * * * bash /home/ubuntu/SKN34-4th-3Team/scripts/backup_db.sh >> /home/ubuntu/backup_db.log 2>&1
+# 매시간 마지막 성공 백업이 26시간 이내인지 확인(백업 cron 자체가 실행되지 않은 경우 포함)
+15 * * * * bash /home/ubuntu/SKN34-4th-3Team/scripts/backup_db.sh --check-freshness >> /home/ubuntu/backup_db.log 2>&1
 ```
 
 한국 시간 기준으로 맞추려면 `sudo timedatectl set-timezone Asia/Seoul`.
+
+- 스크립트는 임시 덤프 생성·목차 검사 후 업로드하고 S3 객체 크기까지 확인한다. Data EC2에는 덤프 1개를 저장할 여유 공간이 필요하다. 임시 파일은 종료 시 삭제되고 마지막 성공 시각은 `~/.local/state/startup-on-backup/last_success`에 기록된다.
+- AWS CLI 경로는 스크립트에서도 `/snap/bin`을 포함한다. 실패/백업 누락 알림은 SNS topic과 확인된 이메일 구독을 만들고 `.env`에 `BACKUP_ALERT_TOPIC_ARN`을 지정한다. Data EC2 역할에 해당 topic의 `sns:Publish` 권한을 추가한다. 미설정이면 stderr에 알림 미설정 경고만 남으므로 운영에서 반드시 설정한다.
+- 업로드 성공·목차 검사는 실제 복원 성공을 보장하지 않는다. S3 덤프를 내려받아 **운영 DB와 분리된 테스트 DB**에 `pg_restore --exit-on-error`로 복원하고 테이블·행 수·대표 조회를 확인한다. 최초 적용 및 이후 월 1회 수행한다.
+- Data EC2 스크립트와 crontab·IAM·SNS 설정은 App EC2 자동 배포로 반영되지 않는다. 10-1절에 따라 수동 적용하고 제한된 PATH로 스크립트 실행 및 `--check-freshness` 실패 알림을 확인한다.
 
 ## 10-1. Data EC2 수동 반영
 
@@ -276,6 +298,58 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 - [ ] deploy workflow 수동 실행 성공
 - [ ] collect workflow 수동 실행 성공(9-1절)
 - [ ] S3 `daily/`에 백업 파일 생성
+
+### 11-1. 챕터 1 운영 완료 기준 (ID 3·4·1·2)
+
+코드/로컬 테스트와 운영 완료를 구분한다. 먼저 `main`에 반영하고 App `.env`의 실측한 `LLM_MEM_LIMIT`, GHCR 접근, Data의 백업 스크립트·SNS·cron을 준비한다. 운영 SSH 없이 수행한 검증으로 아래 항목을 완료 처리하지 않는다.
+
+| ID | 실행/확인 | 완료 출력·상태 |
+|---|---|---|
+| 3 | 수집 실행 중 main 배포·재시도·PR 테스트 실행 | 수집만 실행, 배포/재시도는 대기 후 실행, PR 테스트는 독립 실행. 운영 대기 작업이 `canceled`로 교체되지 않음 |
+| 4 | Data EC2에서 제한된 PATH로 백업 및 freshness 검사 | `backup verified: s3://...`, `backup freshness OK (age=...s)`, 둘 다 exit 0. S3에서 내려받은 덤프의 별도 DB 복원 성공 |
+| 1 | 배포 로그, `docker stats`, 호스트 메모리, OOM/재시작 상태 확인 | EC2 build 로그 없음. GHCR pull 후 `Deployment ready: <SHA>`. LLM 메모리 한도 > 0, 기동/OCR/수집/재색인 동안 OOM·재시작 없음, OS 메모리 여유 유지 |
+| 2 | 준비 상태 조회를 반복하면서 전체 재색인과 상담 실행 | 재색인 중 `index_ready=true` 유지, 기존 상담 정상. 재색인 응답 성공 후 새 문서 반영. 실패 응답 때도 기존 runtime 유지 |
+
+Data EC2 백업 검사(운영 설정을 출력하지 않음):
+
+```bash
+env -i HOME="$HOME" PATH=/usr/bin:/bin bash scripts/backup_db.sh
+echo "backup exit=$?"
+bash scripts/backup_db.sh --check-freshness
+echo "freshness exit=$?"
+# 빈 별도 상태 디렉터리로 백업 누락 알림을 시험한다. 운영 성공 기록은 건드리지 않는다.
+test_state=$(mktemp -d)
+BACKUP_STATE_DIR="$test_state" bash scripts/backup_db.sh --check-freshness
+echo "missing-backup check exit=$?"
+```
+
+마지막 명령은 **0이 아닌 종료값**과 `backup failed`가 정상 시험 결과이며 SNS 알림이 실제 도착해야 한다. 목차/크기 검사만으로 복원 성공을 대신하지 않는다. `main`의 Data 파일은 10-1절에 따라 수동 갱신한다.
+
+App EC2 메모리/상태 확인:
+
+```bash
+docker compose -f docker-compose.app.yml ps
+llm_id=$(docker compose -f docker-compose.app.yml ps -q llm)
+docker inspect "$llm_id" --format 'limit={{.HostConfig.Memory}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
+free -h
+docker stats --no-stream
+sudo journalctl -k --since '30 minutes ago' | grep -Ei 'out of memory|oom-kill' || true
+```
+
+기동·OCR·수집·재색인 전후를 비교한다. `oom=false`, 재시작 횟수 증가 없음, 관련 커널 OOM 기록 없음이 필요하다. 단일 시점의 `stats`만으로 피크를 검증하지 말고 처리 중에도 반복 관찰한다. 한도에 근접하거나 swap/지연이 계속 증가하면 한도만 올리지 말고 호스트 여유·증설을 검토한다.
+
+재색인 검증은 App EC2의 두 터미널에서 실행한다.
+
+```bash
+# 터미널 A: 완료까지 준비 상태를 반복 관찰
+watch -n 1 'docker compose -f docker-compose.app.yml exec -T llm curl -fsS http://localhost:8001/rag/ready'
+# 터미널 B: 전체 재색인. force=false로 변경된 청크만 임베딩한다.
+docker compose -f docker-compose.app.yml exec -T llm curl -fsS --max-time 1800 \
+  -X POST http://localhost:8001/rag/reindex -H 'Content-Type: application/json' \
+  -d '{"documentIds":[],"force":false}'
+```
+
+처리 중 웹 상담도 실행해 미준비 오류나 목업 대체가 없는지 확인한다. `ready`/`already_ready`는 정상 재색인 결과다. 초기 기동에는 인덱스가 없어 준비 전 `index_ready=false`가 정상이며, 최초 준비 실패는 기존처럼 오류를 반환한다. 새 Dense 검색기·BM25는 별도로 준비해 교체하고 실패 시 기존 runtime을 유지한다. **DB 원본/pgvector 데이터의 과거 버전 복원은 보장하지 않는다.** 해당 버전 일치가 필요하면 staging/version 관리가 추가로 필요하다. 실패 경로는 로컬 회귀 테스트로 검증하며 운영 DB를 중지하거나 삭제해 시험하지 않는다.
 
 ## 12. HTTPS (도메인 확보 후)
 
