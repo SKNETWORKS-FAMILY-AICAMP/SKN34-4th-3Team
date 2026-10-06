@@ -59,3 +59,5 @@ jobs:
             docker compose -f docker-compose.app.yml run --rm db-migrate
             docker compose -f docker-compose.app.yml up -d --build
             docker image prune -f
+            # LLM 이미지(약 4.8GB) 빌드 캐시가 쌓여 디스크(30GB)가 차지 않게, 최근 7일 것만 남긴다.
+            docker builder prune -f --filter until=168h

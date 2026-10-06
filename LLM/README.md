@@ -8,17 +8,20 @@ HTTP API는 Django ASGI로 제공하며, 요청 라우팅·오류 처리·OpenAP
 Backend(`Backend/core/llm_client.py`)가 Docker 내부 네트워크에서 호출하며 다음을 제공한다.
 
 - Backend 어댑터: `GET /rag/ready`, `POST /rag/reindex`, `POST /rag/chat`(LangGraph),
-  `POST /rag/legal-basis`, `POST /rag/deductibility`, `POST /rag/summarize-announcement`,
-  `POST /ocr/receipt`
+  `POST /rag/chat/stream`(같은 Graph, NDJSON 스트리밍), `POST /rag/legal-basis`,
+  `POST /rag/deductibility`, `POST /rag/summarize-announcement`, `POST /ocr/receipt`
+- 사업계획서: `POST /rag/business-plan`, `-refine`, `-template-inspect`, `-render`,
+  `-evaluate`, `-coach`
 - 내부 호환 API: `GET /internal/rag/ready`, `POST /internal/rag/index`,
   `POST /internal/rag/answer`(LangGraph), `POST /internal/rag/recommendations`
-- `GET /health`, 환경변수 기반 LLM·Embedding 모델 팩터리(실제 자격증명 없이도 기동)
+- `GET /health`, `GET /docs`·`GET /openapi.json`, 환경변수 기반 LLM·Embedding 모델 팩터리(실제 자격증명 없이도 기동)
 - PostgreSQL 사용자·정책·공고문·세법 조회와 테스트용 Mock 데이터 계층
-- DB 원천 문서 Chunking·pgvector 저장, BM25+RRF Hybrid 검색, Cohere Rerank
+- DB 원천 문서 Chunking·pgvector 저장, Elasticsearch(Nori) BM25 재색인, Dense+Nori BM25 RRF Hybrid 검색, Cohere Rerank
+- 영수증 OCR(Tesseract 우선, 실패 시 Vision LLM)과 사업계획서 양식 검사·PDF/HWPX 출력
 - 세금 질문 Semantic Cache(`tax_rag_cache`)와 LangSmith tracing
 
 원본 PDF와 DB 원천 테이블은 읽기 전용으로 취급하고 가공 결과를 원본에 덮어쓰지 않는다.
-LLM 프로세스는 첫 HTTP 요청에서 검색기를 백그라운드로 준비한다. Backend도 기동 시
+LLM 프로세스는 첫 HTTP 요청(헬스체크 포함)에서 검색기를 백그라운드로 준비한다(`src/serving/django_config/asgi.py`). Backend도 기동 시
 `/rag/ready`를 확인하고 준비되지 않았으면 `/rag/reindex`를 호출한다.
 변경된 Chunk가 있으면 이때 Embedding 비용이 발생할 수 있다.
 그래프 구조와 인수인계는 `LANGGRAPH_ARCHITECTURE.md`, 실행 절차는 `RUN_GUIDE.md`를 참고한다.
@@ -28,7 +31,7 @@ LLM 프로세스는 첫 HTTP 요청에서 검색기를 백그라운드로 준비
 ```text
 LLM/
 ├── data/                  # 원본과 분리한 중간·가공·캐시 데이터
-├── evaluation/            # 평가 케이스·실행 스크립트·결과(results/는 Git 제외)
+├── evaluation/            # 평가 케이스(evaluation_cases·holdout_cases_250)·실행 스크립트(run_*·dev_*_probe·profile_graph_latency)·결과(results/는 Git 제외)
 ├── models/                # 로컬 모델 자산을 위한 예약 영역
 ├── manage.py              # Django 설정 검사 등 관리 명령
 ├── main.py                # Django ASGI 개발 실행기
@@ -47,12 +50,17 @@ LLM/
 │   │   ├── evaluator.py       # 평가 schema와 전체 실행 흐름
 │   │   ├── graph_evaluator.py # LangGraph 답변·대화 채점
 │   │   ├── metrics.py         # 검색·Guardrail 지표 계산
+│   │   ├── retrieval_ab*.py   # 검색기 A/B(재정렬 포함) 비교
+│   │   ├── nori_*.py          # Nori 후보 풀·cross_fields 실험
 │   │   └── run_evaluation.py  # HTTP adapter와 평가 CLI
 │   ├── features/
+│   │   ├── business_plan_documents.py # 사업계획서 양식(PDF·HWPX) 검사·출력
 │   │   ├── document_processing.py # PDF 로드와 Chunking
+│   │   ├── elasticsearch_indexing.py # pgvector 청크 → ES Nori 인덱스 재색인(alias 교체)
 │   │   ├── index_database.py  # DB 원천 문서를 pgvector에 적재하는 CLI
 │   │   ├── indexing.py        # Embedding·인덱스·로컬 캐시
-│   │   └── index_documents.py # 명시적으로 실행하는 임시 색인 CLI
+│   │   ├── index_documents.py # 명시적으로 실행하는 임시 색인 CLI
+│   │   └── receipt_ocr.py     # Tesseract 영수증 OCR·이미지 보정
 │   ├── models/
 │   │   └── factory.py      # 교체 가능한 모델 생성 진입점
 │   ├── rag/
@@ -63,7 +71,8 @@ LLM/
 │   │   ├── roadmap.py      # 로드맵 코치 단일 호출
 │   │   ├── reranker.py     # Cohere Rerank
 │   │   ├── history.py      # 대화 이력 정규화·절삭
-│   │   ├── backend_tasks.py # legal-basis·deductibility·공고 요약·영수증 추출
+│   │   ├── backend_tasks.py # legal-basis·deductibility·공고 요약·영수증 추출·사업계획서 초안/진단/정리
+│   │   ├── bizplan_coach.py # 사업계획서 아이디어 어시스턴트
 │   │   ├── retriever.py    # 검색 및 관련성 필터
 │   │   ├── prompts.py      # 근거·판정 보존 PromptTemplate
 │   │   ├── chain.py        # 구조화 생성·출력 분량·문자열 변환
@@ -74,7 +83,9 @@ LLM/
 │   │   └── contracts.py    # RAG 도메인·구조화 출력 schema
 │   ├── vectorstores/
 │   │   ├── base.py         # In-memory/pgvector 공통 검색 계약
-│   │   ├── hybrid.py       # BM25와 RRF Hybrid Search
+│   │   ├── hybrid.py       # 메모리 BM25와 RRF Hybrid Search(in-memory 모드)
+│   │   ├── elasticsearch.py # Elasticsearch Nori BM25 검색
+│   │   ├── nori_hybrid.py  # pgvector Dense + ES Nori BM25 RRF(Postgres 모드 기본)
 │   │   ├── in_memory.py    # 프로세스 내부 테스트 Vector Store
 │   │   └── postgres.py     # 실제 PostgreSQL pgvector Search
 │   └── serving/
@@ -108,7 +119,12 @@ MIN_RELEVANCE_SCORE=0.2
 RETRIEVAL_MODE=hybrid
 HYBRID_DENSE_CANDIDATE_K=20
 HYBRID_BM25_CANDIDATE_K=20
+NORI_RETRIEVAL_POOL_K=40
 HYBRID_RRF_K=60
+ELASTICSEARCH_URL=http://localhost:9200
+ELASTICSEARCH_INDEX_ALIAS=rag-documents
+ELASTICSEARCH_REQUEST_TIMEOUT=30
+ELASTICSEARCH_BULK_CHUNK_SIZE=500
 MAX_QUESTION_LENGTH=1000
 MAX_CONTEXT_CHARACTERS=12000
 MAX_CHUNKS_PER_POLICY=2
@@ -204,8 +220,13 @@ PostgreSQL과 In-memory 구현은 모두 `src/vectorstores/base.py`의
 ### Hybrid Retrieval
 
 기본 검색은 동일한 Chunk 집합의 Dense와 BM25 순위를 RRF로 결합한다.
-`HYBRID_DENSE_CANDIDATE_K`와 `HYBRID_BM25_CANDIDATE_K`는 각 검색기가 RRF에
-제공할 후보 수이고, `HYBRID_RRF_K`는 순위 점수 격차를 조절한다.
+`VECTOR_STORE_BACKEND=postgres`에서는 BM25 쪽이 Elasticsearch Nori 인덱스다
+(`NoriHybridSearch`, 각 검색기 후보 수 `NORI_RETRIEVAL_POOL_K`). ES 인덱스는
+`/rag/reindex`가 pgvector 갱신 뒤 새 인덱스를 만들고 alias(`ELASTICSEARCH_INDEX_ALIAS`)를
+옮겨 교체하며, 동기화되지 않은 동안에는 BM25를 건너뛰고 `/rag/ready`가 `not_ready`다.
+in-memory 모드는 메모리 BM25(`HybridSearch`)를 쓰고
+`HYBRID_DENSE_CANDIDATE_K`와 `HYBRID_BM25_CANDIDATE_K`가 각 검색기가 RRF에
+제공할 후보 수다. `HYBRID_RRF_K`는 순위 점수 격차를 조절한다.
 최종 후보 수는 API의 `top_k` 또는 `DEFAULT_TOP_K`를 사용한다.
 
 `RETRIEVAL_MODE=dense`로 바꾸면 정책 추천(`/internal/rag/recommendations`)만 Dense
@@ -221,7 +242,7 @@ RETRIEVAL_MODE=dense
 일반 질문 Router는 실제 요청 의도를 `policy`, `notice`, `tax`, `out_of_scope`로
 Structured Output 분류한다. Backend category는 허용 route 제약으로 적용된다
 (`tax`·`expense`→tax, `saving`→tax·policy, `policy`→policy·notice). 범위 밖 요청은
-허용하지 않는다. Policy는 Dense + BM25 + RRF 결과에 Cohere Rerank를 적용하고,
+허용하지 않는다. Policy는 Dense + BM25(Postgres 모드는 ES Nori) + RRF 결과에 Cohere Rerank를 적용하고,
 Notice는 Vector 검색 없이 Backend가 요청에 담아 보낸 `noticeResults`(현재
 `category=policy`에서 전달)만 사용한다.
 
@@ -299,6 +320,7 @@ Backend의 `core/llm_client.py`가 우선 호출하는 명세 경로를 제공�
 - `GET /rag/ready`
 - `POST /rag/reindex`
 - `POST /rag/chat`
+- `POST /rag/chat/stream` — `/rag/chat`과 같은 요청. `{type:"draft",answer}` 이벤트를 0회 이상 보낸 뒤 `{type:"done",result}` 또는 `{type:"error"}`로 끝나는 NDJSON
 
 `/rag/chat`은 기존 `{ category, question }` 요청을 그대로 허용한다. 개인화, 실제 공고
 조회와 사용자별 후속 질문 연결을 위해 Backend가 다음 선택 필드를 전달할 수도 있다.
@@ -338,8 +360,8 @@ API 검증 후 실제 모델 Prompt에는 모든 route에서 최근 5쌍·4,000�
 사용한다. 모델 Prompt에는 최근 5쌍·4,000자까지만 전달하며 결과는
 `route="roadmap"`, `sources=[]`, `grounded=false`다.
 
-검색 인덱스가 준비돼 있어야 실제 답변이 나온다. Compose 기동에서는 Backend 워밍업이
-준비하고, LLM만 따로 띄웠거나 재시작했으면 아래처럼 직접 준비한다. 준비 전
+검색 인덱스가 준비돼 있어야 실제 답변이 나온다. LLM 프로세스 자체의 첫 요청 워밍업과
+Backend 기동 워밍업이 준비하며, 필요하면 아래처럼 직접 준비한다. 준비 전
 `/rag/chat`은 200 + `status=integration_unavailable`로 응답한다.
 
 PostgreSQL 모드에서는 실제 정책·공고문을 조회해 신규·변경 Chunk만 임베딩한다.
@@ -588,6 +610,9 @@ uv run pytest
 
 저장소 루트 `docker-compose.yml`의 `llm` 서비스가 이 폴더를 빌드한다. `8001:8001` 포트,
 루트 `.env`(`env_file`), `DATABASE_URL`(compose의 `db` 서비스), `VECTOR_STORE_BACKEND=postgres`,
-`PORT=8001`을 주입하고 `./LLM`을 `/app`에 마운트한다. `/health` 헬스체크가 통과해야
-Backend가 기동하며, Backend 워밍업이 검색 인덱스를 준비한다. 전체 실행 절차는
+`ELASTICSEARCH_URL`(compose의 `elasticsearch` 서비스), `PORT=8001`을 주입하고 `./LLM`을 `/app`에
+마운트한다. `db`·`db-migrate`·`elasticsearch`가 준비된 뒤 뜨고, `/health` 헬스체크가 통과해야
+Backend가 기동한다. 이미지에는 Tesseract(`tesseract-ocr-kor`)가 설치된다. 개발 모드
+(`docker-compose.dev.yml`)는 `--reload`로 띄운다. AWS App EC2(`docker-compose.app.yml`)에서는
+Data EC2의 Postgres·Elasticsearch에 private IP로 붙는다. 전체 실행 절차는
 `Docs/README.md` 10절과 `setup.sh`를 따른다.

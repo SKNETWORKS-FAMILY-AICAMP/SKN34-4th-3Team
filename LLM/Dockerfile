@@ -1,8 +1,10 @@
 FROM python:3.13-slim
 
-# 영수증 OCR(글자·위치·신뢰도 추출)용 Tesseract와 한국어 학습 데이터.
+# 영수증 OCR: 기본 엔진 PP-OCRv5(paddle, OpenCV가 libgl1·libglib2.0-0·libgomp1을 쓴다)와
+# paddle을 쓸 수 없을 때 대신 읽는 Tesseract + 한국어 학습 데이터.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor fonts-nanum ca-certificates curl \
+       libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # hwp-cli renders HWPX templates to PDF. Pin and verify the release binary.
@@ -31,6 +33,12 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/llm-venv \
 
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --no-install-project
+
+# PP-OCRv5 모델(검출 mobile · 한국어 인식 · 문서 방향 분류)을 이미지에 미리 받아 둔다.
+# /root/.paddlex 는 Compose 의 /app 바인드 마운트 밖이라 가려지지 않는다.
+# 모델 이름은 src/features/receipt_ocr.py 의 PADDLE_*_MODEL 과 같아야 한다.
+ENV PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+RUN /opt/llm-venv/bin/python -c "from paddleocr import PaddleOCR; PaddleOCR(text_detection_model_name='PP-OCRv5_mobile_det', text_recognition_model_name='korean_PP-OCRv5_mobile_rec', use_doc_orientation_classify=True, use_doc_unwarping=False, use_textline_orientation=False)"
 
 COPY . .
 RUN uv sync --frozen --no-dev

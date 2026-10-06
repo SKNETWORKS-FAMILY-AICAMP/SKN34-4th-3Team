@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -6,7 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   plugins: [
     react(),
-    // PWA: 빌드 시 manifest·sw.js 를 생성한다. 설계는 Docs/reports/PWA_PLAN.md.
+    // PWA: 빌드 시 manifest·sw.js 를 생성한다. HTTPS 배포 절차는 Docs/AWS_DEPLOY_GUIDE.md 12절.
     VitePWA({
       // 새 배포(main 병합 → 재빌드)가 감지되면 사용자 조작 없이 SW 를 교체한다.
       registerType: 'autoUpdate',
@@ -42,6 +43,15 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    // 기존 화면(index.html)과 반응형 웹앱(web.html)을 함께 빌드한다.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        web: fileURLToPath(new URL('./web.html', import.meta.url)),
+      },
+    },
+  },
   server: {
     port: 5173,
     open: true,

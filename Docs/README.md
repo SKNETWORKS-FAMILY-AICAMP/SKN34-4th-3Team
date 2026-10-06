@@ -89,7 +89,8 @@ flowchart LR
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성한다.
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
-- **Vision**: 영수증 정보 추출(추가 기능 전용, 8절 참고). 별도 OCR 엔진이 아니라 OpenAI Vision 호출로 처리한다(`LLM/src/rag/backend_tasks.py`의 `extract_receipt`). Backend·LLM 경로는 구현돼 있으나 이를 부르는 화면이 없다
+- **Hybrid 검색**: pgvector Dense 검색과 Elasticsearch Nori(한국어 형태소) BM25를 RRF로 결합하고 Cohere로 재정렬한다
+- **OCR**: 영수증을 Tesseract(`LLM/src/features/receipt_ocr.py`)로 읽고 LLM이 항목을 정리한다. Tesseract가 실패하거나 읽은 글자가 부족하면 OpenAI Vision으로 대체한다. 지출관리 화면이 부른다
 - **Agent 구조**: 세무·정책 등 업무별 정보 검색 및 처리
 
 ## 7. 프로젝트 수행 범위
@@ -101,9 +102,9 @@ flowchart LR
 - LangChain 기반 RAG 기술로 벡터데이터베이스와 LLM 연동하여 질의응답 구현
 - 구현 결과 테스트 및 개선
 
-## 8. 추가 기능(추후 개발)
+## 8. 추가 기능
 
-초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발하고, 아래 기능은 추후 개발한다.
+초기에는 세무 관리 + 지원금·정책 탐색을 핵심 기능으로 개발했다. 아래 ①·③·④는 이후 구현을 마쳤고, ② 공공입찰 검토만 추후 개발로 남았다.
 
 ### ① 사업 지출 분석 (FS-14~17)
 
@@ -111,6 +112,7 @@ flowchart LR
 
 - 현재 상태: 지출관리 화면(`Frontend/src/pages/ExpenseTracker.jsx`)에 연결돼 영수증 등록·OCR·분류·경비처리 판정·엑셀 다운로드를 제공한다(PR #7·#12). 상세는 `Docs/FEATURE_ROADMAP_EXPENSE.md`
 - 경비처리 질의응답은 핵심 기능인 AI 상담(`category=expense`)으로 계속 제공한다
+- 지출 목록은 `요약`·`지출 내역`·`품목 상세` 3시트 엑셀 보고서로 내려받는다(`Frontend/src/expenseExcel.js`)
 
 ### ② 공공입찰 검토
 
@@ -120,6 +122,17 @@ flowchart LR
 
 로 기능을 확장하여 청년·1인 창업자의 창업 행정 업무 전반을 지원하는 AI 플랫폼을 목표로 한다.
 
+### ③ 사업계획서 작성 (FS-29~31)
+
+- 사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)에서 기초 정보·아이디어 입력 → AI 초안 → 예비진단(0~100점) → HWPX·PDF 출력. 제출 양식 파일(PDF·HWPX)을 올리면 그 양식에 맞춰 채운다
+- 임시저장과 보관함(`/bizplan/draft`, `/bizplan/plans`)은 서버에 저장되고, 마이페이지 `사업계획서` 메뉴에서 여러 건을 관리한다. 상세는 `Docs/FEATURE_ROADMAP_EXPENSE.md` 3절
+
+### ④ 구독·온보딩·PWA
+
+- **구독·결제(목업)**: 마이페이지 `구독 · 결제`에서 무료·베이직·프로 플랜을 바꾼다. 실제 결제는 없고 `user_subscriptions`에 플랜만 저장한다(`/users/me/subscription`, 근거 `Docs/reports/subscription_cost.md`)
+- **온보딩 안내**: 로그인 후 각 화면을 처음 열면 기능을 차례로 짚어 주는 투어가 한 번 뜬다(`Frontend/src/components/PageTour.jsx`)
+- **PWA**: 브라우저에서 앱처럼 설치할 수 있다(`vite-plugin-pwa`, `Frontend/vite.config.js`). Service Worker는 HTTPS(AWS 배포)에서 동작한다
+
 ## 9. 저장소 구조
 
 ```
@@ -127,11 +140,19 @@ flowchart LR
 ├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # Django ASGI API, RAG 파이프라인, 모델 서빙 (:8001)
-├── DB/              # DB 스키마와 수집 스크립트
+├── DB/              # DB 스키마, 수집 스크립트(scripts/), 수집 실행기(run_collection.py)
+├── elasticsearch/   # Nori 분석기를 설치한 Elasticsearch 이미지
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
-│   └── reports/     # 특정 시점의 검수·분석 보고서
-├── docker-compose.yml
+│   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
+│   └── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
+├── Presentation/    # 발표자료(Slidev, /ppt/로 서빙)
+├── scripts/         # 운영 스크립트(backup_db.sh)
+├── .github/workflows/  # deploy, collect, collect-retry
+├── docker-compose.yml       # 로컬·단일 호스트
+├── docker-compose.dev.yml   # 개발 오버라이드
+├── docker-compose.app.yml   # AWS App EC2
+├── docker-compose.data.yml  # AWS Data EC2
 ├── setup.sh         # 로컬 실행 (macOS / Linux / Git Bash)
 ├── setup.bat        # 로컬 실행 (Windows cmd.exe)
 └── .env.example     # 환경변수 키 목록 (값은 비어 있음)
@@ -155,7 +176,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | LLM API 문서 | http://localhost:8001/docs (Django ASGI) |
 | LLM 상태 확인 | http://localhost:8001/health |
 
-- 로컬 개발에서는 `db`·`backend`·`llm`만 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend` 서비스는 `frontend` 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (12절 참고)
+- 로컬 개발에서는 `db`·`db-migrate`(스키마 적용 후 종료)·`elasticsearch`·`llm`·`backend`가 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend`·`presentation` 서비스는 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다 (12절 참고)
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
@@ -176,8 +197,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
   - `01_schema.sql`은 빈 볼륨 최초 기동 때만 실행된다. 수정 시 같은 변경을 `app_extras.sql`에도 추가해야 기존 DB에 반영된다
   - 적용 실패는 Backend 로그의 "app_extras.sql 적용 실패" 경고로 확인. 오류 내용을 바로 보려면 `docker compose run --rm db-migrate`
   - `docker compose down -v`는 DB·ES 데이터 전체 삭제이므로 데이터 초기화가 필요할 때만 사용
-- LLM은 재시작마다 인덱스 warm-up이 돌아 개발 모드 대상에서 제외. LLM 코드 수정 후에는 `docker compose restart llm`
-- 배포(12절)는 기존처럼 `docker-compose.yml`만 사용
+- **LLM**: `LLM/src/` 의 `.py` 저장 시 uvicorn `--reload` 로 자동 재시작(`WATCHFILES_FORCE_POLLING`). 재시작마다 첫 요청에서 인덱스 warm-up이 다시 돈다
+- 학원 내부망 배포(12절)는 `docker-compose.yml`만, AWS 배포는 `docker-compose.app.yml`·`docker-compose.data.yml`을 쓴다(`Docs/AWS_DEPLOY_GUIDE.md`)
 
 ## 11. Git 커밋 메시지 규약
 형식: `Type: 설명` — Type은 영문 대문자로 시작, 설명은 한글로 간결하게
@@ -196,12 +217,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 ## 12. 배포 (학원 내부망)
 
-팀원 한 명의 노트북이 서버가 되어 네 컨테이너를 모두 돌리고, 나머지 인원은 브라우저로 접속한다. nginx가 화면과 API를 같은 출처에서 서빙하므로 접속자는 Backend 주소를 알 필요가 없다.
+> AWS 배포(App/Data EC2, GitHub Actions 자동 배포·수집, HTTPS)는 `Docs/AWS_DEPLOY_GUIDE.md`를 따른다. 이 절은 노트북 한 대로 내부망에서 시연하는 절차다.
+
+팀원 한 명의 노트북이 서버가 되어 컨테이너(db·db-migrate·elasticsearch·llm·backend·frontend, 선택 presentation)를 모두 돌리고, 나머지 인원은 브라우저로 접속한다. nginx가 화면과 API를 같은 출처에서 서빙하므로 접속자는 Backend 주소를 알 필요가 없다.
 
 ### 서버 담당자
 
 ```bash
-git clone <repo> && cd SKN34-3rd-3Team
+git clone <repo> && cd SKN34-4th-3Team
 # .env 는 git 으로 공유되지 않으므로 파일로 받아 저장소 루트에 둔다
 docker compose --profile frontend up -d --build
 # 발표자료(/ppt/)까지 함께 띄울 때
@@ -238,7 +261,7 @@ docker compose --profile frontend --profile presentation up -d --build
 
 기동 직후 AI 답변이 실제로 나오는지는 `curl -fsS http://<서버노트북IP>/api/health` 의 `ragReady` 로 판정한다. **true 여야 실답변이고, false 면 목업이 내려온다.** backend 는 llm 이 healthy 가 된 뒤에 뜨면서 RAG 인덱스를 한 번 깨우므로 정상 경로에서는 수동 재색인이 필요 없다. frontend(nginx) 는 backend 의 `/health` 헬스체크가 healthy 가 된 뒤에 뜬다. 인덱스는 `rag_documents` 의 기존 임베딩을 재사용하므로(`index_source: cache`) 기동만으로 임베딩 비용이 발생하지 않는다.
 
-화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다. 단 backend 는 `--reload` 없이 돌므로 Backend 코드가 바뀐 pull 뒤에는 화면만 재배포하지 말고 `docker compose --profile frontend up -d --build` 로 backend 까지 다시 만든다. 구 backend 에 새 화면이 붙으면 대화방 삭제가 전체 기록 삭제로 동작할 수 있다(`Docs/reports/INTEGRATION_ISSUES_0914.md` 3절).
+화면만 다시 배포하려면 `docker compose --profile frontend up -d --build frontend` 를 쓴다. 단 backend 는 `--reload` 없이 돌므로 Backend 코드가 바뀐 pull 뒤에는 화면만 재배포하지 말고 `docker compose --profile frontend up -d --build` 로 backend 까지 다시 만든다. 구 backend 에 새 화면이 붙으면 API 계약이 어긋나 오동작할 수 있다(예: 예전 backend 는 대화방 하나 삭제 요청을 전체 기록 삭제로 처리했다).
 
 ### 데이터가 없는 노트북이 서버를 맡을 때
 
@@ -251,6 +274,6 @@ docker compose exec -T db pg_dump -U <user> -Fc <db> > startup_platform.dump
 docker compose exec -T db pg_restore -U <user> -d <db> --clean --if-exists < startup_platform.dump
 ```
 
-복원 후 `GET /api/health` 의 `ragChunks` 가 10,523인지로 확인한다.
+복원 후 `GET /api/health` 의 `ragChunks` 가 원본 DB의 `rag_documents` 건수와 같은지로 확인한다. Elasticsearch 인덱스는 덤프에 들어 있지 않고 LLM 워밍업·재색인 때 `rag_documents` 에서 다시 만들어진다.
 
 덤프를 옮기는 대신 서버 노트북의 `.env` 에 `COMPOSE_DB_HOST=<데이터 있는 노트북 IP>` 를 넣어 DB만 원격으로 쓸 수도 있다. `docker-compose.yml` 의 `DATABASE_URL` 이 이미 이 변수를 받으므로 코드 변경은 필요 없다. 다만 노트북 두 대가 모두 켜져 있어야 해서 실패 지점이 늘어난다.

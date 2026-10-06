@@ -270,6 +270,10 @@
     font-size: 12px;
     color: var(--red);
   }
+  /* 반응형 웹앱에서만 보이는 추천 질문 줄(입력칸 위). 보이는 규칙은 src/web/web.css. */
+  .ai__qchips {
+    display: none;
+  }
   .ai__foot {
     display: flex;
     gap: 8px;

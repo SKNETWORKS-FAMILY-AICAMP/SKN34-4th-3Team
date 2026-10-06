@@ -1,6 +1,8 @@
-# AWS 배포 가이드 (1차: HTTP)
+# AWS 배포 가이드
 
-> 설계 근거는 `Docs/reports/AWS_MIGRATION_PLAN.md`. 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 도메인이 없어 1차는 Elastic IP + HTTP로 배포하고, HTTPS는 12절에서 도메인 확보 후 적용.
+> 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 구성 개요는 `Docs/Design/ARCHITECTURE.md` 4절. 처음에는 도메인 없이 Elastic IP + HTTP로 배포하고 HTTPS는 12절에서 적용하는 순서로 작성했다.
+>
+> **현재 코드 상태(2026-10-01):** 12-4절의 HTTPS 구성(`Frontend/nginx.https.conf`, `docker-compose.app.yml` frontend의 `443`·`/etc/letsencrypt` 마운트)과 PWA는 이미 `main`에 반영돼 있다. 따라서 App EC2를 새로 띄울 때는 **8절 `up` 전에 12-1~12-3절(도메인·443 보안그룹·인증서 발급)을 먼저 끝내야 한다.** 인증서가 없으면 frontend(nginx)가 기동하지 못한다.
 
 ## 구성 요약
 
@@ -8,7 +10,7 @@
 |---|---|---|
 | 서브넷 | Public (Elastic IP) | Private (NAT Gateway 경유 외부 통신) |
 | compose | `docker-compose.app.yml` | `docker-compose.data.yml` |
-| 컨테이너 | frontend(nginx :80), backend, llm, db-migrate(배포 시 1회), presentation(선택) | db(startup_db), elasticsearch |
+| 컨테이너 | frontend(nginx :80/:443), backend, llm, presentation(선택), `run --rm`으로만 실행: db-migrate(배포마다), collector(수집, 9-1절) | db(startup_db), elasticsearch |
 | 권장 유형 | t3.medium (4GB) + swap 2GB | t3.large (8GB) |
 
 리전은 서울(ap-northeast-2) 기준. 아래 `<APP_EIP>`는 App EC2의 Elastic IP, `<DATA_IP>`는 Data EC2의 private IP.
@@ -172,11 +174,16 @@ COMPOSE_DB_PORT=5432
 COMPOSE_ES_PORT=9200
 COMPOSE_PROFILES=presentation   # 발표자료가 필요 없으면 비움
 ADMIN_PASSWORD=<관리자 비밀번호>   # 필수. 없으면 compose 실행 실패
+LAW_API_KEY=<국가법령정보 OC>       # collector(수집)용. 9-1절
+GOV24_API_KEY=<공공데이터포털 serviceKey>
+ONTONG_YOUTH_API_KEY=<온통청년 API 키>
 ```
 
 `ADMIN_PASSWORD`는 backend 기동 시 관리자 계정(`ADMIN_EMAIL`, 기본 `admin@demo.com`)에 적용. 기존 DB에 남은 옛 비밀번호도 이 값으로 갱신됨.
 
 `.env`의 `ELASTICSEARCH_URL`은 `docker-compose.app.yml`이 `http://<COMPOSE_DB_HOST>:9200`으로 덮어씀.
+
+> frontend는 항상 `nginx.https.conf`(443, `/etc/letsencrypt/live/changeup/`)로 뜬다. 인증서가 없으면 12-1~12-3절을 먼저 수행한다.
 
 ```bash
 docker compose -f docker-compose.app.yml run --rm db-migrate
@@ -204,10 +211,22 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 3. Settings → Branches → `main` 보호 규칙: PR 필수, 상태 검사 `test` 통과 필수
 4. Actions → deploy → **Run workflow**로 수동 실행해 동작 확인
 
-이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트 → `git pull` → `db-migrate` → `up -d --build` 순서로 자동 배포.
+이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, Frontend `node --test` + `npm run build`) → `git pull` → `db-migrate` → `up -d --build` → `docker image prune -f` 순서로 자동 배포.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
 - 자동 배포 대상은 App EC2뿐. Data EC2 변경은 10-1단계로 수동 반영
+
+## 9-1. 데이터 수집 자동화
+
+같은 Secrets(`EC2_HOST`·`EC2_USER`·`EC2_SSH_KEY`)를 쓰는 workflow 두 개가 App EC2에서 수집을 돌린다. `schedule`은 기본 브랜치(`main`)에 있는 workflow만 실행되며, 배포와 같은 `concurrency` 그룹(`ec2-app`)이라 동시에 돌지 않는다.
+
+| workflow | 주기 | 동작 |
+|---|---|---|
+| `.github/workflows/collect.yml` | 매주 월 03:00 KST (`0 18 * * 0` UTC), 수동 실행 가능 | `docker compose -f docker-compose.app.yml run --rm collector`(`DB/run_collection.py` 전체 수집) → llm 컨테이너 안에서 `POST /rag/reindex`(변경 청크만 임베딩 → pgvector → ES 재색인). 수집이 일부 실패해도 성공분은 재색인하고 실패는 마지막에 알림 |
+| `.github/workflows/collect-retry.yml` | 3시간마다 (`0 */3 * * *` UTC) | `collection_failures`의 `transient` 중 `next_retry_at`이 지난 스크립트만 `run_collection.py --retry`로 재실행한 뒤 `POST /rag/reindex`. 재시도할 것이 없으면 종료 코드 3 → 재색인 없이 성공 처리 |
+
+- collector는 App EC2 `.env`의 `LAW_API_KEY`·`GOV24_API_KEY`·`ONTONG_YOUTH_API_KEY`와 `COMPOSE_DB_HOST`로 Data EC2 DB에 쓴다
+- `permanent` 실패는 자동 재시도하지 않는다. `collection_failures`에서 확인 후 조치(`Docs/data_collection_preprocessing.md`)
 
 ## 10. 백업 cron (Data EC2)
 
@@ -250,16 +269,17 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 ## 11. 검증
 
 - [ ] `http://<APP_EIP>/` 화면 표시
-- [ ] `http://<APP_EIP>/api/health` → `ragReady=true`, `ragChunks=10,523`
+- [ ] `http://<APP_EIP>/api/health` → `ragReady=true`, `ragChunks`가 이전 원본 DB의 `rag_documents` 건수와 같음
 - [ ] 로그인, 정책 검색, 세무 질의, 사업계획서 생성, 영수증 업로드
 - [ ] 로컬에서 `curl -m 5 http://<APP_EIP>:8000/health` 실패 (8000·8001 미노출)
 - [ ] Data EC2에 퍼블릭 IP 없음 (5432·9200 외부 접근 불가)
 - [ ] deploy workflow 수동 실행 성공
+- [ ] collect workflow 수동 실행 성공(9-1절)
 - [ ] S3 `daily/`에 백업 파일 생성
 
 ## 12. HTTPS (도메인 확보 후)
 
-> 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 코드 변경은 `feature/pwa`에서 PWA와 함께 진행(`Docs/reports/PWA_PLAN.md` 2절).
+> 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 12-4절 코드 변경과 PWA(`Frontend/vite.config.js`의 `VitePWA`)는 이미 `main`에 반영됐다.
 
 아래 `<DOMAIN>`은 구매한 도메인.
 
@@ -299,7 +319,9 @@ sudo mkdir -p /var/www/certbot   # 이후 갱신용 webroot
 - `--cert-name changeup` → 인증서 경로를 `/etc/letsencrypt/live/changeup/`로 고정. 저장소에 도메인 하드코딩 불필요
 - **HTTPS 설정이 포함된 코드를 main에 병합하기 전에 완료 필수.** 인증서 없이 443 설정이 배포되면 frontend(nginx) 기동 실패
 
-### 12-4. nginx·compose 구성 (코드 변경)
+### 12-4. nginx·compose 구성 (코드 변경, 반영 완료)
+
+> 아래 변경은 이미 저장소에 들어가 있다. 기록용으로 남긴다.
 
 로컬 `docker-compose.yml`도 같은 `Frontend/nginx.conf`를 사용 → 이 파일에 443 블록을 넣으면 인증서가 없는 로컬 환경이 깨짐. 공통 location을 분리하고 AWS 전용 설정 파일을 compose에서 덮어쓰는 방식.
 
@@ -333,7 +355,10 @@ sudo certbot renew --dry-run   # 성공 확인
 - [ ] 브라우저 `https://<DOMAIN>/` 자물쇠 표시, 로그인·정책 검색 정상
 - [ ] `https://<DOMAIN>/ppt/` 발표자료 표시 (presentation 프로필 사용 시)
 - [ ] `sudo certbot renew --dry-run` 성공
-- [ ] PWA 항목은 `Docs/reports/PWA_PLAN.md` 11절 AWS(HTTPS) 체크리스트
+- [ ] PWA: Android Chrome 설치 프롬프트 표시·설치 후 `standalone` 실행, iOS Safari 홈 화면 추가 후 실행
+- [ ] `curl -I https://<DOMAIN>/sw.js` 응답에 `Cache-Control: no-cache`
+- [ ] `http://` 접속 시 `https://` 리다이렉트 후 Service Worker 정상 등록, `/ppt/`를 Service Worker가 가로채지 않음
+- [ ] 화면 변경을 `main`에 병합 → deploy 성공 → 설치된 앱 재실행 시 변경 반영
 
 ## 비용 주의
 

@@ -44,6 +44,7 @@ NORI_SEARCH_STOP_TAGS = (
     "SY",
     "XSA",
     "XSV",
+    "NNB",
 )
 
 
@@ -220,23 +221,22 @@ def load_elasticsearch_source_documents(
             }
         )
     for row in tax_rows:
-        source_id = int(row["id"])
-        documents.append(
-            {
-                "document_id": f"tax_document-{source_id}",
-                "source_type": "tax_document",
-                "source_id": source_id,
-                "policy_id": None,
-                "title": _text(row["title"], f"세법 문서 {source_id}"),
-                "source": _text(row["source"], f"db://tax_documents/{source_id}"),
-                "content": _labeled_content(
-                    ("문서명", row["title"]),
-                    ("법령명", row["law_name"]),
-                    ("내용", row["content"]),
-                ),
-            }
-        )
+        documents.append(tax_source_document_from_row(row))
     return [document for document in documents if document["content"]]
+
+
+def tax_source_document_from_row(row: dict[str, Any]) -> ElasticsearchSourceDocument:
+    """검색과 캐시 복원에 동일한 세법 원본 본문을 사용한다."""
+    source_id = int(row["id"])
+    return {
+        "document_id": f"tax_document-{source_id}", "source_type": "tax_document",
+        "source_id": source_id, "policy_id": None,
+        "title": _text(row["title"], f"세법 문서 {source_id}"),
+        "source": _text(row["source"], f"db://tax_documents/{source_id}"),
+        "content": _labeled_content(
+            ("문서명", row["title"]), ("법령명", row["law_name"]), ("내용", row["content"]),
+        ),
+    }
 
 
 def iter_bulk_actions(

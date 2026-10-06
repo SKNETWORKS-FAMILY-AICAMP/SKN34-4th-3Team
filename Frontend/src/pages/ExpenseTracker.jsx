@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
+import { isWebApp, takeHandoff } from '../web/env.js';
 import { linkBtn } from '../utils.js';
 
 // 지출 목록을 요약·지출 내역·품목 상세 세 시트짜리 .xlsx로 만든다. 서버를 거치지 않고 브라우저에서 바로 만든다.
@@ -580,7 +581,9 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged, onVendorChanged }) {
           )}
         </button>
 
-        <div className="exp-row__info">
+        {/* 웹앱: 줄(상호 · 날짜 부분)을 누르면 상세가 열린다. 안의 버튼 · 입력칸은 각자 동작한다. */}
+        <div className="exp-row__info"
+          onClick={(e) => { if (isWebApp() && !e.target.closest('button, input, form, a')) openDetail(); }}>
           <div className="exp-row__line1">
             {vendorEdit ? (
               <VendorForm
@@ -643,7 +646,13 @@ function ReceiptCard({ item, onDeleted, onCategoryChanged, onVendorChanged }) {
           <div className="exp-row__sub" title={uploadedLabel ? `${uploadedLabel} 업로드` : undefined}>
             {formatTxDate(item.date)} · {item.proofTypeLabel}
           </div>
-          {reason && <div className="exp-row__reason">{reason}</div>}
+          {reason && (
+            <div className="exp-row__reason">
+              {reason}
+              {/* 웹앱에서만 보이는 다음 행동 안내(web.css) */}
+              {item.tier === 'ambiguous' && <span className="exp-row__todo"> · 눌러서 확인 ›</span>}
+            </div>
+          )}
           {catBusy && <p className="exp-card__busy" role="status">지출항목을 바꾸고 판정을 다시 계산하고 있어요…</p>}
           {catErr && <p className="cal__err">{catErr}</p>}
         </div>
@@ -770,7 +779,11 @@ export function ExpenseTracker({ user, onRequireLogin }) {
   const [uploadIndex, setUploadIndex] = useState(0); // 여러 장을 올릴 때 지금 몇 번째인지
   const [uploadTotal, setUploadTotal] = useState(0);
   const [err, setErr] = useState('');
-  const [tierFilter, setTierFilter] = useState('all');
+  // 웹앱 홈 '확인 필요한 영수증' 카드에서 왔으면 그 필터로 연다.
+  const [tierFilter, setTierFilter] = useState(() => {
+    const h = isWebApp() ? takeHandoff('expenses') : null;
+    return (h && h.filter) || 'all';
+  });
   const [search, setSearch] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const fileRef = React.useRef(null);
@@ -926,8 +939,11 @@ export function ExpenseTracker({ user, onRequireLogin }) {
     ambiguous: monthItems.filter((x) => x.tier === 'ambiguous').length,
     low: monthItems.filter((x) => x.tier === 'low').length,
   };
-  const monthRate = month.total ? Math.round((month.high / month.total) * 100) : null;
-  const monthShare = (n) => (month.total ? `${(n / month.total) * 100}%` : '0%');
+  // 반응형 웹앱: 이번 달 영수증이 없으면 '—' 대신 전체 영수증 기준으로 보여 준다.
+  const rateAll = isWebApp() && month.total === 0;
+  const rateSrc = rateAll ? { total: items.length, high: highCount, ambiguous: ambiguousCount, low: lowCount } : month;
+  const monthRate = rateSrc.total ? Math.round((rateSrc.high / rateSrc.total) * 100) : null;
+  const monthShare = (n) => (rateSrc.total ? `${(n / rateSrc.total) * 100}%` : '0%');
 
   const searchNorm = search.trim().toLowerCase();
   const filteredItems = items
@@ -1022,20 +1038,20 @@ export function ExpenseTracker({ user, onRequireLogin }) {
 
                 {!loading && items.length > 0 && (
                   <React.Fragment>
-                    <section className="exp-rate" aria-label="이번 달 인정률">
-                      <p className="exp-rate__lbl">이번 달 인정률</p>
+                    <section className="exp-rate" aria-label={rateAll ? '전체 인정률' : '이번 달 인정률'}>
+                      <p className="exp-rate__lbl">{rateAll ? '전체 인정률 (이번 달 영수증 없음)' : '이번 달 인정률'}</p>
                       <p className="exp-rate__num">{monthRate == null ? '—' : `${monthRate}%`}</p>
                       <p className="exp-rate__sub">
-                        {month.total ? `${month.total}건 중 ${month.high}건` : '이번 달 거래 영수증이 없어요'}
+                        {rateSrc.total ? `${rateSrc.total}건 중 ${rateSrc.high}건` : '이번 달 거래 영수증이 없어요'}
                       </p>
                       <div
                         className="exp-rate__bar"
                         role="img"
-                        aria-label={`인정 ${month.high}건, 확인 필요 ${month.ambiguous}건, 불인정 ${month.low}건`}
+                        aria-label={`인정 ${rateSrc.high}건, 확인 필요 ${rateSrc.ambiguous}건, 불인정 ${rateSrc.low}건`}
                       >
-                        <span className="exp-rate__seg exp-rate__seg--ok" style={{ width: monthShare(month.high) }} />
-                        <span className="exp-rate__seg exp-rate__seg--check" style={{ width: monthShare(month.ambiguous) }} />
-                        <span className="exp-rate__seg exp-rate__seg--bad" style={{ width: monthShare(month.low) }} />
+                        <span className="exp-rate__seg exp-rate__seg--ok" style={{ width: monthShare(rateSrc.high) }} />
+                        <span className="exp-rate__seg exp-rate__seg--check" style={{ width: monthShare(rateSrc.ambiguous) }} />
+                        <span className="exp-rate__seg exp-rate__seg--bad" style={{ width: monthShare(rateSrc.low) }} />
                       </div>
                     </section>
 
@@ -1069,7 +1085,11 @@ export function ExpenseTracker({ user, onRequireLogin }) {
                 {loading ? (
                   <p className="ai__hint">불러오는 중…</p>
                 ) : items.length === 0 ? (
-                  <p className="cvx__empty">아직 올린 영수증이 없어요.</p>
+                  <div className="w-empty">
+                    <p className="cvx__empty">아직 올린 영수증이 없어요.</p>
+                    {/* 웹앱: 빈 화면에 다음 행동 버튼 */}
+                    {isWebApp() && <button type="button" className="w-empty__btn" onClick={pickFile}>첫 영수증 올리기</button>}
+                  </div>
                 ) : (
                   <React.Fragment>
                     <div className="exp-listhead">

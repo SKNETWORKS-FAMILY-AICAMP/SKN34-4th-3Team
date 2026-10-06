@@ -25,4 +25,4 @@
 - `holdout-tax-missing-region` 2턴: status
 - `holdout-tax-missing-input-tax` 1턴: status
 
-원시 결과: [세금 JSON](../../LLM/evaluation/results/tax_20260913_205653.json)
+원시 결과: 세금 JSON(`LLM/evaluation/results/tax_20260913_205653.json`, 로컬 생성물, git 미추적)

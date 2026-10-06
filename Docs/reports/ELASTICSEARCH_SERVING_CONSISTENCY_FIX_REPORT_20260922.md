@@ -2,11 +2,11 @@
 
 - 작성일: 2026-09-22
 - 범위: LLM의 PostgreSQL Dense + Elasticsearch Nori BM25 검색, 준비 상태, 재색인 경로
-- 실행 절차: [`LLM/RUN_GUIDE.md` 5절](../../LLM/RUN_GUIDE.md#5-검색기-준비)
+- 실행 절차: `LLM/RUN_GUIDE.md` 5절(`LLM/RUN_GUIDE.md#5-검색기-준비`, 저장소에 없음)
 
 ## 1. 결론과 적용 범위
 
-개발 환경에서 진행한 Elasticsearch 성능 평가가 잘못된 것은 아니다. 당시에는 PostgreSQL 원본 10,892건을 Elasticsearch에 적재하고 `rag-documents` alias를 연결한 기록이 있다. 기존 ES 볼륨이 있는 환경에서 정상 검색이 된 것과 새 볼륨에서 초기 색인이 필요한 것은 양립한다. [당시 작업 기록](../../LLM/work_log/WORK_LOG_0920_NORI_RETRIEVAL_HANDOFF.md)과 [성능 비교 보고서](ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md)는 이미 색인된 환경의 결과다.
+개발 환경에서 진행한 Elasticsearch 성능 평가가 잘못된 것은 아니다. 당시에는 PostgreSQL 원본 10,892건을 Elasticsearch에 적재하고 `rag-documents` alias를 연결한 기록이 있다. 기존 ES 볼륨이 있는 환경에서 정상 검색이 된 것과 새 볼륨에서 초기 색인이 필요한 것은 양립한다. 당시 작업 기록(`LLM/work_log/WORK_LOG_0920_NORI_RETRIEVAL_HANDOFF.md`, 저장소에 없음)과 [성능 비교 보고서](ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md)는 이미 색인된 환경의 결과다.
 
 이번 수정은 다음 네 지적 중 **2~4번의 서빙 동작을 직접 수정**했고, **1번은 Backend가 사용하는 `/rag/reindex` 경로에서 ES 적재가 실행되도록 연결**했다. LLM만 단독 실행하거나 `/internal/rag/index`만 호출하는 경우에는 ES 전체 적재가 자동으로 수행되지 않는다. 새 환경에서의 수동 명령과 확인 절차는 실행 가이드에 있다.
 

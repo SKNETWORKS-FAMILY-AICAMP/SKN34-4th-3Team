@@ -39,6 +39,7 @@ export function AiConsult({
   noHeader,
   onRequireLogin,
   withSidebar,
+  askRef, // 바깥(로드맵 할 일의 '묻기' 등)에서 질문을 보낼 수 있게 ask 함수를 넣어 주는 ref
 }) {
   const RULES = rules || AI_RULES;
   const CHIPS = suggestions || AI_SUGGESTIONS;
@@ -53,6 +54,8 @@ export function AiConsult({
   const [progress, setProgress] = useState('');
   const [err, setErr] = useState('');
   const [histBusy, setHistBusy] = useState(false); // 기록 조회·삭제 진행 중
+  // 반응형 웹앱 휴대폰 폭: 대화 목록(왼쪽)을 아래에서 올라오는 시트로 연다. 다른 화면에서는 버튼이 CSS로 숨겨진다.
+  const [sideOpen, setSideOpen] = useState(false);
   const [histLoaded, setHistLoaded] = useState(false); // DB 기록 조회가 끝났는지(빈 기록 포함)
   const [rows, setRows] = useState([]); // 서버 기록 원본 (id·room_id 포함)
   const [roomList, setRoomList] = useState([]); // 서버 대화방 목록 (최근 대화 순)
@@ -532,6 +535,11 @@ export function AiConsult({
           <span className="chatbox__who">
             <b>{title || 'AI 세무·창업 상담'}</b>
           </span>
+          {withSidebar && (
+            <button type="button" className="ai__histbtn" onClick={() => setSideOpen(true)}>
+              이전 대화
+            </button>
+          )}
         </div>
       )}
 
@@ -547,6 +555,7 @@ export function AiConsult({
           </button>
         </div>
       )}
+
 
       <div className="ai__body" ref={bodyRef}>
         {histBusy && turns.length === 0 && (
@@ -613,6 +622,14 @@ export function AiConsult({
         </p>
       )}
 
+      {/* 대화를 시작한 뒤에도 추천 질문을 입력칸 위에 둔다. 반응형 웹앱에서만 보인다(web.css). */}
+      {turns.length > 0 && (
+        <div className="ai__qchips">
+          {CHIPS.slice(0, 4).map((s) => (
+            <button key={s} type="button" className="ai__qchip" disabled={busy} onClick={() => ask(s)}>{s}</button>
+          ))}
+        </div>
+      )}
       <form className="ai__foot" onSubmit={(e) => { e.preventDefault(); ask(draft); }}>
         <input
           value={draft}
@@ -638,12 +655,15 @@ export function AiConsult({
     </div>
   );
 
+  if (askRef) askRef.current = ask;
+
   if (!withSidebar) return panel;
 
   return (
-    <div className="cvx">
+    <div className={'cvx' + (sideOpen ? ' is-side-open' : '')}>
+      <div className="cvx__dim" aria-hidden="true" onClick={() => setSideOpen(false)} />
       <aside className="cvx__side">
-        <button type="button" className="cvx__new" onClick={startNew} disabled={busy || histBusy}>
+        <button type="button" className="cvx__new" onClick={() => { setSideOpen(false); startNew(); }} disabled={busy || histBusy}>
           + 새 대화 시작
         </button>
         <nav className="cvx__list" aria-label="대화 목록">
@@ -686,7 +706,7 @@ export function AiConsult({
                           type="button"
                           className="cvx__conv"
                           aria-current={room.id === roomId ? 'true' : undefined}
-                          onClick={() => openRoom(room.id)}
+                          onClick={() => { setSideOpen(false); openRoom(room.id); }}
                         >
                           {room.title}
                           {roomKey(room.id) === pendingKey && (

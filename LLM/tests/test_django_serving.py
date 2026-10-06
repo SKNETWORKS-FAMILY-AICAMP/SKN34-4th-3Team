@@ -109,11 +109,16 @@ def test_asgi_starts_index_warmup_once_on_http(monkeypatch) -> None:
     async def fake_warmup():
         calls.append("warmup")
 
+    async def fake_ocr_warmup():
+        calls.append("ocr-warmup")
+
     async def fake_django(scope, receive, send):
         calls.append(scope["type"])
 
     monkeypatch.setattr(asgi, "_warmup_task", None)
+    monkeypatch.setattr(asgi, "_ocr_warmup_task", None)
     monkeypatch.setattr(asgi, "_warm_up", fake_warmup)
+    monkeypatch.setattr(asgi, "_warm_up_ocr", fake_ocr_warmup)
     monkeypatch.setattr(asgi, "_django_application", fake_django)
 
     async def exercise():
@@ -122,7 +127,8 @@ def test_asgi_starts_index_warmup_once_on_http(monkeypatch) -> None:
             await asyncio.sleep(0)
 
     asyncio.run(exercise())
-    assert calls == ["lifespan", "http", "warmup", "http"]
+    # 인덱스와 영수증 OCR 모델을 첫 HTTP 요청 때 한 번씩만 미리 준비한다.
+    assert calls == ["lifespan", "http", "warmup", "ocr-warmup", "http"]
 
 
 def test_empty_reindex_body_and_legacy_http_error(monkeypatch) -> None:

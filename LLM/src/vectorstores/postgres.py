@@ -417,6 +417,29 @@ class PostgresVectorSearch:
         by_id = {int(row["id"]): _row_to_search_result(row) for row in rows}
         return [by_id[document_id] for document_id in ids if document_id in by_id]
 
+    def get_tax_source_evidence_by_ids(self, ids: list[int]) -> list[VectorSearchResult]:
+        """BM25가 사용한 세법 원본을 청크로 바꾸지 않고 복원한다."""
+        # features의 패키지 초기화가 PostgresVectorSearch를 가져오므로 지연 로드한다.
+        from src.features.elasticsearch_indexing import tax_source_document_from_row
+
+        if not ids:
+            return []
+        with connect_database(self._settings) as connection:
+            with connection.cursor(row_factory=dict_row) as cursor:
+                cursor.execute(
+                    "SELECT id, title, law_name, content, source FROM tax_documents WHERE id = ANY(%s)",
+                    (ids,),
+                )
+                rows = cursor.fetchall()
+        documents = [tax_source_document_from_row(row) for row in rows]
+        return [
+            {"chunk_id": document["document_id"], "policy_id": None,
+             "title": document["title"], "source": document["source"], "page": 1,
+             "content": document["content"], "source_type": "tax_document",
+             "source_id": document["source_id"], "score": 1.0}
+            for document in documents
+        ]
+
     def counts(self) -> tuple[int, int]:
         """검색 가능한 원천 문서 수와 Chunk 수를 반환한다."""
         with connect_database(self._settings) as connection:

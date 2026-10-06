@@ -1369,6 +1369,10 @@
   .exp-row__vendor.is-unknown {
     color: var(--exp-muted);
   }
+  /* 반응형 웹앱에서만 보이는 '눌러서 확인' 안내. 보이는 규칙은 src/web/web.css. */
+  .exp-row__todo {
+    display: none;
+  }
   .exp-row__sub,
   .exp-row__reason {
     overflow: hidden;

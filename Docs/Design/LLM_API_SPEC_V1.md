@@ -2,6 +2,7 @@
 
 - 문서 버전: `1.0`
 - 확정일: `2026-09-09`
+- 최종 갱신: `2026-10-01` (`/rag/chat/stream` 추가, 사업계획서 Endpoint·시간 제한·재색인 호출자 반영)
 - 상태: **Backend↔LLM API 정본(Single Source of Truth)**
 
 이 문서는 Backend가 LLM 서비스를 호출할 때 사용하는 내부 REST 계약의 정본이다.
@@ -17,7 +18,7 @@ Frontend↔Backend 계약은 `Docs/Design/API_SPEC.md`를 따른다.
 - 금액: 원 단위 정수
 - 비율·신뢰도: `0.0` 이상 `1.0` 이하 실수
 - 요청 필드는 기존 Backend 경계와의 호환성을 위해 `camelCase`를 사용한다.
-- 기존 LLM 구현의 `/internal/*` 경로는 구현·진단용 비공개 경로다. Backend는 이를 호출하거나 fallback 경로로 사용하지 않는다. 현재 `GET /internal/rag/ready`, `POST /internal/rag/index`, `POST /internal/rag/answer`, `POST /internal/rag/recommendations` 네 개가 남아 있으나 계약 대상이 아니다(`LLM/src/serving/rag_routes.py`).
+- 기존 LLM 구현의 `/internal/*` 경로는 구현·진단용 비공개 경로다. Backend는 이를 호출하거나 fallback 경로로 사용하지 않는다. 현재 `GET /internal/rag/ready`, `POST /internal/rag/index`, `POST /internal/rag/answer`, `POST /internal/rag/recommendations` 네 개가 남아 있으나 계약 대상이 아니다. 서버는 Django이며 경로는 `LLM/src/serving/django_config/urls.py`, 처리 함수는 `django_views.py` → `rag_routes.py`에 있다. `GET /docs`·`GET /openapi.json`은 Swagger UI와 OpenAPI 문서다(`api_schema.py`).
 - 응답에 새 필드는 추가할 수 있지만 기존 필드의 이름·자료형·의미는 문서 버전 변경 없이 바꾸지 않는다.
 
 ### 답변 상태
@@ -86,7 +87,7 @@ Backend는 오류의 HTTP 상태와 `error.code`를 로그에 남긴다. 사용�
 
 ### `GET /rag/ready`
 
-RAG 요청 처리 준비 상태를 확인한다. 이 요청 자체는 인덱스를 생성하지 않는다.
+RAG 요청 처리 준비 상태를 확인한다. 이 요청 자체는 인덱스를 생성하지 않는다. `VECTOR_STORE_BACKEND=postgres`에서는 pgvector 인덱스뿐 아니라 Elasticsearch(Nori BM25) 동기화·연결까지 확인돼야 `index_ready=true`다.
 
 ```json
 {
@@ -206,6 +207,18 @@ history에 중복하지 않는다. API는 최대 10쌍·12,000자를 검증하�
 - 범위 밖 질문은 `status=no_result`, `guardrail_reason=out_of_scope`다
 - `sources`는 실제 검색 결과 또는 Backend가 전달한 공고에서만 생성한다.
 - `source`는 원천 식별자 또는 URL이고, `url`은 사용자에게 제공할 링크다. URL이 없는 문서는 `url`을 빈 문자열로 반환할 수 있다.
+
+### `POST /rag/chat/stream`
+
+`/rag/chat`과 같은 Request로 같은 Graph를 실행하되 답변 생성 중간 결과를 NDJSON(`application/x-ndjson`)으로 흘려보낸다. Backend `POST /chat/messages/stream`이 호출하며, 채팅 화면은 이 경로를 쓴다.
+
+| 이벤트 | 형식 | 의미 |
+| --- | --- | --- |
+| `draft` | `{ "type": "draft", "answer": "..." }` | 생성 중인 답변(누적 문자열). 0회 이상 |
+| `done` | `{ "type": "done", "result": { …/rag/chat Response } }` | 최종 결과. 한 번 |
+| `error` | `{ "type": "error" }` | 처리 실패. 이후 스트림 종료 |
+
+Backend는 `error`나 `done` 없는 종료를 실패로 보고 기존 fallback(목업 답변 저장)으로 처리한 뒤 자체 `done` 이벤트를 보낸다(`Backend/services/chat_service.py`의 `send_message_stream_async`).
 
 ## 4. 세액감면 판정 근거 설명
 
@@ -460,6 +473,8 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 - `force=true`: 대상 문서의 기존 캐시를 무시하고 다시 Embedding한다.
 - 이미 runtime 인덱스가 준비됐더라도 명시적인 재색인 요청은 생략하지 않는다.
 - 원천 `policies`, `announcements`, `tax_documents`를 수정하거나 DB schema를 변경하지 않는다.
+- `VECTOR_STORE_BACKEND=postgres`에서는 pgvector 갱신 후 Elasticsearch Nori 인덱스도 다시 만든다(`reindex_postgres_to_elasticsearch`, `LLM/src/features/elasticsearch_indexing.py`).
+- 호출자: Backend `POST /admin/rag-documents/reindex`·기동 워밍업, 그리고 GitHub Actions `collect.yml`(주간 수집 후 App EC2의 llm 컨테이너 안에서 직접 `POST /rag/reindex` `{documentIds:[], force:false}`).
 
 #### Response
 
@@ -488,10 +503,11 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 | `POST /rag/chat` — `category=policy` | 45 | `LLM_TIMEOUT_CHAT_POLICY` |
 | `POST /rag/chat` — `category=roadmap` | 45 | `LLM_TIMEOUT_CHAT_POLICY` |
 | `POST /rag/chat` — `category=tax`·`expense`·`saving` | 120 | `LLM_TIMEOUT_CHAT_TAX` |
+| `POST /rag/chat/stream` | `/rag/chat`과 같은 category별 값 | 같음 |
 | `POST /rag/legal-basis` | 30 | `LLM_TIMEOUT_LEGAL_BASIS` |
 | `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |
 | `POST /rag/summarize-announcement` | 45 | `LLM_TIMEOUT_SUMMARIZE` |
-| `POST /rag/business-plan`, `-refine`, `-template-inspect`, `-render`, `-evaluate`, `-coach` | 60 | `LLM_TIMEOUT_BIZPLAN` |
+| `POST /rag/business-plan`, `-refine`, `-template-inspect`, `-render`, `-evaluate`, `-coach` | 120 | `LLM_TIMEOUT_BIZPLAN` |
 | `POST /ocr/receipt` | 40 | `LLM_TIMEOUT_OCR` (프론트 업로드 제한 45초보다 짧게 유지) |
 | `POST /rag/reindex` | 180 | `LLM_TIMEOUT_REINDEX` |
 
@@ -499,7 +515,7 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 
 `/rag/chat`이 category에 따라 갈리는 이유는 LLM의 `_route_for_category`(`LLM/src/rag/graph.py`)가 `tax`·`expense`를 tax 멀티홉 경로로 확정하기 때문이다. 멀티홉은 검색·근거 평가·재질의를 최대 `TAX_MAX_HOPS`회 반복해 30초를 넘길 수 있다. 실측 최대는 11.7초였다. `policy`는 대화 이력이 있을 때 문맥 복원(`contextualize_question`) 모델 호출이 한 번 더 붙으므로 기존 30초에서 45초로 올렸다.
 
-- **Backend는 GET·POST 어느 쪽도 자동 재시도하지 않는다.** `Backend/core/llm_client.py`의 `_request`·`_post_multipart`는 `urlopen`을 한 번만 호출하고 `HTTPError`·`URLError`·timeout에서 바로 `None`을 돌려준다. 상태 조회 실패는 `llm_status()`가 `reachable=false`·`ragReady=false`로 표면화한다.
+- **Backend는 GET·POST 어느 쪽도 자동 재시도하지 않는다.** `Backend/core/llm_client.py`에서 채팅(`/rag/chat`·`/rag/chat/stream`)은 `httpx.AsyncClient`로, 그 밖의 호출은 `_request`·`_post_multipart`의 `urlopen`으로 한 번만 호출하고 HTTP 오류·연결 오류·timeout에서 바로 `None`을 돌려준다(스트림은 예외 후 fallback). 상태 조회 실패는 `llm_status()`가 `reachable=false`·`ragReady=false`로 표면화한다.
 - 비용 중복과 중복 작업을 방지하기 위해 POST 요청은 자동 재시도하지 않는다.
 - 재시도가 필요한 요청은 사용자 또는 관리자가 명시적으로 다시 요청한다.
 
@@ -522,7 +538,7 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 
 ## 11. 구현 현황
 
-LLM은 위 계약의 공개 Endpoint 11개(사업계획서 3개 포함), 요청·응답 schema, 공통 오류 응답, 카테고리 route 제한,
+LLM은 위 계약의 공개 Endpoint 14개(`/rag/ready`·`reindex`·`chat`·`chat/stream`·`legal-basis`·`deductibility`·`summarize-announcement`, 사업계획서 6개, `/ocr/receipt`)와 `/health`, 요청·응답 schema, 공통 오류 응답, 카테고리 route 제한,
 범위 밖 질문 Guardrail과 PostgreSQL 부분 재색인을 구현했다.
 
 **Backend 측 연동도 완료됐다.** 2026-09-09 시점에 남아 있던 작업 7건은 `d8242fc`에서 전부

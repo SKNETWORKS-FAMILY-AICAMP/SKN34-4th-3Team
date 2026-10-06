@@ -9,11 +9,27 @@ import { LoginModal } from './components/LoginModal.jsx';
 import { SubPage } from './pages/SubPage.jsx';
 import { MyPage } from './pages/MyPage.jsx';
 import { Home } from './pages/Home.jsx';
+import { MobileApp } from './mobile/MobileApp.jsx';
+import { useIsMobile } from './mobile/useIsMobile.js';
+import { WebTabBar } from './web/WebTabBar.jsx';
+import { WebToday } from './web/WebToday.jsx';
 
-export function App() {
+// 반응형 웹앱(/web.html)은 주소 해시에 현재 화면을 남긴다(#/roadmap · #/mypage).
+const WEB_PAGES = ['roadmap', 'tax', 'expenses', 'gov', 'bizplan'];
+function viewFromHash() {
+  const key = window.location.hash.replace(/^#\/?/, '');
+  if (key === 'mypage') return { view: 'mypage', pageKey: 'tax' };
+  if (WEB_PAGES.includes(key)) return { view: 'page', pageKey: key };
+  return { view: 'home', pageKey: 'tax' };
+}
+
+// variant='web': 반응형 웹앱(/web.html). 기존 PC 화면을 모든 폭에서 쓰고, 폭에 맞춰 배치만 바꾼다(web/web.css).
+// 그 외(index.html)에는 폭 768px 이하에서 모바일 앱, 넓으면 기존 PC 화면.
+export function App({ variant } = {}) {
+  const isWeb = variant === 'web';
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('home');
-  const [pageKey, setPageKey] = useState('tax');
+  const [view, setView] = useState(() => (isWeb ? viewFromHash().view : 'home'));
+  const [pageKey, setPageKey] = useState(() => (isWeb ? viewFromHash().pageKey : 'tax'));
   const [loginOpen, setLoginOpen] = useState(false);
   const [afterLogin, setAfterLogin] = useState(null);
   const bizplanUnsavedRef = useRef(false);
@@ -22,12 +38,41 @@ export function App() {
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
+  // 화면 폭 768px 이하에서는 모바일 전용 웹앱(src/mobile)을 보여준다. 데이터·API는 PC와 같이 쓴다.
+  const isMobile = useIsMobile();
+  // 모바일 앱 여부는 첫 로딩 때 한 번만 정한다(회전·창 크기 변경으로 화면이 바뀌어 입력이 사라지지 않게).
+  const [mobileApp] = useState(isMobile);
+
+  // 웹앱: 화면이 바뀌면 주소에 남기고, 뒤로 가기 · 앞으로 가기로 화면을 되돌린다.
+  useEffect(() => {
+    if (!isWeb) return undefined;
+    const onPop = () => {
+      const next = viewFromHash();
+      // 저장하지 않은 사업계획서를 떠나려다 취소하면 주소를 사업계획서로 되돌린다.
+      const toBizplan = next.view === 'page' && next.pageKey === 'bizplan';
+      if (!toBizplan && !confirmLeaveBizplan()) {
+        window.history.pushState(null, '', '#/bizplan');
+        return;
+      }
+      setView(next.view);
+      setPageKey(next.pageKey);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [isWeb, view, pageKey]);
+  useEffect(() => {
+    if (!isWeb) return;
+    const hash = view === 'page' ? `#/${pageKey}` : view === 'mypage' ? '#/mypage' : '';
+    if ((window.location.hash || '') !== hash) window.history.pushState(null, '', hash || window.location.pathname);
+  }, [isWeb, view, pageKey]);
 
   // 이전 버전의 사용자 캐시는 더 이상 읽지 않는다.
   useEffect(() => {
     try { localStorage.removeItem(USER_STORE_KEY); } catch { /* 저장소 접근 불가 */ }
   }, []);
 
+  // 토큰으로 사용자 복원을 마쳤는지(웹앱 홈이 복원 전에 로그인 안내를 잠깐 띄우지 않게).
+  const [authReady, setAuthReady] = useState(() => !getToken());
   // 토큰으로 사용자와 사업자 정보를 DB에서 복원한다.
   useEffect(() => {
     let alive = true;
@@ -39,7 +84,8 @@ export function App() {
       })
       .catch(() => {
         /* Backend 미실행·타임아웃 — 저장된 사용자 정보로 대체하지 않는다 */
-      });
+      })
+      .finally(() => { if (alive) setAuthReady(true); });
     return () => { alive = false; };
   }, []);
 
@@ -172,6 +218,31 @@ export function App() {
   const modal = loginOpen && (
     <LoginModal onClose={() => setLoginOpen(false)} onSuccess={handleLoginSuccess} />
   );
+  // 웹앱 휴대폰 폭의 하단 탭바(넓은 화면에서는 web.css가 숨긴다)
+  const tabbar = isWeb && (
+    <WebTabBar
+      current={view === 'page' ? pageKey : view === 'mypage' && user ? 'mypage' : 'home'}
+      onNavigate={handleNavigate}
+    />
+  );
+
+  if (mobileApp && !isWeb) {
+    return (
+      <React.Fragment>
+        <MobileApp
+          user={user}
+          roadmapDone={roadmapDone}
+          setRoadmapDone={updateRoadmapDone}
+          savedPolicies={savedPolicies}
+          onToggleSavedPolicy={toggleSavedPolicy}
+          onLogin={() => { setAfterLogin(null); setLoginOpen(true); }}
+          onLogout={() => { api.logout(); setUser(null); }}
+          onProfileSaved={setUser}
+        />
+        {modal}
+      </React.Fragment>
+    );
+  }
 
   if (view === 'mypage' && user) {
     return (
@@ -197,6 +268,7 @@ export function App() {
         />
         <FloatingThemeToggle />
         <PageTour page="mypage" userId={user.id} />
+        {tabbar}
         {modal}
       </React.Fragment>
     );
@@ -221,6 +293,7 @@ export function App() {
         <FloatingThemeToggle />
         {/* 사업계획서는 단계별 안내와 '사용 가이드' 버튼을 페이지 안에 따로 둔다. */}
         {pageKey !== 'bizplan' && <PageTour key={pageKey} page={pageKey} userId={user && user.id} />}
+        {tabbar}
         {modal}
       </React.Fragment>
     );
@@ -231,6 +304,11 @@ export function App() {
       <ScrollProgress />
       {/* 머리글은 홈 본문 축소(.home-scale)의 영향을 받지 않게 밖에 두어 다른 페이지와 크기를 맞춘다. */}
       <Nav user={user} onLoginClick={handleLoginClick} onNavigate={handleNavigate} />
+      {/* 웹앱 태블릿 · PC: 홈 맨 위에 오늘 챙길 일(로그인 전에는 로그인 안내). 휴대폰 폭에서는 그리지 않는다. */}
+      {isWeb && !isMobile && (user || authReady) && (
+        <WebToday user={user} roadmapDone={roadmapDone} savedPolicies={savedPolicies}
+          onNavigate={handleNavigate} onLogin={handleLoginClick} />
+      )}
       <div className="home-scale">
         <Home
           onNavigate={handleNavigate}
@@ -244,6 +322,7 @@ export function App() {
         </footer>
       </div>
       <FloatingThemeToggle />
+      {tabbar}
       {modal}
     </React.Fragment>
   );

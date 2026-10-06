@@ -28,6 +28,35 @@ _EVIDENCE_DECISION_CACHE_VERSION = "tax-evidence-v1"
 _DECISION_SIGNATURE_VERSION = "tax-decision-facts-v1"
 _EMBEDDING_VERSION = "topic-v3"
 _NEGATIVE_EVIDENCE_TTL = timedelta(hours=6)
+TaxEvidenceId = int | str
+_SOURCE_EVIDENCE_ID = re.compile(r"tax_source:([1-9][0-9]*):[0-9a-f]{64}\Z")
+
+
+def tax_evidence_id(document: VectorSearchResult) -> TaxEvidenceId | None:
+    """청크 PK 또는 원본 문서 ID와 본문 hash로 근거를 식별한다."""
+    document_id = document.get("id")
+    if isinstance(document_id, int) and not isinstance(document_id, bool):
+        return document_id
+    source_id = document.get("source_id")
+    if (
+        document.get("source_type") == "tax_document"
+        and isinstance(source_id, int) and not isinstance(source_id, bool) and source_id > 0
+        and document.get("content")
+    ):
+        digest = _digest([document.get("title"), document.get("source"), document["content"]])
+        return f"tax_source:{source_id}:{digest}"
+    return None
+
+
+def sorted_tax_evidence_ids(ids: list[TaxEvidenceId]) -> list[TaxEvidenceId]:
+    return sorted(ids, key=lambda value: (isinstance(value, str), value))
+
+
+def _valid_evidence_id(value: object) -> bool:
+    return (
+        isinstance(value, int) and not isinstance(value, bool)
+        or isinstance(value, str) and _SOURCE_EVIDENCE_ID.fullmatch(value) is not None
+    )
 
 
 def _normalized_question(question: str) -> str:
@@ -174,7 +203,7 @@ class TaxRagCache:
         self,
         question: str,
         profile: UserProfile | None,
-        prior_evidence_ids: list[int] | None = None,
+        prior_evidence_ids: list[TaxEvidenceId] | None = None,
     ) -> tuple[
         list[VectorSearchResult], list[str], list[float] | None,
         dict[str, object] | None, str | None,
@@ -183,7 +212,7 @@ class TaxRagCache:
         question = _normalized_question(question)
         conditions = _user_conditions(question, profile)
         decision_conditions = _decision_conditions(question, profile)
-        prior_ids = sorted(prior_evidence_ids or [])
+        prior_ids = sorted_tax_evidence_ids(prior_evidence_ids or [])
         key = self._decision_lookup_key(question, decision_conditions, prior_ids)
         with connect_database(self._settings) as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
@@ -278,19 +307,18 @@ class TaxRagCache:
         embedding: list[float] | None,
         *,
         evidence_decision: dict[str, object] | None = None,
-        prior_evidence_ids: list[int] | None = None,
+        prior_evidence_ids: list[TaxEvidenceId] | None = None,
     ) -> None:
-        ids = [document.get("id") for document in documents]
+        ids = [tax_evidence_id(document) for document in documents]
         if (
             not ids or not hop_queries
-            or any(not isinstance(document_id, int) or isinstance(document_id, bool)
-                   for document_id in ids)
+            or any(not _valid_evidence_id(document_id) for document_id in ids)
         ):
             return
         question = _normalized_question(question)
         conditions = _user_conditions(question, profile)
         decision_conditions = _decision_conditions(question, profile)
-        prior_ids = sorted(prior_evidence_ids or [])
+        prior_ids = sorted_tax_evidence_ids(prior_evidence_ids or [])
         if embedding is None:
             embedding = self._embedding.embed_query(self._embedding_text(question))
         prior_id_set = set(prior_ids)
@@ -346,7 +374,7 @@ class TaxRagCache:
         conditions: dict[str, object],
         decision_conditions: dict[str, object],
         created_at: datetime,
-        prior_evidence_ids: list[int],
+        prior_evidence_ids: list[TaxEvidenceId],
     ) -> tuple[
         list[VectorSearchResult], list[str], dict[str, object] | None
     ] | None:
@@ -362,7 +390,7 @@ class TaxRagCache:
         decision = result.get("evidence_decision")
         if (
             not isinstance(ids, list) or not ids
-            or any(not isinstance(value, int) or isinstance(value, bool) for value in ids)
+            or any(not _valid_evidence_id(value) for value in ids)
             or len(set(ids)) != len(ids)
             or not isinstance(queries, list) or not queries
             or any(not isinstance(query, str) for query in queries)
@@ -382,35 +410,50 @@ class TaxRagCache:
                     return None
         elif prior_evidence_ids:
             return None
-        documents = self._vector_search.get_tax_evidence_by_ids(ids, created_at)
+        documents = self._restore_documents(ids, created_at)
         return (documents, queries, decision) if len(documents) == len(ids) else None
+
+    def _restore_documents(
+        self, ids: list[TaxEvidenceId], created_at: datetime,
+    ) -> list[VectorSearchResult]:
+        chunk_ids = [value for value in ids if isinstance(value, int)]
+        source_ids = [int(value.split(":")[1]) for value in ids if isinstance(value, str)]
+        documents = (
+            self._vector_search.get_tax_evidence_by_ids(chunk_ids, created_at)
+            if chunk_ids else []
+        )
+        if source_ids:
+            documents.extend(self._vector_search.get_tax_source_evidence_by_ids(source_ids))
+        by_id = {tax_evidence_id(document): document for document in documents}
+        # 원본이 수정되거나 삭제되면 hash가 달라져 전체 캐시를 무효화한다.
+        return [by_id[value] for value in ids if value in by_id]
 
     @staticmethod
     def _decision_lookup_key(
         question: str,
         conditions: dict[str, object],
-        prior_evidence_ids: list[int],
+        prior_evidence_ids: list[TaxEvidenceId],
     ) -> str:
         return _digest([
             _DECISION_SIGNATURE_VERSION,
             _decision_scope(question),
             conditions,
-            {"prior_evidence_ids": sorted(prior_evidence_ids)},
+            {"prior_evidence_ids": sorted_tax_evidence_ids(prior_evidence_ids)},
         ])
 
     @staticmethod
     def _decision_signature(
         question: str,
         conditions: dict[str, object],
-        prior_evidence_ids: list[int],
-        evidence_ids: list[object],
+        prior_evidence_ids: list[TaxEvidenceId],
+        evidence_ids: list[TaxEvidenceId],
     ) -> str:
         return _digest([
             _DECISION_SIGNATURE_VERSION,
             _decision_scope(question),
             conditions,
-            {"prior_evidence_ids": sorted(prior_evidence_ids)},
-            {"evidence_ids": sorted(evidence_ids)},
+            {"prior_evidence_ids": sorted_tax_evidence_ids(prior_evidence_ids)},
+            {"evidence_ids": sorted_tax_evidence_ids(evidence_ids)},
         ])
 
     def _valid_decision_signature(
@@ -418,7 +461,7 @@ class TaxRagCache:
         result: object,
         question: str,
         conditions: dict[str, object],
-        prior_evidence_ids: list[int],
+        prior_evidence_ids: list[TaxEvidenceId],
     ) -> bool:
         if not isinstance(result, dict):
             return False
@@ -426,7 +469,7 @@ class TaxRagCache:
         return (
             isinstance(ids, list)
             and bool(ids)
-            and all(isinstance(value, int) and not isinstance(value, bool) for value in ids)
+            and all(_valid_evidence_id(value) for value in ids)
             and result.get("decision_signature")
             == self._decision_signature(
                 question, conditions, prior_evidence_ids, ids
@@ -450,22 +493,22 @@ class TaxRagCache:
             ]
         if (
             not isinstance(ids, list) or not ids
-            or any(not isinstance(value, int) or isinstance(value, bool) for value in ids)
+            or any(not _valid_evidence_id(value) for value in ids)
             or len(set(ids)) != len(ids)
         ):
             return []
-        documents = self._vector_search.get_tax_evidence_by_ids(ids, created_at)
+        documents = self._restore_documents(ids, created_at)
         return documents if len(documents) == len(ids) else []
 
     @staticmethod
     def _key(
         question: str,
         conditions: dict[str, object],
-        prior_evidence_ids: list[int] | None = None,
+        prior_evidence_ids: list[TaxEvidenceId] | None = None,
     ) -> str:
         payload: list[object] = [question, conditions]
         if prior_evidence_ids:
-            payload.append({"prior_evidence_ids": sorted(prior_evidence_ids)})
+            payload.append({"prior_evidence_ids": sorted_tax_evidence_ids(prior_evidence_ids)})
         encoded = json.dumps(
             payload, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"),

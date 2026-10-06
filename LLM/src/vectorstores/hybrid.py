@@ -87,6 +87,7 @@ class BM25Search:
         source_types: tuple[str, ...] | None = None,
         require_policy_id: bool = False,
         unique_policy_ids: bool = False,
+        unique_source_ids: bool = False,
         top_k: int = 5,
     ) -> list[VectorSearchResult]:
         """Query 단어와 Chunk 단어의 BM25 관련성을 계산한다.
@@ -97,6 +98,7 @@ class BM25Search:
             source_types: 후보를 뽑기 전에 적용할 원천 문서 유형.
             require_policy_id: True이면 정책 ID가 연결된 Chunk만 검색한다.
             unique_policy_ids: True이면 정책별 최상위 Chunk만 반환한다.
+            unique_source_ids: True이면 원천 문서별 최상위 Chunk만 반환한다.
             top_k: BM25 점수 순으로 반환할 최대 Chunk 개수.
 
         Returns:
@@ -135,6 +137,18 @@ class BM25Search:
                 if chunk_policy_id is None or chunk_policy_id in seen_policy_ids:
                     continue
                 seen_policy_ids.add(chunk_policy_id)
+                unique_chunks.append((score, chunk))
+                if len(unique_chunks) >= top_k:
+                    break
+            ranked_chunks = unique_chunks
+        elif unique_source_ids:
+            unique_chunks = []
+            seen_sources: set[tuple[str, int]] = set()
+            for score, chunk in ranked_chunks:
+                key = (_source_type(chunk), int(chunk["source_id"]))
+                if key in seen_sources:
+                    continue
+                seen_sources.add(key)
                 unique_chunks.append((score, chunk))
                 if len(unique_chunks) >= top_k:
                     break
