@@ -235,11 +235,19 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 ```bash
 bash ~/SKN34-4th-3Team/scripts/backup_db.sh   # 1회 수동 실행으로 확인
 crontab -e
+PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin
 # 매일 04:00 (서버 시간대 기준. UTC면 한국 13:00)
 0 4 * * * bash /home/ubuntu/SKN34-4th-3Team/scripts/backup_db.sh >> /home/ubuntu/backup_db.log 2>&1
+# 매시간 마지막 성공 백업이 26시간 이내인지 확인(백업 cron 자체가 실행되지 않은 경우 포함)
+15 * * * * bash /home/ubuntu/SKN34-4th-3Team/scripts/backup_db.sh --check-freshness >> /home/ubuntu/backup_db.log 2>&1
 ```
 
 한국 시간 기준으로 맞추려면 `sudo timedatectl set-timezone Asia/Seoul`.
+
+- 스크립트는 임시 덤프 생성·목차 검사 후 업로드하고 S3 객체 크기까지 확인한다. Data EC2에는 덤프 1개를 저장할 여유 공간이 필요하다. 임시 파일은 종료 시 삭제되고 마지막 성공 시각은 `~/.local/state/startup-on-backup/last_success`에 기록된다.
+- AWS CLI 경로는 스크립트에서도 `/snap/bin`을 포함한다. 실패/백업 누락 알림은 SNS topic과 확인된 이메일 구독을 만들고 `.env`에 `BACKUP_ALERT_TOPIC_ARN`을 지정한다. Data EC2 역할에 해당 topic의 `sns:Publish` 권한을 추가한다. 미설정이면 stderr에 알림 미설정 경고만 남으므로 운영에서 반드시 설정한다.
+- 업로드 성공·목차 검사는 실제 복원 성공을 보장하지 않는다. S3 덤프를 내려받아 **운영 DB와 분리된 테스트 DB**에 `pg_restore --exit-on-error`로 복원하고 테이블·행 수·대표 조회를 확인한다. 최초 적용 및 이후 월 1회 수행한다.
+- Data EC2 스크립트와 crontab·IAM·SNS 설정은 App EC2 자동 배포로 반영되지 않는다. 10-1절에 따라 수동 적용하고 제한된 PATH로 스크립트 실행 및 `--check-freshness` 실패 알림을 확인한다.
 
 ## 10-1. Data EC2 수동 반영
 
