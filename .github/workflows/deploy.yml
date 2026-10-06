@@ -10,11 +10,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# 배포가 겹치지 않게 한다. 이후 수집 workflow 도 같은 그룹을 쓴다.
-concurrency:
-  group: ec2-app
-  cancel-in-progress: false
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -43,6 +38,11 @@ jobs:
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: test
+    # PR 테스트는 제외하고 서버를 변경하는 작업만 수집과 함께 순서대로 실행한다.
+    concurrency:
+      group: ec2-app
+      queue: max
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -54,6 +54,11 @@ jobs:
           command_timeout: 35m
           script: |
             set -e
+            exec 9>"$HOME/.ec2-app.lock"
+            flock -w 300 9 || { echo "::error::서버 작업 잠금 대기 시간 초과"; exit 1; }
+            # SSH 취소 뒤에도 Docker daemon의 collector는 남을 수 있다.
+            active_collectors=$(docker ps -q --filter label=com.docker.compose.service=collector)
+            [ -z "$active_collectors" ] || { echo "::error::이전 collector가 실행 중입니다"; exit 1; }
             cd ~/SKN34-4th-3Team
             git pull --ff-only origin main
             docker compose -f docker-compose.app.yml run --rm db-migrate

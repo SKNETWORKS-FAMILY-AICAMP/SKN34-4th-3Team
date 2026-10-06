@@ -214,6 +214,8 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, Frontend `node --test` + `npm run build`) → `git pull` → `db-migrate` → `up -d --build` → `docker image prune -f` 순서로 자동 배포.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
+- PR 테스트는 운영 대기열에 들어가지 않는다. deploy job·수집·재시도는 `ec2-app` 그룹과 `queue: max`로 직렬 실행한다(대기 최대 100개).
+- 서버 작업은 `$HOME/.ec2-app.lock`을 사용한다. 수동 배포·수집도 같은 잠금 아래 실행한다. SSH 취소 후 collector가 남아 있으면 다음 작업은 실패하므로, 실행 상태를 확인하고 정리한 뒤 재실행한다.
 - 자동 배포 대상은 App EC2뿐. Data EC2 변경은 10-1단계로 수동 반영
 
 ## 9-1. 데이터 수집 자동화
