@@ -4,8 +4,16 @@
 #   docker compose -f docker-compose.app.yml up -d --build
 # 발표자료(/ppt/)까지 띄우려면 .env 에 COMPOSE_PROFILES=presentation 을 둔다.
 # 절차: Docs/AWS_DEPLOY_GUIDE.md
+# 컨테이너 로그(json-file)가 디스크를 채우지 않게 서비스마다 10MB x 3개로 제한한다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
+    logging: *default-logging
     build:
       context: ./Backend
     restart: unless-stopped
@@ -30,6 +38,7 @@ services:
         condition: service_healthy
 
   frontend:
+    logging: *default-logging
     build:
       context: ./Frontend
     restart: unless-stopped
@@ -45,12 +54,14 @@ services:
         condition: service_healthy
 
   presentation:
+    logging: *default-logging
     build:
       context: ./Presentation
     profiles: ["presentation"]
     restart: unless-stopped
 
   llm:
+    logging: *default-logging
     build:
       context: ./LLM
     restart: unless-stopped
@@ -72,6 +83,7 @@ services:
   # 배포마다 app_extras.sql 을 Data EC2 의 DB 에 다시 적용한다(전 문장 재실행 안전).
   # up 으로는 뜨지 않고 run --rm db-migrate 로만 실행한다.
   db-migrate:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     profiles: ["migrate"]
     restart: "no"
@@ -84,6 +96,7 @@ services:
   # 수집 스크립트(DB/run_collection.py)를 Data EC2 의 DB 에 실행한다.
   # up 으로는 뜨지 않고 run --rm collector 로만 실행한다(.github/workflows/collect.yml).
   collector:
+    logging: *default-logging
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     profiles: ["collector"]
     restart: "no"
