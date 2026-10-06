@@ -2115,30 +2115,6 @@ html:has(.m-app) body {
   font-size: 13px !important;
   text-decoration: underline;
 }
-.m-xp-sheet__acts {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-}
-.m-xp-sheet__acts button {
-  height: 52px;
-  border-radius: 14px;
-  font-size: 16px !important;
-  font-weight: 700;
-}
-.m-xp-sheet__acts .is-bad {
-  flex: 1;
-  border: 1.5px solid #e0574a;
-  background: #fff;
-  color: #c0392b !important;
-}
-.m-xp-sheet__acts .is-ok {
-  flex: 2;
-  border: 0;
-  background: #1e8a4c;
-  color: #fff !important;
-}
-.m-xp-sheet__acts button:active { transform: scale(0.98); }
 
 /* ---------- 01 창업 로드맵(대화형 코치 시안) ----------
    헤더 · 단계 스트립 · 입력 영역은 고정, 가운데 대화만 세로 스크롤한다. */

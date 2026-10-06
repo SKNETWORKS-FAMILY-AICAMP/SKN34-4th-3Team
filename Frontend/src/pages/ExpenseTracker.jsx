@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { isWebApp, takeHandoff } from '../web/env.js';
 import { linkBtn } from '../utils.js';
+import { prepareReceiptImage } from '../receiptImage.js';
 
 // 지출 목록을 요약·지출 내역·품목 상세 세 시트짜리 .xlsx로 만든다. 서버를 거치지 않고 브라우저에서 바로 만든다.
 // exceljs는 용량이 커서 누르기 전까지 불러오지 않는다(정적 import면 이 페이지를 열기만 해도
@@ -822,8 +823,6 @@ export function ExpenseTracker({ user, onRequireLogin }) {
     picked.forEach((file) => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
         rejected.push(`${file.name} (JPEG·PNG·WebP만 가능)`);
-      } else if (file.size > 4 * 1024 * 1024) {
-        rejected.push(`${file.name} (4MB 초과)`);
       } else {
         valid.push(file);
       }
@@ -854,7 +853,10 @@ export function ExpenseTracker({ user, onRequireLogin }) {
         setUploadStep(2);
       }, 8000);
       try {
-        await api.uploadReceipt(valid[i]);
+        // 카메라 원본처럼 큰 사진은 줄여서 올린다. 줄여도 4MB를 넘으면 실패로 모은다.
+        const ready = await prepareReceiptImage(valid[i]);
+        if (ready) await api.uploadReceipt(ready);
+        else failed.push(`${valid[i].name} (이미지를 줄이지 못함)`);
       } catch (e2) {
         if (e2 && e2.status === 401) {
           onRequireLogin && onRequireLogin();

@@ -219,11 +219,12 @@ LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은
    | `EC2_HOST` | `<APP_EIP>` |
    | `EC2_USER` | `ubuntu` |
    | `EC2_SSH_KEY` | `deploy_key` 파일 내용 전체 |
+   | `HEALTH_URL` | `https://<DOMAIN>/api/health` (HTTPS 전에는 `http://<APP_EIP>/api/health`) |
 
 3. Settings → Branches → `main` 보호 규칙: PR 필수, 상태 검사 `test` 통과 필수
 4. Actions → deploy → **Run workflow**로 수동 실행해 동작 확인
 
-이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트 → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
+이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, LLM `pytest` + 이미지 빌드, Frontend `node --test` + `npm run build`) → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 → 이미지·빌드 캐시 정리 → 디스크 사용률 확인(80% 이상이면 경고) 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
 - PR 테스트는 운영 대기열에 들어가지 않는다. deploy job·수집·재시도는 `ec2-app` 그룹과 `queue: max`로 직렬 실행한다(대기 최대 100개).
@@ -241,6 +242,24 @@ LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은
 
 - collector는 App EC2 `.env`의 `LAW_API_KEY`·`GOV24_API_KEY`·`ONTONG_YOUTH_API_KEY`와 `COMPOSE_DB_HOST`로 Data EC2 DB에 쓴다
 - `permanent` 실패는 자동 재시도하지 않는다. `collection_failures`에서 확인 후 조치(`Docs/data_collection_preprocessing.md`)
+
+## 9-2. 장애 감지·자동 복구
+
+| 구성 | 동작 |
+|---|---|
+| `.github/workflows/health-check.yml` | 10분마다 `HEALTH_URL`을 호출해 `postgres=connected`·`ragReady=true` 확인. 60초 간격 5회 모두 실패하면 workflow 실패 → GitHub 실패 메일 |
+| `scripts/autoheal.sh` (cron) | 5분마다 `unhealthy` 컨테이너 재시작. compose `restart: unless-stopped`는 프로세스 종료만 감지하므로 보완 |
+
+두 EC2 모두 cron 등록
+
+```bash
+crontab -e
+*/5 * * * * bash /home/ubuntu/SKN34-4th-3Team/scripts/autoheal.sh >> /home/ubuntu/autoheal.log 2>&1
+```
+
+- 실패 메일은 Actions 알림 설정(Settings → Notifications → Actions)이 켜진 사용자에게 발송. 예약 workflow는 workflow를 마지막으로 수정한 사용자에게 발송
+- 예약 workflow는 `main`에서만 실행되며 저장소 활동이 60일 없으면 비활성화됨. Actions 탭에서 다시 활성화
+- 동작 확인: Actions → health-check → **Run workflow** 성공 확인
 
 ## 10. 백업 cron (Data EC2)
 
@@ -286,7 +305,7 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 
 - 볼륨(`db_data`, `elasticsearch_data`)은 유지되므로 데이터 손실 없음
 - DB 컨테이너가 재생성되면 App EC2의 backend·llm 연결이 잠시 끊김. 시연 중에는 반영 금지
-- `elasticsearch/`(분석기·플러그인) 변경 시 인덱스 재생성 필요. App EC2에서 `docker compose -f docker-compose.app.yml restart llm backend` 실행(backend 기동 시 LLM 인덱스가 비어 있으면 재색인) 후 `http://<APP_EIP>/api/health`의 `ragReady=true` 확인
+- `elasticsearch/`(분석기·플러그인) 변경 시 인덱스 재생성 필요. App EC2에서 `docker compose -f docker-compose.app.yml restart llm backend` 실행(llm 기동 시 자체 warm-up으로 인덱스 구성, 10분 내 준비되지 않으면 backend가 재색인 요청) 후 `http://<APP_EIP>/api/health`의 `ragReady=true` 확인
 
 ## 11. 검증
 

@@ -213,6 +213,31 @@ def test_save_uses_pk_and_conflict_upsert(monkeypatch) -> None:
     assert stored["embedding_version"] == "topic-v3"
 
 
+def test_lookup_ignores_expired_or_pre_tax_update_cache(monkeypatch) -> None:
+    # 실제 거르기는 DB가 한다. 세 조회 모두 같은 유효 조건과 보관 일수를 넘기는지 확인한다.
+    cache, _, _, cursor = _cache(monkeypatch)
+    assert cache.lookup("청년 창업 감면", None)[0] == []
+    assert len(cursor.sql) == 3  # 정확 키, legacy 키, 유사도
+    for sql, params in zip(cursor.sql, cursor.params):
+        assert "make_interval(days => %s)" in sql
+        assert "max(updated_at) FROM rag_documents WHERE source_type = 'tax_document'" in sql
+        assert 30 in params
+    assert cursor.params[2][1] == 30  # <=> 비교 벡터 사이의 보관 일수
+
+
+def test_save_deletes_invalid_cache_before_upsert(monkeypatch) -> None:
+    cache, _, _, cursor = _cache(monkeypatch)
+    cache.save("청년 창업 감면", None, [{"id": 323}], ["제6조"], [0.1] * 1536)  # type: ignore[list-item]
+    assert cursor.sql[0].startswith("DELETE FROM tax_rag_cache WHERE NOT (")
+    assert cursor.params[0] == (30,)
+    assert "INSERT INTO tax_rag_cache" in cursor.sql[1]
+
+
+def test_tax_cache_ttl_days_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="TAX_CACHE_TTL_DAYS"):
+        Settings(_env_file=None, tax_cache_ttl_days=0)
+
+
 def test_negative_evidence_decision_is_restored_for_same_hop(monkeypatch) -> None:
     question = "조세특례제한법 청년 요건"
     conditions = _user_conditions(question, None)

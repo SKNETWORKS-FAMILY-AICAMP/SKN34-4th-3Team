@@ -48,7 +48,13 @@ from src.rag.backend_tasks import (
     generate_legal_basis,
     summarize_announcement,
 )
-from src.features.receipt_ocr import MIN_TEXT_CHARACTERS, OcrResult, OcrUnavailableError, run_ocr
+from src.features.receipt_ocr import (
+    MIN_TEXT_CHARACTERS,
+    OcrBusyError,
+    OcrResult,
+    OcrUnavailableError,
+    run_ocr_limited,
+)
 from src.rag.discovery import PolicyDiscoveryService
 from src.rag.graph import GraphState, build_graph
 from src.rag.guardrails import RagInputError, validate_question, validate_top_k
@@ -1228,10 +1234,16 @@ async def adapter_receipt_ocr(
 
     ocr: OcrResult | None = None
     try:
-        candidate = await asyncio.to_thread(run_ocr, raw_image)
+        candidate = await run_ocr_limited(raw_image)
         if candidate.text_length >= MIN_TEXT_CHARACTERS:
             ocr = candidate
-    except OcrUnavailableError:
+    except OcrBusyError as exc:
+        raise ApiError(
+            status_code=503,
+            detail="receipt OCR is busy",
+        ) from exc
+    # 오래 걸리는 OCR은 기다리지 않고 Vision으로 읽는다.
+    except (OcrUnavailableError, TimeoutError):
         ocr = None
 
     try:

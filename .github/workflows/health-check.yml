@@ -1,0 +1,40 @@
+# 운영 서버 상태를 서버 밖에서 주기적으로 확인한다. 실패하면 GitHub 실패 메일로 알린다.
+# 필요한 Secrets: HEALTH_URL(예: https://<DOMAIN>/api/health)
+# schedule 은 기본 브랜치(main)에 있는 workflow 만 실행되고, 저장소 활동이 60일 없으면 비활성화된다.
+name: health-check
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # 10분마다(GitHub 사정으로 몇 분 늦을 수 있다)
+  workflow_dispatch:
+
+# 배포·수집(ec2-app)과 상관없이 돈다. SSH 를 쓰지 않는다.
+concurrency:
+  group: health-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check /api/health
+        env:
+          HEALTH_URL: ${{ secrets.HEALTH_URL }}
+        run: |
+          [ -n "$HEALTH_URL" ] || { echo "::error::HEALTH_URL Secret 이 없다"; exit 1; }
+          # 배포 중 재기동·인덱스 준비 구간을 장애로 보지 않도록 60초 간격으로 5번까지 확인한다.
+          summary="응답 없음"
+          for attempt in 1 2 3 4 5; do
+            if body=$(curl -fsS --max-time 20 "$HEALTH_URL"); then
+              if echo "$body" | jq -e '.postgres == "connected" and .ragReady == true' >/dev/null; then
+                echo "healthy (attempt $attempt)"
+                exit 0
+              fi
+              summary=$(echo "$body" | jq -c '{postgres, llm, ragReady}' 2>/dev/null || echo "JSON 아님")
+            fi
+            echo "attempt $attempt: $summary"
+            [ "$attempt" -lt 5 ] && sleep 60
+          done
+          echo "::error::운영 서버 상태 이상: $summary"
+          exit 1

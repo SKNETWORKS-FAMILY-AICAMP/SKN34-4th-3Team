@@ -1416,7 +1416,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     improve: '평가 내용을 참고해 항목을 수정하세요. 제목에 마우스를 올리거나 키보드로 선택하면 해당 평가를 볼 수 있습니다.',
   }[key] || '');
 
-  // 웹앱(/web.html): 단계별 버튼을 본문 아래 액션 바 하나로 모은다.
+  // 웹앱: 단계별 버튼을 본문 아래 액션 바 하나로 모은다.
   // 아직 안 한 단계 작업이 있으면 그 작업이, 끝났으면 다음 단계가 파란 주 버튼이 된다.
   const web = isWebApp();
   const stepAction = {

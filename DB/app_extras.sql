@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS tax_rag_cache (
     cached_result      JSONB NOT NULL,
     created_at         TIMESTAMPTZ DEFAULT now()
 );
+-- 유사 질문 조회(ORDER BY question_embedding <=> ...)가 캐시 전체를 훑지 않게 한다.
+CREATE INDEX IF NOT EXISTS tax_rag_cache_question_embedding_hnsw
+    ON tax_rag_cache USING hnsw (question_embedding vector_cosine_ops);
+-- 캐시 유효성 판단(세법 청크 최신 갱신 시각) 조회용.
+CREATE INDEX IF NOT EXISTS rag_documents_source_type_updated_at_idx
+    ON rag_documents (source_type, updated_at);
 
 -- 대화방
 CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -188,3 +194,9 @@ CREATE TABLE IF NOT EXISTS collection_failures (
 );
 CREATE INDEX IF NOT EXISTS idx_collection_failures_open
     ON collection_failures (script) WHERE resolved_at IS NULL;
+
+-- TIMESTAMP 컬럼의 now() 기본값을 앱 컨테이너(TZ=Asia/Seoul)와 같은 한국 시간으로 기록한다. 새 연결부터 적용된다.
+DO $$
+BEGIN
+    EXECUTE format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'Asia/Seoul');
+END $$;

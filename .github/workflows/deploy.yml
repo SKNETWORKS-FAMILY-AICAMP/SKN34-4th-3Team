@@ -23,6 +23,14 @@ jobs:
           TOKEN_SECRET: "ci-test-only-secret-1234567890abcdef"
         run: uv run python -m unittest discover tests
 
+      - name: LLM tests
+        working-directory: LLM
+        run: uv run pytest
+
+      # LLM 이미지(paddle·PP-OCR 모델 다운로드 포함)가 운영 EC2 에서 처음 깨지지 않게 미리 빌드해 본다.
+      - name: LLM image build
+        run: docker build -t llm-ci ./LLM
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24

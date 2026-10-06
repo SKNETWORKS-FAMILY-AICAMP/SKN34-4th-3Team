@@ -9,12 +9,11 @@ import { LoginModal } from './components/LoginModal.jsx';
 import { SubPage } from './pages/SubPage.jsx';
 import { MyPage } from './pages/MyPage.jsx';
 import { Home } from './pages/Home.jsx';
-import { MobileApp } from './mobile/MobileApp.jsx';
 import { useIsMobile } from './mobile/useIsMobile.js';
 import { WebTabBar } from './web/WebTabBar.jsx';
 import { WebToday } from './web/WebToday.jsx';
 
-// 반응형 웹앱(/web.html)은 주소 해시에 현재 화면을 남긴다(#/roadmap · #/mypage).
+// 반응형 웹앱은 주소 해시에 현재 화면을 남긴다(#/roadmap · #/mypage).
 const WEB_PAGES = ['roadmap', 'tax', 'expenses', 'gov', 'bizplan'];
 function viewFromHash() {
   const key = window.location.hash.replace(/^#\/?/, '');
@@ -23,8 +22,8 @@ function viewFromHash() {
   return { view: 'home', pageKey: 'tax' };
 }
 
-// variant='web': 반응형 웹앱(/web.html). 기존 PC 화면을 모든 폭에서 쓰고, 폭에 맞춰 배치만 바꾼다(web/web.css).
-// 그 외(index.html)에는 폭 768px 이하에서 모바일 앱, 넓으면 기존 PC 화면.
+// variant='web': 반응형 웹앱(진입점 web/main.jsx). 기존 PC 화면을 모든 폭에서 쓰고, 폭에 맞춰 배치만 바꾼다(web/web.css).
+// 모바일 전용 앱(src/mobile/MobileApp.jsx)은 연결하지 않는다(휴대폰도 같은 화면을 쓴다).
 export function App({ variant } = {}) {
   const isWeb = variant === 'web';
   const [user, setUser] = useState(null);
@@ -38,10 +37,8 @@ export function App({ variant } = {}) {
   const [roadmapDone, setRoadmapDone] = useState({});
   // 관심 정책 — 서버(saved_policies)가 원본. 화면 이동으로 MyPage가 언마운트돼도 유지되게 여기서 든다.
   const [savedPolicies, setSavedPolicies] = useState([]);
-  // 화면 폭 768px 이하에서는 모바일 전용 웹앱(src/mobile)을 보여준다. 데이터·API는 PC와 같이 쓴다.
+  // 화면 폭 768px 이하인지(휴대폰 폭에서는 홈 '오늘 챙길 일'을 그리지 않는다).
   const isMobile = useIsMobile();
-  // 모바일 앱 여부는 첫 로딩 때 한 번만 정한다(회전·창 크기 변경으로 화면이 바뀌어 입력이 사라지지 않게).
-  const [mobileApp] = useState(isMobile);
 
   // 웹앱: 화면이 바뀌면 주소에 남기고, 뒤로 가기 · 앞으로 가기로 화면을 되돌린다.
   useEffect(() => {
@@ -225,24 +222,6 @@ export function App({ variant } = {}) {
       onNavigate={handleNavigate}
     />
   );
-
-  if (mobileApp && !isWeb) {
-    return (
-      <React.Fragment>
-        <MobileApp
-          user={user}
-          roadmapDone={roadmapDone}
-          setRoadmapDone={updateRoadmapDone}
-          savedPolicies={savedPolicies}
-          onToggleSavedPolicy={toggleSavedPolicy}
-          onLogin={() => { setAfterLogin(null); setLoginOpen(true); }}
-          onLogout={() => { api.logout(); setUser(null); }}
-          onProfileSaved={setUser}
-        />
-        {modal}
-      </React.Fragment>
-    );
-  }
 
   if (view === 'mypage' && user) {
     return (

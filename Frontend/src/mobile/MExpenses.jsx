@@ -1,8 +1,9 @@
 // 03 지출관리: 요약 카드(금액 기준 인정률 · 합계 · 3색 막대 · 상태별 금액) → 밑줄 탭 → 한 카드 목록(스크롤)
-// + 떠 있는 "+ 영수증" 버튼. 행을 누르면 바텀시트에서 영수증 이미지를 보고 인정/불인정을 판정한다.
+// + 떠 있는 "+ 영수증" 버튼. 행을 누르면 바텀시트에서 영수증 이미지를 보고 지출항목을 바꿔 다시 판정한다.
 // 지출관리 화면만 앱 공통 3b 규칙(스크롤 금지 · 페이지 넘김 · 엑셀 버튼) 대신 이 화면 전용 시안을 따른다.
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { prepareReceiptImage } from '../receiptImage.js';
 import { Burger, Sheet, useToast } from './ui.jsx';
 
 const CATS = ['사무용품', '통신비', '차량유지비', '광고선전비', '임차료', '복리후생비', '접대비', '교육·도서', '기타'];
@@ -77,15 +78,18 @@ export function MExpenses({ user, params, onHome, onMenu, onLogin }) {
   const rows = [...placeholders, ...shown];
 
   const upload = async (files) => {
-    const valid = files.filter((f) => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type) && f.size <= 4 * 1024 * 1024);
-    if (valid.length < files.length) toast('JPEG·PNG·WebP, 4MB 이하만 올릴 수 있어요');
+    const valid = files.filter((f) => ['image/jpeg', 'image/png', 'image/webp'].includes(f.type));
+    if (valid.length < files.length) toast('JPEG·PNG·WebP 이미지만 올릴 수 있어요');
     if (!valid.length) return;
     setFilter('all');
     setUploading(valid.length);
     let failed = 0;
     for (const f of valid) {
       try {
-        await api.uploadReceipt(f);
+        // 카메라 원본처럼 큰 사진은 줄여서 올린다. 줄여도 4MB를 넘으면 실패로 센다.
+        const ready = await prepareReceiptImage(f);
+        if (ready) await api.uploadReceipt(ready);
+        else failed += 1;
       } catch (e) {
         if (e && e.status === 401) { onLogin(); break; }
         failed += 1;
@@ -95,15 +99,6 @@ export function MExpenses({ user, params, onHome, onMenu, onLogin }) {
     setUploading(0);
     await load();
     toast(failed ? `${failed}건을 올리지 못했어요` : '영수증을 판독했어요');
-  };
-
-  // 판정: 요약 · 막대 · 탭 숫자가 바로 바뀌도록 목록 상태를 즉시 고친다.
-  // TODO(확인 필요): 수동 판정을 저장하는 백엔드 API가 아직 없어 새로고침하면 자동 판정으로 돌아간다.
-  const judge = (tier) => {
-    if (!sel) return;
-    setItems((cur) => cur.map((x) => (x.expenseId === sel.expenseId ? { ...x, tier } : x)));
-    setSelId(null);
-    toast(tier === 'high' ? '인정으로 판정했어요' : '불인정으로 판정했어요');
   };
 
   const changeCategory = async (category) => {
@@ -229,10 +224,6 @@ export function MExpenses({ user, params, onHome, onMenu, onLogin }) {
                 </select>
               </label>
               <button type="button" onClick={remove} disabled={busy}>삭제</button>
-            </div>
-            <div className="m-xp-sheet__acts">
-              <button type="button" className="is-bad" onClick={() => judge('low')} disabled={busy}>불인정</button>
-              <button type="button" className="is-ok" onClick={() => judge('high')} disabled={busy}>인정</button>
             </div>
           </>
         )}

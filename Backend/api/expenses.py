@@ -47,7 +47,7 @@ def upload_receipt(
     request,
     image: UploadedFile = File(..., description="영수증 이미지 파일"),
 ):
-    """이미지 바이트를 LLM Vision OCR로 보내고, 실패 시 파일명 규칙으로 추출합니다."""
+    """이미지 바이트를 LLM OCR로 보내 추출합니다. 읽지 못하면 저장하지 않고 503을 반환합니다."""
     filename = image.name or "receipt.jpg"
     content = image.read()
     if len(content) > MAX_RECEIPT_BYTES:

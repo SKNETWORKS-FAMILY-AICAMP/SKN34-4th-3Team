@@ -280,49 +280,34 @@ def create_receipt(
     image_bytes: bytes | None = None,
 ) -> dict:
     llm = extract_receipt(filename, image_base64=image_base64, mime_type=mime_type)
-    if llm:
-        vendor = llm.get("vendor") or "상호 미상"
-        amount = int(llm.get("amount") or 0)
-        items = llm.get("items") or []
-        spent = date.fromisoformat(str(llm.get("date") or date.today())[:10])
-        proof_type = llm.get("proofType") or "unknown"
-        category = _classify(vendor, amount, llm.get("category"), items)
-        source = llm.get("source") or "heuristic"
-        # 못 읽은 값은 아래에서 기본값으로 채워지므로, 실제로 읽은 것인지 따로 기록해 둔다.
-        read_meta = {
-            "source": source,
-            "ocrConfidence": llm.get("ocrConfidence"),
-            "read": {
-                "date": bool(llm.get("date")),
-                "vendor": bool(llm.get("vendor")),
-                "amount": bool(llm.get("amount")),
-                "items": bool(items),
-                "proof": proof_type != "unknown",
-            },
-            "evidence": {
-                "date": llm.get("dateText"),
-                "vendor": llm.get("vendorText"),
-                "amount": llm.get("amountText"),
-                "proof": llm.get("proofEvidence"),
-            },
-        }
-    else:
-        vendor = "샘플문구점" if "office" in filename.lower() else "강남카페"
-        amount = 18000
-        items = (
-            [{"name": "아이스 아메리카노", "price": None}, {"name": "크루아상", "price": None}]
-            if "카페" in vendor
-            else [{"name": "노트", "price": None}, {"name": "펜", "price": None}]
-        )
-        spent = date.today()
-        proof_type = "unknown"
-        category = _classify(vendor, amount, None, items)
-        source = "mock"
-        read_meta = {
-            "source": source,
-            "read": {"date": False, "vendor": False, "amount": False, "items": False, "proof": False},
-            "evidence": {},
-        }
+    # 읽지 못한 영수증을 임의 값으로 저장하면 잘못된 지출이 남는다. 저장하지 않고 다시 올리게 한다.
+    if not llm:
+        raise HttpError(503, "영수증을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    vendor = llm.get("vendor") or "상호 미상"
+    amount = int(llm.get("amount") or 0)
+    items = llm.get("items") or []
+    spent = date.fromisoformat(str(llm.get("date") or date.today())[:10])
+    proof_type = llm.get("proofType") or "unknown"
+    category = _classify(vendor, amount, llm.get("category"), items)
+    source = llm.get("source") or "heuristic"
+    # 못 읽은 값은 아래에서 기본값으로 채워지므로, 실제로 읽은 것인지 따로 기록해 둔다.
+    read_meta = {
+        "source": source,
+        "ocrConfidence": llm.get("ocrConfidence"),
+        "read": {
+            "date": bool(llm.get("date")),
+            "vendor": bool(llm.get("vendor")),
+            "amount": bool(llm.get("amount")),
+            "items": bool(items),
+            "proof": proof_type != "unknown",
+        },
+        "evidence": {
+            "date": llm.get("dateText"),
+            "vendor": llm.get("vendorText"),
+            "amount": llm.get("amountText"),
+            "proof": llm.get("proofEvidence"),
+        },
+    }
 
     rid = repo.insert_receipt(user_id, filename, image_bytes=image_bytes, mime_type=mime_type)
     repo.insert_extraction(rid, spent, vendor, amount, items, proof_type, read_meta)
