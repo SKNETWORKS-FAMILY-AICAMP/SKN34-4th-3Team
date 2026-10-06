@@ -5,12 +5,22 @@
 #   docker compose -f docker-compose.app.yml up -d --no-build
 # 발표자료(/ppt/)까지 띄우려면 .env 에 COMPOSE_PROFILES=presentation 을 둔다.
 # 절차: Docs/AWS_DEPLOY_GUIDE.md
+# 컨테이너 로그(json-file)가 디스크를 채우지 않게 서비스마다 10MB x 3개로 제한한다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
+    logging: *default-logging
     image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY(GHCR 이미지 경로)가 필요하다}/backend:${APP_IMAGE_TAG:?APP_IMAGE_TAG(검증된 커밋 SHA)가 필요하다}
     mem_limit: ${BACKEND_MEM_LIMIT:-0}
     restart: unless-stopped
     environment:
+      # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
+      TZ: Asia/Seoul
       LLM_API_URL: http://llm:8001
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
@@ -31,6 +41,7 @@ services:
         condition: service_healthy
 
   frontend:
+    logging: *default-logging
     image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/frontend:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
     mem_limit: ${FRONTEND_MEM_LIMIT:-0}
     restart: unless-stopped
@@ -46,18 +57,22 @@ services:
         condition: service_healthy
 
   presentation:
+    logging: *default-logging
     image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/presentation:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
     mem_limit: ${PRESENTATION_MEM_LIMIT:-0}
     profiles: ["presentation"]
     restart: unless-stopped
 
   llm:
+    logging: *default-logging
     image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/llm:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
     mem_limit: ${LLM_MEM_LIMIT:?운영 실측 후 LLM_MEM_LIMIT을 지정해야 한다}
     restart: unless-stopped
     env_file:
       - .env
     environment:
+      # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
+      TZ: Asia/Seoul
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
       VECTOR_STORE_BACKEND: postgres
       # Postgres 와 같은 Data EC2 에 있다.
@@ -73,6 +88,7 @@ services:
   # 배포마다 app_extras.sql 을 Data EC2 의 DB 에 다시 적용한다(전 문장 재실행 안전).
   # up 으로는 뜨지 않고 run --rm db-migrate 로만 실행한다.
   db-migrate:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     profiles: ["migrate"]
     restart: "no"
@@ -85,6 +101,7 @@ services:
   # 수집 스크립트(DB/run_collection.py)를 Data EC2 의 DB 에 실행한다.
   # up 으로는 뜨지 않고 run --rm collector 로만 실행한다(.github/workflows/collect.yml).
   collector:
+    logging: *default-logging
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     profiles: ["collector"]
     restart: "no"
@@ -92,6 +109,8 @@ services:
     env_file:
       - .env
     environment:
+      # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
+      TZ: Asia/Seoul
       DB_HOST: ${COMPOSE_DB_HOST:?COMPOSE_DB_HOST(Data EC2 private IP)가 필요하다}
       DB_PORT: ${COMPOSE_DB_PORT:-5432}
       # 바인드 마운트한 DB/ 안에 .venv 를 만들지 않는다.

@@ -971,7 +971,7 @@ export function BizplanManager({ onOpenBizplan }) {
   );
 }
 
-// 웹앱(/web.html) 마이페이지 메뉴 아이콘 (24px 선 아이콘)
+// 웹앱 마이페이지 메뉴 아이콘 (24px 선 아이콘)
 const MP_ICON = {
   home: 'M4 5h7v7H4zM13 5h7v4h-7zM13 11h7v8h-7zM4 14h7v5H4z',
   profile: 'M12 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM5 20c.8-3.4 3.6-5.5 7-5.5s6.2 2.1 7 5.5',

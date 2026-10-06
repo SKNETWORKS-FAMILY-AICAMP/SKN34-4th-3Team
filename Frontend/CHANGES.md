@@ -17,6 +17,20 @@
 
 ---
 
+## 2026-10-06 · `/`·`/web.html` 통합, 영수증 업로드 전 축소
+**요청**: 휴대폰 원본 사진이 4MB 제한으로 거부되고 모바일 인정·불인정 판정이 새로고침 후 사라지는 문제 해결(위험 보고서 ⑪). `/`와 `/web.html`의 영수증 화면이 달라서 `/web.html`을 없애고 모바일·PC 모두 `/`에서 web.html 화면을 쓰도록 통합
+**변경**:
+- `src/receiptImage.js` 추가 — 긴 변 2000px 또는 4MB 초과 이미지를 긴 변 2000px JPEG로 축소, 4MB 안으로 못 만들면 실패. `tests/receiptImage.test.mjs` 추가
+- `src/pages/ExpenseTracker.jsx`, `src/mobile/MExpenses.jsx` — 업로드 전 4MB 거부 대신 축소 후 업로드
+- `src/mobile/MExpenses.jsx`, `src/styles/15-mobile-app.css` — 저장되지 않는 인정·불인정 버튼과 스타일 제거
+- `index.html` — 진입 스크립트를 `/src/web/main.jsx`로 변경. `web.html`, `src/main.jsx` 삭제, `vite.config.js` 다중 입력 제거
+- `src/App.jsx` — 모바일 전용 앱(`MobileApp`) 분기 제거. `src/mobile`은 코드만 보존
+- `src/web/main.jsx` — 서비스워커 캐시로 `/web.html`이 열리면 주소를 `/`로 정리
+- `nginx-locations.conf` — `/web.html` → `/` 301
+- 주석의 `(/web.html)` 표기 정리(`env.js`, `WebTabBar.jsx`, `WebToday.jsx`, `Home.jsx`, `MyPage.jsx`, `BusinessPlanPage.jsx`, `02-drawer-nav.css`, `web.css`)
+- `Docs/MOBILE_CSS_GUIDE.md` — 진입점 하나·기능 동일·저장되지 않는 동작 금지 원칙과 1-1절(이번 사례) 추가
+**메모**: 휴대폰 지출관리도 PC 화면(판정 근거·품목·상호 수정·엑셀)을 쓰고 인정·불인정 버튼은 없다. PC `/`도 주소 해시(`#/expenses`)·'오늘 챙길 일' 등 기존 web.html 동작을 따른다. 되돌리려면 `index.html` 스크립트를 `/src/main.jsx`로 바꾸고 `App.jsx`의 `MobileApp` 분기를 git 이력에서 복구한다(권장하지 않음, 가이드 1-1절)
+
 ## 2026-09-18 ~ 2026-09-30 · 저장소 이전 후 변경 요약 (git log 기준)
 **요청**: 개별 요청 기록이 없어 `git log -- Frontend/`의 커밋을 날짜별로 묶어 정리함
 **변경**:

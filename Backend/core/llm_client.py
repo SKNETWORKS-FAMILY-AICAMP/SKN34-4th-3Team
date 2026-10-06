@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 import uuid
 import urllib.error
 import urllib.request
@@ -28,6 +29,7 @@ from core.config import (
     LLM_TIMEOUT_REINDEX,
     LLM_TIMEOUT_SECONDS,
     LLM_TIMEOUT_SUMMARIZE,
+    LLM_WARMUP_WAIT,
 )
 
 
@@ -52,6 +54,8 @@ _CHAT_TIMEOUTS = {
     "saving": LLM_TIMEOUT_CHAT_TAX,
 }
 
+_WARMUP_POLL_SECONDS = 10
+
 
 def llm_status() -> dict:
     health = _get("/health", timeout=LLM_TIMEOUT_READY)
@@ -75,22 +79,28 @@ def reindex() -> dict | None:
 
 
 def ensure_index_ready() -> bool:
-    """기동 워밍업. 인덱스가 없을 때만 재색인한다.
+    """기동 워밍업. LLM warm-up이 끝나기를 기다리고, 끝내 준비되지 않을 때만 재색인한다.
 
-    LLM은 기동 시 인덱스를 만들지 않는다(`create_app`이 빈 runtime을 만든다).
-    누가 한 번 재색인해 주기 전까지 모든 질의가 `integration_unavailable`로 끝나므로
-    Backend가 기동할 때 대신 깨워 준다.
+    LLM은 첫 HTTP 요청(compose healthcheck)에서 스스로 인덱스를 만든다(asgi warm-up).
+    여기서 바로 재색인하면 warm-up이 막 만든 인덱스를 다시 지우고 만들므로,
+    `LLM_WARMUP_WAIT` 동안 준비 여부만 확인하고 그래도 안 되면(warm-up 실패) 재색인한다.
 
     질의마다 준비 상태를 묻던 것(P0-2-1에서 제거)과는 다르다. 그건 챗 요청 경로에서
     매번 왕복하던 것이고 이건 기동 시 한 번 도는 워밍업이다.
     """
-    ready = _get("/rag/ready", timeout=LLM_TIMEOUT_READY)
-    if ready is None:
-        logger.warning("LLM warm-up skipped: /rag/ready unreachable")
-        return False
-    if ready.get("index_ready"):
-        logger.info("LLM warm-up skipped: index already ready (chunks=%s)", ready.get("chunk_count"))
-        return True
+    deadline = time.monotonic() + LLM_WARMUP_WAIT
+    while True:
+        ready = _get("/rag/ready", timeout=LLM_TIMEOUT_READY)
+        if ready is None:
+            logger.warning("LLM warm-up skipped: /rag/ready unreachable")
+            return False
+        if ready.get("index_ready"):
+            logger.info("LLM warm-up skipped: index already ready (chunks=%s)", ready.get("chunk_count"))
+            return True
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(_WARMUP_POLL_SECONDS)
+    logger.warning("LLM index not ready after %ss, requesting reindex", LLM_WARMUP_WAIT)
     result = reindex()
     if result is None:
         logger.warning("LLM warm-up failed: reindex request did not succeed")

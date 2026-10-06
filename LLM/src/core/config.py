@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     tax_cache_enabled: bool = True
     tax_cache_similarity_threshold: float = 0.95
     tax_cache_decision_similarity_threshold: float = 0.98
+    tax_cache_ttl_days: int = 30
     database_url: SecretStr | None = None
     database_connect_timeout: int = 5
     vector_store_backend: Literal["postgres", "in_memory"] = "postgres"
@@ -234,6 +235,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TAX_CACHE_DECISION_SIMILARITY_THRESHOLD must be between 0 and 1"
             )
+        if self.tax_cache_ttl_days < 1:
+            raise ValueError("TAX_CACHE_TTL_DAYS must be at least 1")
         if (
             self.tax_cache_decision_similarity_threshold
             < self.tax_cache_similarity_threshold

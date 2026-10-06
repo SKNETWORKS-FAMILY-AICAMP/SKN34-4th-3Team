@@ -49,4 +49,7 @@ done
 [ "$ready" = true ] || { echo '::error::DB/LLM/RAG readiness check failed' >&2; exit 1; }
 docker image prune -f
 docker builder prune -f --filter until=168h
+usage=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+echo "disk usage: ${usage}%"
+[ "$usage" -lt 80 ] || echo "::warning::App EC2 디스크 사용률 ${usage}%"
 echo "Deployment ready: $RELEASE_SHA"

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import receipt_ocr
 from src.features.receipt_ocr import OcrLine, OcrResult
 from src.rag.backend_tasks import (
     BusinessPlanEvaluation,
@@ -149,7 +150,7 @@ def test_receipt_falls_back_to_vision_when_ocr_text_yields_nothing(
         image_width=100,
         image_height=100,
     )
-    monkeypatch.setattr(rag_routes, "run_ocr", lambda _data: garbage)
+    monkeypatch.setattr(receipt_ocr, "run_ocr", lambda _data: garbage)
 
     async def empty_from_ocr(_llm, *, ocr_text: str) -> ReceiptExtractionGeneration:
         return ReceiptExtractionGeneration()
@@ -181,7 +182,7 @@ def test_receipt_keeps_ocr_result_when_it_found_something(
         image_width=100,
         image_height=100,
     )
-    monkeypatch.setattr(rag_routes, "run_ocr", lambda _data: readable)
+    monkeypatch.setattr(receipt_ocr, "run_ocr", lambda _data: readable)
 
     async def filled_from_ocr(_llm, *, ocr_text: str) -> ReceiptExtractionGeneration:
         return ReceiptExtractionGeneration(amount=29210)
@@ -202,3 +203,23 @@ def test_receipt_keeps_ocr_result_when_it_found_something(
     body = response.json()
     assert body["source"] == "ocr_llm"
     assert body["ocrConfidence"] == 90.0
+
+
+def test_receipt_returns_503_when_ocr_queue_is_full(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(receipt_ocr, "_ocr_pending", receipt_ocr.OCR_MAX_PENDING)
+
+    async def vision_must_not_run(_llm, *, image_data_url: str) -> ReceiptExtractionGeneration:
+        raise AssertionError("대기열이 차면 Vision으로 넘기지 않고 바로 거절해야 한다")
+
+    monkeypatch.setattr(rag_routes, "extract_receipt", vision_must_not_run)
+    client = build_client(tmp_path / "index.json")
+
+    response = client.post(
+        "/ocr/receipt",
+        files={"image": ("receipt.jpg", b"fake-jpeg", "image/jpeg")},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["message"] == "receipt OCR is busy"

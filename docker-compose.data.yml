@@ -2,8 +2,16 @@
 #   docker compose -f docker-compose.data.yml up -d --build
 # 포트는 DATA_BIND_IP(이 인스턴스의 private IP)에만 연다. 접근 제어는 보안그룹(sg-data)이 맡는다.
 # 절차: Docs/AWS_DEPLOY_GUIDE.md
+# 컨테이너 로그(json-file)가 디스크를 채우지 않게 서비스마다 10MB x 3개로 제한한다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     container_name: startup_db
     restart: always
@@ -25,6 +33,7 @@ services:
       retries: 10
 
   elasticsearch:
+    logging: *default-logging
     build: ./elasticsearch
     container_name: elasticsearch
     environment:

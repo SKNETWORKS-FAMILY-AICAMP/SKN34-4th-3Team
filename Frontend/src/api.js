@@ -335,7 +335,10 @@ export const api = {
   calendarUpcoming: (params, opt) => apiGet('/calendar/upcoming' + qs(params), opt),
   taxSchedule: (params, opt) => apiGet('/tax/schedule' + qs(params), opt),
   taxDocuments: (params, opt) => apiGet('/tax/documents' + qs(params), opt),
-  taxCheck: (body, opt) => apiPost('/tax/tax-reduction/check', body, opt),
+  // LLM을 부르는 호출의 제한 시간은 Backend → LLM 제한(Backend/core/config.py LLM_TIMEOUT_*)보다 10초 이상 길게 둔다.
+  // 프런트가 먼저 포기하면 서버는 작업을 끝내고도 실패로 보이고, 재시도로 LLM 호출이 중복된다.
+  // 창업 감면 확인: LLM_TIMEOUT_LEGAL_BASIS(30초) + DB 처리.
+  taxCheck: (body, opt) => apiPost('/tax/tax-reduction/check', body, { timeout: 45000, ...opt }),
   // 세무 멀티홉은 Backend가 LLM 응답을 최대 120초 기다린다.
   // 공통 POST 기본 제한(30초)으로 먼저 중단하지 않도록 채팅에만 여유를 둔다.
   chat: (body, opt) => apiPost('/chat/messages', body, {
@@ -356,11 +359,12 @@ export const api = {
   // 캐시가 없으면 LLM이 즉시 요약을 생성하므로 일반 GET보다 긴 제한 시간을 둔다.
   announcementSummary: (announcementId, opt) => apiGet(
     `/announcements/${announcementId}/summary`,
-    { timeout: 50000, ...opt }
+    { timeout: 60000, ...opt }
   ),
-  summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, opt),
-  // 영수증 OCR은 Vision 호출이라 일반 POST보다 여유 있게 기다린다.
-  uploadReceipt: (file, opt) => apiUpload('/expenses/receipts', file, { timeout: 45000, ...opt }),
+  // LLM_TIMEOUT_SUMMARIZE(45초)보다 길게 둔다.
+  summarizeAnnouncement: (body, opt) => apiPost('/announcements/summary', body, { timeout: 60000, ...opt }),
+  // 영수증 OCR은 Vision 호출이라 일반 POST보다 여유 있게 기다린다(LLM_TIMEOUT_OCR 40초 + 10초).
+  uploadReceipt: (file, opt) => apiUpload('/expenses/receipts', file, { timeout: 50000, ...opt }),
   receiptDetail: (receiptId, opt) => apiGet(`/expenses/receipts/${receiptId}`, opt),
   receiptImage: (receiptId, opt) => apiGetBlob(`/expenses/receipts/${receiptId}/image`, opt),
   expenses: (params, opt) => apiGet('/expenses' + qs(params), opt),
@@ -372,11 +376,12 @@ export const api = {
   deleteExpenseItem: (expenseId, itemIndex, opt) => apiDelete(`/expenses/${expenseId}/items/${itemIndex}`, opt),
   // LLM이 PSST 초안을 새로 쓰는 호출이라 여유 있게 기다린다.
   generateBusinessPlan: (body, opt) => apiPost('/bizplan/generate', body, { timeout: 130000, ...opt }),
-  evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 70000, ...opt }),
+  // 진단·정리·양식 검사·출력도 Backend가 LLM_TIMEOUT_BIZPLAN(120초)까지 기다리므로 초안 생성과 같게 둔다.
+  evaluateBusinessPlan: (body, opt) => apiPost('/bizplan/evaluate', body, { timeout: 130000, ...opt }),
   // 사업계획서 입력 정리·양식 검사·문서 출력 계약.
-  refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 70000, ...opt }),
-  inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 70000, ...opt }),
-  renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 70000, ...opt }),
+  refineBusinessPlan: (body, opt) => apiPost('/bizplan/refine', body, { timeout: 130000, ...opt }),
+  inspectBusinessPlanTemplate: (body, opt) => apiPost('/bizplan/template-inspect', body, { timeout: 130000, ...opt }),
+  renderBusinessPlan: (body, opt) => apiPost('/bizplan/render', body, { timeout: 130000, ...opt }),
   // 임시저장에는 양식·이미지 Base64가 들어가 최대 10MB대라 전송 시간을 넉넉히 둔다.
   bizplanDraft: (opt) => apiGet('/bizplan/draft', { timeout: 30000, ...opt }),
   saveBizplanDraft: (data, opt) => apiPut('/bizplan/draft', { data }, { timeout: 30000, ...opt }),

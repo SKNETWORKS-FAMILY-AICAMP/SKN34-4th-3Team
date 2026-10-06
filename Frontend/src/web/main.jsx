@@ -1,9 +1,12 @@
-// 반응형 웹앱 진입점(/web.html). 기존 PC 화면(홈 · 기능 페이지 · 마이페이지)을 모든 폭에서 쓰고,
+// 앱 진입점(/). 기존 PC 화면(홈 · 기능 페이지 · 마이페이지)을 모든 폭에서 쓰고,
 // html.is-web 아래에서만 동작하는 web.css로 휴대폰 · 태블릿 폭의 배치를 바꾼다.
 import { createRoot } from 'react-dom/client';
 import App from '../App.jsx';
 import '../styles.css';
 import './web.css';
+
+// 예전 주소(/web.html)를 서비스워커 캐시로 연 경우 주소를 /로 정리한다(서버는 301로 보낸다).
+if (window.location.pathname === '/web.html') window.history.replaceState(null, '', '/' + window.location.hash);
 
 document.documentElement.classList.add('is-web');
 

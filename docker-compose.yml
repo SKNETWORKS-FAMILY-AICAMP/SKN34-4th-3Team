@@ -4,6 +4,8 @@ services:
       context: ./Backend
     restart: unless-stopped
     environment:
+      # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
+      TZ: Asia/Seoul
       LLM_API_URL: http://llm:8001
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-25}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:-db}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
@@ -58,6 +60,8 @@ services:
     env_file:
       - .env
     environment:
+      # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
+      TZ: Asia/Seoul
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${COMPOSE_DB_HOST:-db}:${COMPOSE_DB_PORT:-5432}/${POSTGRES_DB}
       VECTOR_STORE_BACKEND: postgres
       ELASTICSEARCH_URL: http://elasticsearch:9200

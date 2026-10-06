@@ -3,6 +3,8 @@
 paddle 파이프라인과 tesseract 실행(`_ocr_image`)은 대역으로 바꿔, 설치 여부와 무관하게 선택 로직만 검증한다.
 """
 
+import asyncio
+import threading
 from io import BytesIO
 
 import numpy as np
@@ -212,6 +214,62 @@ def test_run_ocr_rejects_undecodable_bytes_before_any_engine(monkeypatch: pytest
 
     with pytest.raises(OcrUnavailableError):
         ocr.run_ocr(b"not an image")
+
+
+def test_run_ocr_shrinks_large_photo_before_paddle(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakePaddle()
+    monkeypatch.setattr(ocr, "_get_paddle_pipeline", lambda: fake)
+
+    result = ocr.run_ocr(_png_bytes(4000, 1000))
+
+    assert fake.inputs[0].shape == (500, 2000, 3)
+    assert (result.image_width, result.image_height) == (2000, 500)
+
+
+# ---- run_ocr_limited: 전용 스레드·대기열 상한·대기 시간 상한 ----
+
+
+def test_run_ocr_limited_returns_result_and_frees_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    expected = _result(("합계 1,000", 90.0))
+    monkeypatch.setattr(ocr, "run_ocr", lambda _b: expected)
+
+    async def scenario() -> OcrResult:
+        result = await ocr.run_ocr_limited(b"image")
+        await asyncio.sleep(0)  # 완료 콜백이 대기열 자리를 돌려줄 기회를 준다.
+        return result
+
+    assert asyncio.run(scenario()) is expected
+    assert ocr._ocr_pending == 0
+
+
+def test_run_ocr_limited_rejects_when_queue_is_full(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ocr, "_ocr_pending", ocr.OCR_MAX_PENDING)
+    monkeypatch.setattr(ocr, "run_ocr", lambda _b: pytest.fail("OCR should not run"))
+
+    with pytest.raises(ocr.OcrBusyError):
+        asyncio.run(ocr.run_ocr_limited(b"image"))
+
+
+def test_run_ocr_limited_times_out_but_keeps_slot_until_ocr_ends(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = threading.Event()
+    monkeypatch.setattr(ocr, "OCR_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr(ocr, "run_ocr", lambda _b: release.wait(5) and _result(("합계", 90.0)))
+
+    async def scenario() -> tuple[int, int]:
+        with pytest.raises(TimeoutError):
+            await ocr.run_ocr_limited(b"image")
+        still_running = ocr._ocr_pending
+        release.set()
+        for _ in range(100):
+            if ocr._ocr_pending == 0:
+                break
+            await asyncio.sleep(0.01)
+        return still_running, ocr._ocr_pending
+
+    try:
+        assert asyncio.run(scenario()) == (1, 0)
+    finally:
+        release.set()
 
 
 def test_group_rows_keeps_rows_apart_when_vertical_gap_is_large() -> None:

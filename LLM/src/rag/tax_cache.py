@@ -28,6 +28,15 @@ _EVIDENCE_DECISION_CACHE_VERSION = "tax-evidence-v1"
 _DECISION_SIGNATURE_VERSION = "tax-decision-facts-v1"
 _EMBEDDING_VERSION = "topic-v3"
 _NEGATIVE_EVIDENCE_TTL = timedelta(hours=6)
+# 보관 기간(TAX_CACHE_TTL_DAYS)이 지났거나, 세법 청크가 추가·변경되기 전에 만든 캐시는 쓰지 않는다.
+# 수집으로 새 세법이 들어오면 근거 후보가 달라지므로 이전 검색 결과를 재사용하면 안 된다.
+# 파라미터: 보관 일수 1개.
+_VALID_CACHE_CONDITION = (
+    "created_at >= now() - make_interval(days => %s) "
+    "AND created_at >= COALESCE("
+    "(SELECT max(updated_at) FROM rag_documents WHERE source_type = 'tax_document'), "
+    "'-infinity')"
+)
 TaxEvidenceId = int | str
 _SOURCE_EVIDENCE_ID = re.compile(r"tax_source:([1-9][0-9]*):[0-9a-f]{64}\Z")
 
@@ -217,16 +226,17 @@ class TaxRagCache:
         with connect_database(self._settings) as connection:
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
-                    "SELECT cached_result, created_at FROM tax_rag_cache WHERE cache_key = %s",
-                    (key,),
+                    "SELECT cached_result, created_at FROM tax_rag_cache "
+                    f"WHERE cache_key = %s AND {_VALID_CACHE_CONDITION}",
+                    (key, self._settings.tax_cache_ttl_days),
                 )
                 exact = cursor.fetchone()
                 if exact is None:
                     legacy_key = self._key(question, conditions, prior_ids)
                     cursor.execute(
                         "SELECT cached_result, created_at FROM tax_rag_cache "
-                        "WHERE cache_key = %s",
-                        (legacy_key,),
+                        f"WHERE cache_key = %s AND {_VALID_CACHE_CONDITION}",
+                        (legacy_key, self._settings.tax_cache_ttl_days),
                     )
                     exact = cursor.fetchone()
         if exact is not None:
@@ -256,15 +266,16 @@ class TaxRagCache:
             register_vector(connection)
             with connection.cursor(row_factory=dict_row) as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT cached_result, created_at,
                            1 - (question_embedding <=> %s) AS similarity
                     FROM tax_rag_cache
                     WHERE question_embedding IS NOT NULL
+                      AND {_VALID_CACHE_CONDITION}
                     ORDER BY question_embedding <=> %s
                     LIMIT 5
                     """,
-                    (Vector(embedding), Vector(embedding)),
+                    (Vector(embedding), self._settings.tax_cache_ttl_days, Vector(embedding)),
                 )
                 candidates = cursor.fetchall()
         for candidate in candidates:
@@ -348,6 +359,11 @@ class TaxRagCache:
         with connect_database(self._settings) as connection:
             register_vector(connection)
             with connection.cursor() as cursor:
+                # 더 이상 쓰지 않는 캐시가 쌓여 유사도 조회가 느려지지 않게 저장할 때 함께 지운다.
+                cursor.execute(
+                    f"DELETE FROM tax_rag_cache WHERE NOT ({_VALID_CACHE_CONDITION})",
+                    (self._settings.tax_cache_ttl_days,),
+                )
                 cursor.execute(
                     """
                     INSERT INTO tax_rag_cache
