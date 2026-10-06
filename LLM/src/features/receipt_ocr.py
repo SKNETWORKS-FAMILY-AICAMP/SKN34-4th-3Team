@@ -11,11 +11,13 @@ LLM은 이 결과(글자)만 받아 해석한다. 이미지를 직접 보고 값
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -76,15 +78,30 @@ PADDLE_CPU_THREADS = int(os.getenv("OCR_CPU_THREADS", str(min(4, os.cpu_count() 
 # PP-OCR은 "베이컨토마토", "5,480", "1"을 따로 돌려주므로, 영수증 한 줄로 묶어야 LLM이 품목과 금액을 짝짓는다.
 ROW_CENTER_RATIO = 0.5
 
+# ---- 요청 처리 제한 ----
+# OCR은 전용 스레드 하나에서 한 장씩 돈다. 기본 스레드 풀(2 vCPU면 6개)을 OCR 대기로 채우면
+# 검색·DB 같은 다른 LLM 작업까지 밀린다. 실행 중 1장 + 대기 1장을 넘으면 바로 거절한다.
+OCR_MAX_PENDING = 2
+# 이 시간 안에 OCR이 끝나지 않으면 기다리지 않고 Vision으로 읽는다. OCR + LLM 정리 + Vision이
+# Backend의 LLM_TIMEOUT_OCR(40초) 안에 끝나야 한다.
+OCR_WAIT_SECONDS = 15.0
+
 _logger = logging.getLogger(__name__)
 _paddle_pipeline: Any = None
 _paddle_failed = False
 # 파이프라인 생성과 추론을 한 번에 하나씩만 한다(모델 중복 로드 방지, 추론 객체는 스레드 안전이 보장되지 않음).
 _paddle_lock = threading.Lock()
+_ocr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="receipt-ocr")
+# 실행 중 + 대기 중인 OCR 수. 이벤트 루프 스레드에서만 바꾼다.
+_ocr_pending = 0
 
 
 class OcrUnavailableError(RuntimeError):
     """OCR 엔진이 없거나 실행에 실패해 글자를 읽지 못했다."""
+
+
+class OcrBusyError(RuntimeError):
+    """처리 중·대기 중인 영수증이 많아 새 요청을 받지 않는다."""
 
 
 @dataclass(frozen=True)
@@ -132,6 +149,9 @@ def run_ocr(image_bytes: bytes) -> OcrResult:
     PP-OCRv5 한국어로 읽고, paddle을 쓸 수 없거나 실행에 실패하면 Tesseract로 읽는다.
     """
     image = _open_image(image_bytes)
+    # 검출은 어차피 PADDLE_DET_LIMIT_SIDE로 줄여 읽으므로, 큰 휴대폰 사진을 미리 줄여 메모리·시간을 아낀다.
+    if max(image.size) > MAX_LONG_SIDE:
+        image.thumbnail((MAX_LONG_SIDE, MAX_LONG_SIDE), Image.LANCZOS)
     pipeline = _get_paddle_pipeline()
     if pipeline is not None:
         try:
@@ -139,6 +159,29 @@ def run_ocr(image_bytes: bytes) -> OcrResult:
         except Exception:  # paddle 내부 오류는 종류가 다양해 모두 Tesseract로 넘긴다
             _logger.exception("PP-OCR failed; falling back to Tesseract")
     return run_tesseract_ocr(image_bytes)
+
+
+async def run_ocr_limited(image_bytes: bytes) -> OcrResult:
+    """전용 스레드에서 run_ocr을 돌린다.
+
+    대기열이 차 있으면 OcrBusyError, OCR_WAIT_SECONDS 안에 끝나지 않으면 TimeoutError.
+    시간을 넘긴 OCR은 멈출 수 없어 끝날 때까지 대기열 한 자리를 차지한다.
+    """
+    global _ocr_pending
+    if _ocr_pending >= OCR_MAX_PENDING:
+        raise OcrBusyError("receipt OCR queue is full")
+    _ocr_pending += 1
+    future = asyncio.get_running_loop().run_in_executor(_ocr_executor, run_ocr, image_bytes)
+    future.add_done_callback(_release_ocr_slot)
+    return await asyncio.wait_for(asyncio.shield(future), OCR_WAIT_SECONDS)
+
+
+def _release_ocr_slot(future: asyncio.Future) -> None:
+    global _ocr_pending
+    _ocr_pending -= 1
+    # 시간 초과로 아무도 기다리지 않는 결과의 예외를 읽어 "never retrieved" 경고를 막는다.
+    if not future.cancelled():
+        future.exception()
 
 
 def warm_up() -> bool:

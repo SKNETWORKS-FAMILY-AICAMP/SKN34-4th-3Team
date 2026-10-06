@@ -145,5 +145,18 @@ class UpdateVendorTest(unittest.TestCase):
         self.assertIn("상호", repo.update_missing_fields.call_args[0][1])
 
 
+class CreateReceiptTest(unittest.TestCase):
+    def test_unread_receipt_is_503_and_not_saved(self):
+        repo = MagicMock()
+
+        with patch.object(expense_service, "repo", repo), \
+             patch.object(expense_service, "extract_receipt", return_value=None):
+            with self.assertRaises(HttpError) as ctx:
+                expense_service.create_receipt(1, "office.jpg", image_base64="aW1n")
+        self.assertEqual(ctx.exception.status_code, 503)
+        repo.insert_receipt.assert_not_called()
+        repo.insert_expense.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
