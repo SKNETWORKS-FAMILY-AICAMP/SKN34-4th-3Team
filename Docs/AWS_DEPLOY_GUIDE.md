@@ -247,7 +247,7 @@ LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은
 
 | 구성 | 동작 |
 |---|---|
-| `.github/workflows/health-check.yml` | 10분마다 `HEALTH_URL`을 호출해 `postgres=connected`·`ragReady=true` 확인. 60초 간격 5회 모두 실패하면 workflow 실패 → GitHub 실패 메일 |
+| `.github/workflows/health-check.yml` | 6시간마다(한국 시간 3·9·15·21시 17분) `HEALTH_URL`을 호출해 `postgres=connected`·`ragReady=true` 확인. 60초 간격 5회 모두 실패하면 workflow 실패 → GitHub 실패 메일 |
 | `scripts/autoheal.sh` (cron) | 5분마다 `unhealthy` 컨테이너 재시작. compose `restart: unless-stopped`는 프로세스 종료만 감지하므로 보완 |
 
 두 EC2 모두 cron 등록

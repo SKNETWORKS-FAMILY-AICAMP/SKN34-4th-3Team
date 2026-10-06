@@ -5,7 +5,7 @@ name: health-check
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # 10분마다(GitHub 사정으로 몇 분 늦을 수 있다)
+    - cron: "17 */6 * * *"   # 6시간마다(UTC 0·6·12·18시 17분). 정각은 GitHub 예약 실행이 몰려 지연·누락이 잦아 17분에 돈다
   workflow_dispatch:
 
 # 배포·수집(ec2-app)과 상관없이 돈다. SSH 를 쓰지 않는다.
