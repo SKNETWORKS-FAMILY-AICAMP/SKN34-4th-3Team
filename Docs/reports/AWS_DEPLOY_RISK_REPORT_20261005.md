@@ -147,9 +147,9 @@
 
 **해결** (커밋 `956fc7d`)
 - `docker-compose.app.yml`(backend·frontend·presentation·llm·db-migrate·collector)과 `docker-compose.data.yml`(db·elasticsearch)에 공통 anchor `x-logging`으로 json-file 로그 10MB × 3개 제한
-- `deploy.yml` 배포 스크립트: 빌드 캐시 보존 `until=168h` → `until=48h`, 정리 후 `df` 사용률 출력, 80% 이상이면 `::warning::`
+- 배포 후 `df` 사용률 출력, 80% 이상이면 `::warning::`(develop 병합 후 `scripts/deploy_app.sh`로 이동). 빌드 캐시 `until=48h` 단축은 develop의 GHCR pull 전환으로 EC2 빌드가 없어져 철회(`until=168h` 유지)
 - Data EC2는 자동 배포 대상이 아니라 `docker compose -f docker-compose.data.yml up -d` 1회 실행 시 적용
-- 레지스트리 pull 전환(근본 해결)은 ①과 함께 미적용
+- 레지스트리 pull 전환(근본 해결)은 develop(챕터 1, ①)에서 적용
 - 확인: `docker compose config`로 두 파일의 로그 설정 해석 확인
 
 **검증** `docker system df`, `df -h /`를 배포 전후 비교.
@@ -182,7 +182,7 @@
 
 **해결** (커밋 `77002c0`)
 - `deploy.yml` test job에 `LLM tests`(`uv run pytest`)와 `LLM image build`(`docker build -t llm-ci ./LLM`) 단계 추가 → PR 단계에서 LLM 코드·의존성·PP-OCR 모델 다운로드 실패 검출
-- 배포 순서를 `docker compose build` → `run --rm db-migrate` → `up -d`로 변경(빌드 실패 시 스키마만 바뀐 상태 방지)
+- 배포 순서를 `docker compose build` → `run --rm db-migrate` → `up -d`로 변경(빌드 실패 시 스키마만 바뀐 상태 방지). develop 병합 후에는 CI 이미지 빌드·게시 → pull → `db-migrate` → `up --no-build --wait`(`scripts/deploy_app.sh`)로 같은 목적 달성
 - 외부 키가 필요한 live 테스트 제외 마커는 불필요: 현재 LLM 테스트는 모두 대역을 사용하며 `.env` 없는 환경에서 실행 확인
 - 확인: 로컬에서 `.env` 없는 worktree로 LLM 테스트 실행(514건 중 실패 1건은 Windows 경로 길이 제한 문제, 일반 경로 재실행 시 통과). CI의 이미지 빌드 단계는 PR 실행으로 확인 필요
 

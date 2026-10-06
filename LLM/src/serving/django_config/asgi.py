@@ -17,7 +17,6 @@ from src.serving import django_views, rag_routes  # noqa: E402
 
 _logger = logging.getLogger(__name__)
 _warmup_task: asyncio.Task | None = None
-_ocr_warmup_task: asyncio.Task | None = None
 
 
 async def _warm_up() -> None:
@@ -39,10 +38,15 @@ async def _warm_up_ocr() -> None:
         _logger.exception("Receipt OCR warm-up failed")
 
 
+async def _warm_up_all() -> None:
+    # 원본 문서/BM25 구성과 Paddle 모델 로드의 메모리 피크가 겹치지 않게 한다.
+    await _warm_up()
+    await _warm_up_ocr()
+
+
 async def application(scope, receive, send):
     """Start cache-backed indexing on the first HTTP request, using the server loop."""
-    global _warmup_task, _ocr_warmup_task
+    global _warmup_task
     if scope["type"] == "http" and _warmup_task is None:
-        _warmup_task = asyncio.create_task(_warm_up(), name="llm-index-warmup")
-        _ocr_warmup_task = asyncio.create_task(_warm_up_ocr(), name="receipt-ocr-warmup")
+        _warmup_task = asyncio.create_task(_warm_up_all(), name="llm-warmup")
     await _django_application(scope, receive, send)

@@ -284,10 +284,10 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
     monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", fail_after_partial_update)
     failed = client.post("/rag/reindex", json={"documentIds": [9]})
     assert failed.status_code == 502
-    assert client.get("/internal/rag/ready").json()["index_ready"] is False
-    blocked = client.post("/rag/chat", json={"question": "청년 지원사업", "category": "policy"})
-    assert blocked.status_code == 409
-    assert blocked.json()["error"]["code"] == "RAG_INDEX_NOT_READY"
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+    assert runtime.require_hybrid_index(client.settings) is old_hybrid
+    available = client.post("/rag/chat", json={"question": "청년 지원사업", "category": "policy"})
+    assert available.status_code == 200
 
     monkeypatch.setattr(rag_routes, "load_or_build_postgres_index", sync_source_index)
     recovered = client.post("/rag/reindex", json={"documentIds": [9]})
@@ -298,10 +298,12 @@ def test_backend_partial_reindex_uses_postgres_document_ids(
     def fail_source_load(_settings):
         raise RuntimeError("Source documents unavailable")
 
+    before_failure = runtime.require_hybrid_index(client.settings)
     monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", fail_source_load)
     failed = client.post("/rag/reindex", json={"documentIds": [9]})
     assert failed.status_code == 502
-    assert client.get("/internal/rag/ready").json()["index_ready"] is False
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+    assert runtime.require_hybrid_index(client.settings) is before_failure
 
 
 def test_backend_full_reindex_rebuilds_source_bm25(monkeypatch, tmp_path: Path) -> None:
@@ -346,10 +348,11 @@ def test_backend_full_reindex_rebuilds_source_bm25(monkeypatch, tmp_path: Path) 
     monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", fail_source_load)
     failed = client.post("/rag/reindex", json={"documentIds": []})
     assert failed.status_code == 503
-    assert client.get("/internal/rag/ready").json()["index_ready"] is False
+    assert client.get("/internal/rag/ready").json()["index_ready"] is True
+    assert runtime.require_hybrid_index(client.settings).bm25_search is first_bm25
 
     monkeypatch.setattr(rag_routes, "load_elasticsearch_source_documents", lambda settings: [])
-    recovered = client.post("/internal/rag/index")
+    recovered = client.post("/rag/reindex", json={"documentIds": []})
     assert recovered.status_code == 200
     assert client.get("/internal/rag/ready").json()["index_ready"] is True
     assert runtime.require_hybrid_index(client.settings).bm25_search is not first_bm25

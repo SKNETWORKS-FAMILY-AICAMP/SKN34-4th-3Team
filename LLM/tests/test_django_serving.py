@@ -18,7 +18,9 @@ from src.serving.schemas import IndexResponse, RagChatResponse, ReceiptExtractio
 django.setup()
 
 
-def test_health_ready_and_cors() -> None:
+def test_health_ready_and_cors(monkeypatch) -> None:
+    # 다른 API 테스트가 전역 runtime을 준비한 뒤 실행되어도 빈 기동 상태를 검증한다.
+    monkeypatch.setattr(django_views, "_runtime", django_views.rag_routes.RagRuntime())
     client = Client()
     health = client.get("/health")
     ready = client.get("/rag/ready")
@@ -116,7 +118,6 @@ def test_asgi_starts_index_warmup_once_on_http(monkeypatch) -> None:
         calls.append(scope["type"])
 
     monkeypatch.setattr(asgi, "_warmup_task", None)
-    monkeypatch.setattr(asgi, "_ocr_warmup_task", None)
     monkeypatch.setattr(asgi, "_warm_up", fake_warmup)
     monkeypatch.setattr(asgi, "_warm_up_ocr", fake_ocr_warmup)
     monkeypatch.setattr(asgi, "_django_application", fake_django)
@@ -129,6 +130,31 @@ def test_asgi_starts_index_warmup_once_on_http(monkeypatch) -> None:
     asyncio.run(exercise())
     # 인덱스와 영수증 OCR 모델을 첫 HTTP 요청 때 한 번씩만 미리 준비한다.
     assert calls == ["lifespan", "http", "warmup", "ocr-warmup", "http"]
+
+
+def test_ocr_warmup_waits_for_index_warmup(monkeypatch) -> None:
+    async def exercise():
+        started, finish = asyncio.Event(), asyncio.Event()
+        calls = []
+
+        async def index():
+            started.set()
+            await finish.wait()
+            calls.append("index-ready")
+
+        async def ocr():
+            calls.append("ocr")
+
+        monkeypatch.setattr(asgi, "_warm_up", index)
+        monkeypatch.setattr(asgi, "_warm_up_ocr", ocr)
+        task = asyncio.create_task(asgi._warm_up_all())
+        await started.wait()
+        assert calls == []
+        finish.set()
+        await task
+        assert calls == ["index-ready", "ocr"]
+
+    asyncio.run(exercise())
 
 
 def test_empty_reindex_body_and_legacy_http_error(monkeypatch) -> None:

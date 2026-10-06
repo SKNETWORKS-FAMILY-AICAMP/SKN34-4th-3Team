@@ -1,7 +1,8 @@
 # AWS App EC2 전용. db·elasticsearch 는 Data EC2 의 docker-compose.data.yml 이 띄운다.
 # 로컬 개발·학원 내부망 배포는 기존 docker-compose.yml 을 쓴다.
 #   docker compose -f docker-compose.app.yml run --rm db-migrate
-#   docker compose -f docker-compose.app.yml up -d --build
+#   docker compose -f docker-compose.app.yml pull backend frontend llm
+#   docker compose -f docker-compose.app.yml up -d --no-build
 # 발표자료(/ppt/)까지 띄우려면 .env 에 COMPOSE_PROFILES=presentation 을 둔다.
 # 절차: Docs/AWS_DEPLOY_GUIDE.md
 # 컨테이너 로그(json-file)가 디스크를 채우지 않게 서비스마다 10MB x 3개로 제한한다.
@@ -14,8 +15,8 @@ x-logging: &default-logging
 services:
   backend:
     logging: *default-logging
-    build:
-      context: ./Backend
+    image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY(GHCR 이미지 경로)가 필요하다}/backend:${APP_IMAGE_TAG:?APP_IMAGE_TAG(검증된 커밋 SHA)가 필요하다}
+    mem_limit: ${BACKEND_MEM_LIMIT:-0}
     restart: unless-stopped
     environment:
       # date.today()·datetime.now()가 한국 날짜를 쓰게 한다(00~09시 D-day 어긋남 방지).
@@ -41,8 +42,8 @@ services:
 
   frontend:
     logging: *default-logging
-    build:
-      context: ./Frontend
+    image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/frontend:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
+    mem_limit: ${FRONTEND_MEM_LIMIT:-0}
     restart: unless-stopped
     ports:
       - "80:80"
@@ -57,15 +58,15 @@ services:
 
   presentation:
     logging: *default-logging
-    build:
-      context: ./Presentation
+    image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/presentation:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
+    mem_limit: ${PRESENTATION_MEM_LIMIT:-0}
     profiles: ["presentation"]
     restart: unless-stopped
 
   llm:
     logging: *default-logging
-    build:
-      context: ./LLM
+    image: ${APP_IMAGE_REGISTRY:?APP_IMAGE_REGISTRY가 필요하다}/llm:${APP_IMAGE_TAG:?APP_IMAGE_TAG가 필요하다}
+    mem_limit: ${LLM_MEM_LIMIT:?운영 실측 후 LLM_MEM_LIMIT을 지정해야 한다}
     restart: unless-stopped
     env_file:
       - .env
@@ -104,6 +105,7 @@ services:
     image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
     profiles: ["collector"]
     restart: "no"
+    mem_limit: ${COLLECTOR_MEM_LIMIT:-0}
     env_file:
       - .env
     environment:
