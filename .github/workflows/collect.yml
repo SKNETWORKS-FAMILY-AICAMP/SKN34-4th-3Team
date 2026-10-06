@@ -8,9 +8,10 @@ on:
     - cron: "0 18 * * 0"   # UTC. 매주 월요일 03:00 KST
   workflow_dispatch:
 
-# deploy.yml 과 같은 그룹이라 배포·수집이 동시에 돌지 않는다.
+# 서버 변경 작업은 같은 그룹에서 대기 취소 없이 직렬 실행한다.
 concurrency:
   group: ec2-app
+  queue: max
   cancel-in-progress: false
 
 jobs:
@@ -26,6 +27,10 @@ jobs:
           command_timeout: 110m
           script: |
             set -e
+            exec 9>"$HOME/.ec2-app.lock"
+            flock -w 300 9 || { echo "::error::서버 작업 잠금 대기 시간 초과"; exit 1; }
+            active_collectors=$(docker ps -q --filter label=com.docker.compose.service=collector)
+            [ -z "$active_collectors" ] || { echo "::error::이전 collector가 실행 중입니다"; exit 1; }
             cd ~/SKN34-4th-3Team
             git pull --ff-only origin main || { echo "::error::git pull 실패"; exit 1; }
             # 일부 수집이 실패해도 성공한 데이터는 임베딩·ES 에 반영하고, 실패는 마지막에 알린다.

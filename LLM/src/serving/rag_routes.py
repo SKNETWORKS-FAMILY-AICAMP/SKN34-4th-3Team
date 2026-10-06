@@ -145,18 +145,19 @@ class RagRuntime:
     @property
     def ready(self) -> bool:
         """Dense와 PostgreSQL 원본 BM25가 모두 준비됐으면 True를 반환한다."""
-        if self._vector_search is None or self._index_invalidated:
-            return False
-        dense_search = (
-            self._vector_search.dense_search
-            if isinstance(self._vector_search, HybridSearch)
-            and hasattr(self._vector_search, "_dense_search")
-            else self._vector_search
-        )
-        return (
-            not isinstance(dense_search, PostgresVectorSearch)
-            or self._hybrid_search is not None
-        )
+        with self._cache_lock:
+            if self._vector_search is None or self._index_invalidated:
+                return False
+            dense_search = (
+                self._vector_search.dense_search
+                if isinstance(self._vector_search, HybridSearch)
+                and hasattr(self._vector_search, "_dense_search")
+                else self._vector_search
+            )
+            return (
+                not isinstance(dense_search, PostgresVectorSearch)
+                or self._hybrid_search is not None
+            )
 
     def set_index(
         self,
@@ -183,8 +184,28 @@ class RagRuntime:
             self._hybrid_search = None
             self._graph = None
 
+    def publish_index(self, prepared: "RagRuntime") -> None:
+        """별도로 준비한 검색 상태만 반영한다. 진행 중인 요청의 그래프는 유지된다.
+
+        PostgreSQL 데이터 자체의 과거 버전을 보존하는 기능은 아니다.
+        """
+        if not prepared.ready:
+            raise RagIndexNotReadyError("Prepared RAG index is not ready")
+        with self._cache_lock:
+            self._vector_search = prepared._vector_search
+            self._hybrid_search = prepared._hybrid_search
+            self._hybrid_settings = prepared._hybrid_settings
+            self.document_count = prepared.document_count
+            self.chunk_count = prepared.chunk_count
+            self.index_source = prepared.index_source
+            self._index_invalidated = False
+            # 이미 실행 중인 요청은 자신이 확보한 기존 그래프/검색기를 계속 사용한다.
+            self._graph = None
+            self._graph_settings = None
+            self._graph_notice_search = None
+
     def invalidate_index(self) -> None:
-        """재색인 중이거나 실패한 DB 인덱스의 검색기와 그래프 사용을 차단한다."""
+        """사용 가능한 인덱스가 없는 최초 구성 실패 등의 검색 사용을 차단한다."""
         with self._cache_lock:
             self._index_invalidated = True
             self._hybrid_search = None
@@ -205,11 +226,12 @@ class RagRuntime:
         Raises:
             RagIndexNotReadyError: 인덱스를 아직 준비하지 않았을 때.
         """
-        if self._vector_search is None or self._index_invalidated:
-            raise RagIndexNotReadyError(
-                "RAG index is not ready. Call POST /internal/rag/index first."
-            )
-        return self._vector_search
+        with self._cache_lock:
+            if self._vector_search is None or self._index_invalidated:
+                raise RagIndexNotReadyError(
+                    "RAG index is not ready. Call POST /internal/rag/index first."
+                )
+            return self._vector_search
 
     def require_hybrid_index(self, settings: Settings) -> HybridSearch | NoriHybridSearch:
         """준비된 Dense 인덱스를 기존 BM25·RRF 검색과 결합해 반환한다."""
@@ -488,12 +510,17 @@ async def _prepare_index(
         if allow_ready_shortcut and rag_runtime.ready and not force:
             return _index_response(rag_runtime, "already_ready")
         index_prepared = False
-        if settings.vector_store_backend == "postgres":
-            rag_runtime.invalidate_index()
+        # 무거운 BM25 구성은 운영 runtime의 cache lock을 점유하지 않는다.
+        prepared = RagRuntime(
+            embedding_factory=rag_runtime.embedding_factory,
+            llm_factory=rag_runtime.llm_factory,
+            notice_search=rag_runtime.notice_search,
+        )
         try:
             embedding_model = rag_runtime.embedding_factory()
             if requested_ids:
-                postgres_search = PostgresVectorSearch(
+                postgres_search = await asyncio.to_thread(
+                    PostgresVectorSearch,
                     embedding=embedding_model,
                     settings=settings,
                 )
@@ -511,19 +538,22 @@ async def _prepare_index(
                         settings=settings,
                     )
                 )
-                runtime_search = _runtime_search(source_index.vector_search, settings)
+                runtime_search = await asyncio.to_thread(
+                    _runtime_search, source_index.vector_search, settings
+                )
                 index_source: Literal["cache", "embedding"] = (
                     "embedding"
                     if postgres_search.last_embedded_count or not source_index.loaded_from_cache
                     else "cache"
                 )
-                rag_runtime.set_index(
+                prepared.set_index(
                     runtime_search,
                     document_count=source_index.document_count,
                     chunk_count=source_index.chunk_count,
                     index_source=index_source,
                 )
-                await asyncio.to_thread(rag_runtime.require_hybrid_index, settings)
+                await asyncio.to_thread(prepared.require_hybrid_index, settings)
+                rag_runtime.publish_index(prepared)
                 index_prepared = True
                 return IndexResponse(
                     status=(
@@ -557,21 +587,23 @@ async def _prepare_index(
                         force=force,
                     )
                 )
-            runtime_search = _runtime_search(
+            runtime_search = await asyncio.to_thread(
+                _runtime_search,
                 cached_vector_index.vector_search,
                 settings,
             )
             index_source = (
                 "cache" if cached_vector_index.loaded_from_cache else "embedding"
             )
-            rag_runtime.set_index(
+            prepared.set_index(
                 runtime_search,
                 document_count=cached_vector_index.document_count,
                 chunk_count=cached_vector_index.chunk_count,
                 index_source=index_source,
             )
             if settings.vector_store_backend == "postgres":
-                await asyncio.to_thread(rag_runtime.require_hybrid_index, settings)
+                await asyncio.to_thread(prepared.require_hybrid_index, settings)
+            rag_runtime.publish_index(prepared)
             index_prepared = True
             return _index_response(
                 rag_runtime,
@@ -598,7 +630,11 @@ async def _prepare_index(
                 fallback_message="Document embedding failed.",
             ) from exc
         finally:
-            if settings.vector_store_backend == "postgres" and not index_prepared:
+            if (
+                settings.vector_store_backend == "postgres"
+                and not index_prepared
+                and not rag_runtime.ready
+            ):
                 rag_runtime.invalidate_index()
 
 
