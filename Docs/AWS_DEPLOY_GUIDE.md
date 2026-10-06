@@ -150,6 +150,8 @@ aws s3 cp ~/startup_platform.dump s3://<버킷>/migration/   # 원본 보관
 
 복원 후 App EC2에서 스키마를 최신 `main` 기준으로 맞춤
 
+App용 compose는 8절의 `APP_IMAGE_REGISTRY`·`APP_IMAGE_TAG`·실측한 `LLM_MEM_LIMIT`이 있어야 해석된다. migration만 실행할 때도 먼저 해당 설정을 작성한다.
+
 ```bash
 # App EC2
 cd ~/SKN34-4th-3Team
@@ -173,6 +175,9 @@ COMPOSE_DB_HOST=<DATA_IP>
 COMPOSE_DB_PORT=5432
 COMPOSE_ES_PORT=9200
 COMPOSE_PROFILES=presentation   # 발표자료가 필요 없으면 비움
+APP_IMAGE_REGISTRY=ghcr.io/sknetworks-family-aicamp/skn34-4th-3team
+APP_IMAGE_TAG=<main CI에서 게시 완료한 40자리 커밋 SHA>
+LLM_MEM_LIMIT=<운영 실측으로 정한 한도, 예: 단위 m 또는 g>
 ADMIN_PASSWORD=<관리자 비밀번호>   # 필수. 없으면 compose 실행 실패
 LAW_API_KEY=<국가법령정보 OC>       # collector(수집)용. 9-1절
 GOV24_API_KEY=<공공데이터포털 serviceKey>
@@ -186,12 +191,19 @@ ONTONG_YOUTH_API_KEY=<온통청년 API 키>
 > frontend는 항상 `nginx.https.conf`(443, `/etc/letsencrypt/live/changeup/`)로 뜬다. 인증서가 없으면 12-1~12-3절을 먼저 수행한다.
 
 ```bash
+docker compose -f docker-compose.app.yml pull backend frontend llm
+# COMPOSE_PROFILES=presentation이면 presentation도 먼저 pull한다.
 docker compose -f docker-compose.app.yml run --rm db-migrate
-docker compose -f docker-compose.app.yml up -d --build
+docker compose -f docker-compose.app.yml up -d --no-build --wait --wait-timeout 300
 docker compose -f docker-compose.app.yml ps
 ```
 
-backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재생성함. 임베딩은 `rag_documents`의 기존 값을 재사용하므로 추가 비용 없음.
+LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은 재사용하고 신규·변경 청크만 임베딩한다. 실제 준비 여부는 `ragReady`로 확인한다.
+
+- App EC2에서는 이미지를 빌드하지 않는다. main CI가 Linux amd64 이미지를 GHCR에 게시한 뒤 배포한다. 최초 GHCR 이미지는 private이므로 수동 pull에는 패키지 읽기 권한으로 `docker login ghcr.io`가 필요하다. 자동 배포는 일시적인 `GITHUB_TOKEN`을 사용하고 Docker 인증 디렉터리를 종료 시 제거한다.
+- `LLM_MEM_LIMIT`은 필수이며 임의의 기본값은 두지 않는다. 기존 기동/OCR/수집 사용량과 새 BM25를 만드는 재색인 피크를 측정하고 OS·다른 컨테이너 여유를 남겨 지정한다. 필요하면 App EC2 증설 또는 수집 환경 분리 후 진행한다. 다른 서비스 한도는 `.env.example`의 `*_MEM_LIMIT`으로 지정할 수 있다.
+- 인덱스 warm-up 다음 OCR warm-up을 순차 실행한다. 실제 OCR 요청·Backend의 재색인과 겹치는 피크는 별도로 확인해야 한다. `docker inspect <llm-container> --format '{{.HostConfig.Memory}}'`가 0보다 크고 `docker stats` 및 호스트 메모리에 여유가 있는지 확인한다.
+- `up --wait`와 HTTP 200은 RAG 정상 동작을 보장하지 않는다. `/api/health`의 `ragReady=true`, `postgres=connected`, `llm=connected`와 실제 상담·OCR를 확인한다.
 
 ## 9. GitHub 설정 (자동 배포)
 
@@ -211,7 +223,7 @@ backend가 healthy가 되면서 ES 인덱스를 Postgres 원본으로 자동 재
 3. Settings → Branches → `main` 보호 규칙: PR 필수, 상태 검사 `test` 통과 필수
 4. Actions → deploy → **Run workflow**로 수동 실행해 동작 확인
 
-이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, Frontend `node --test` + `npm run build`) → `git pull` → `db-migrate` → `up -d --build` → `docker image prune -f` 순서로 자동 배포.
+이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트 → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
 - PR 테스트는 운영 대기열에 들어가지 않는다. deploy job·수집·재시도는 `ec2-app` 그룹과 `queue: max`로 직렬 실행한다(대기 최대 100개).
