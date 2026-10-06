@@ -299,6 +299,58 @@ docker compose -f docker-compose.data.yml ps   # db, elasticsearch 모두 health
 - [ ] collect workflow 수동 실행 성공(9-1절)
 - [ ] S3 `daily/`에 백업 파일 생성
 
+### 11-1. 챕터 1 운영 완료 기준 (ID 3·4·1·2)
+
+코드/로컬 테스트와 운영 완료를 구분한다. 먼저 `main`에 반영하고 App `.env`의 실측한 `LLM_MEM_LIMIT`, GHCR 접근, Data의 백업 스크립트·SNS·cron을 준비한다. 운영 SSH 없이 수행한 검증으로 아래 항목을 완료 처리하지 않는다.
+
+| ID | 실행/확인 | 완료 출력·상태 |
+|---|---|---|
+| 3 | 수집 실행 중 main 배포·재시도·PR 테스트 실행 | 수집만 실행, 배포/재시도는 대기 후 실행, PR 테스트는 독립 실행. 운영 대기 작업이 `canceled`로 교체되지 않음 |
+| 4 | Data EC2에서 제한된 PATH로 백업 및 freshness 검사 | `backup verified: s3://...`, `backup freshness OK (age=...s)`, 둘 다 exit 0. S3에서 내려받은 덤프의 별도 DB 복원 성공 |
+| 1 | 배포 로그, `docker stats`, 호스트 메모리, OOM/재시작 상태 확인 | EC2 build 로그 없음. GHCR pull 후 `Deployment ready: <SHA>`. LLM 메모리 한도 > 0, 기동/OCR/수집/재색인 동안 OOM·재시작 없음, OS 메모리 여유 유지 |
+| 2 | 준비 상태 조회를 반복하면서 전체 재색인과 상담 실행 | 재색인 중 `index_ready=true` 유지, 기존 상담 정상. 재색인 응답 성공 후 새 문서 반영. 실패 응답 때도 기존 runtime 유지 |
+
+Data EC2 백업 검사(운영 설정을 출력하지 않음):
+
+```bash
+env -i HOME="$HOME" PATH=/usr/bin:/bin bash scripts/backup_db.sh
+echo "backup exit=$?"
+bash scripts/backup_db.sh --check-freshness
+echo "freshness exit=$?"
+# 빈 별도 상태 디렉터리로 백업 누락 알림을 시험한다. 운영 성공 기록은 건드리지 않는다.
+test_state=$(mktemp -d)
+BACKUP_STATE_DIR="$test_state" bash scripts/backup_db.sh --check-freshness
+echo "missing-backup check exit=$?"
+```
+
+마지막 명령은 **0이 아닌 종료값**과 `backup failed`가 정상 시험 결과이며 SNS 알림이 실제 도착해야 한다. 목차/크기 검사만으로 복원 성공을 대신하지 않는다. `main`의 Data 파일은 10-1절에 따라 수동 갱신한다.
+
+App EC2 메모리/상태 확인:
+
+```bash
+docker compose -f docker-compose.app.yml ps
+llm_id=$(docker compose -f docker-compose.app.yml ps -q llm)
+docker inspect "$llm_id" --format 'limit={{.HostConfig.Memory}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
+free -h
+docker stats --no-stream
+sudo journalctl -k --since '30 minutes ago' | grep -Ei 'out of memory|oom-kill' || true
+```
+
+기동·OCR·수집·재색인 전후를 비교한다. `oom=false`, 재시작 횟수 증가 없음, 관련 커널 OOM 기록 없음이 필요하다. 단일 시점의 `stats`만으로 피크를 검증하지 말고 처리 중에도 반복 관찰한다. 한도에 근접하거나 swap/지연이 계속 증가하면 한도만 올리지 말고 호스트 여유·증설을 검토한다.
+
+재색인 검증은 App EC2의 두 터미널에서 실행한다.
+
+```bash
+# 터미널 A: 완료까지 준비 상태를 반복 관찰
+watch -n 1 'docker compose -f docker-compose.app.yml exec -T llm curl -fsS http://localhost:8001/rag/ready'
+# 터미널 B: 전체 재색인. force=false로 변경된 청크만 임베딩한다.
+docker compose -f docker-compose.app.yml exec -T llm curl -fsS --max-time 1800 \
+  -X POST http://localhost:8001/rag/reindex -H 'Content-Type: application/json' \
+  -d '{"documentIds":[],"force":false}'
+```
+
+처리 중 웹 상담도 실행해 미준비 오류나 목업 대체가 없는지 확인한다. `ready`/`already_ready`는 정상 재색인 결과다. 초기 기동에는 인덱스가 없어 준비 전 `index_ready=false`가 정상이며, 최초 준비 실패는 기존처럼 오류를 반환한다. 새 Dense 검색기·BM25는 별도로 준비해 교체하고 실패 시 기존 runtime을 유지한다. **DB 원본/pgvector 데이터의 과거 버전 복원은 보장하지 않는다.** 해당 버전 일치가 필요하면 staging/version 관리가 추가로 필요하다. 실패 경로는 로컬 회귀 테스트로 검증하며 운영 DB를 중지하거나 삭제해 시험하지 않는다.
+
 ## 12. HTTPS (도메인 확보 후)
 
 > 도메인 구매만으로는 HTTPS 미적용. 인증서(Let's Encrypt, 무료) 발급과 nginx 443 설정이 별도로 필요. PWA(Service Worker)도 HTTPS 전제라 이 절 완료 후 동작. 12-4절 코드 변경과 PWA(`Frontend/vite.config.js`의 `VitePWA`)는 이미 `main`에 반영됐다.

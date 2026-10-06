@@ -18,7 +18,9 @@ from src.serving.schemas import IndexResponse, RagChatResponse, ReceiptExtractio
 django.setup()
 
 
-def test_health_ready_and_cors() -> None:
+def test_health_ready_and_cors(monkeypatch) -> None:
+    # 다른 API 테스트가 전역 runtime을 준비한 뒤 실행되어도 빈 기동 상태를 검증한다.
+    monkeypatch.setattr(django_views, "_runtime", django_views.rag_routes.RagRuntime())
     client = Client()
     health = client.get("/health")
     ready = client.get("/rag/ready")
