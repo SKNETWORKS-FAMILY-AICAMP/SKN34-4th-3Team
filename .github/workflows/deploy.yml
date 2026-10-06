@@ -28,6 +28,14 @@ jobs:
           TOKEN_SECRET: "ci-test-only-secret-1234567890abcdef"
         run: uv run python -m unittest discover tests
 
+      - name: LLM tests
+        working-directory: LLM
+        run: uv run pytest
+
+      # LLM 이미지(paddle·PP-OCR 모델 다운로드 포함)가 운영 EC2 에서 처음 깨지지 않게 미리 빌드해 본다.
+      - name: LLM image build
+        run: docker build -t llm-ci ./LLM
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -56,8 +64,10 @@ jobs:
             set -e
             cd ~/SKN34-4th-3Team
             git pull --ff-only origin main
+            # 빌드가 실패하면 스키마만 바뀐 채 이전 코드가 남지 않도록 빌드를 먼저 한다.
+            docker compose -f docker-compose.app.yml build
             docker compose -f docker-compose.app.yml run --rm db-migrate
-            docker compose -f docker-compose.app.yml up -d --build
+            docker compose -f docker-compose.app.yml up -d
             docker image prune -f
             # LLM 이미지(약 4.8GB) 빌드 캐시가 쌓여 디스크(30GB)가 차지 않게, 최근 7일 것만 남긴다.
             docker builder prune -f --filter until=168h
