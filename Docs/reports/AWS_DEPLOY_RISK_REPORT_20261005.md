@@ -2,7 +2,7 @@
 
 작성일: 2026-10-05 · 대상: `develop`(`4f096f1`) · 상태: 정적 분석 + 재검토(2차), 테스트·빌드 실행 확인. EC2 실측 없음
 
-갱신: 2026-10-06 · `feature/refactoring`에서 8건 해결(⑤⑥⑦⑧⑨⑩⑫⑬, 커밋 `77002c0`~`833fa15`). 해결한 이슈는 "해결 방안" 대신 "해결"에 커밋과 조치 내용을 적었다. 나머지 22건은 최초 보고 그대로다
+갱신: 2026-10-06 · `develop`(챕터 1)에서 ①~④ 4건, `feature/refactoring`(챕터 2·3)에서 ⑤~⑬ 9건 해결(커밋 `77002c0`~`4b1e88e`). ㉗은 ⑪ 작업으로 해당 없음. 해결한 이슈는 "해결"에 커밋과 조치 내용을 적었다. 나머지 17건은 최초 보고 그대로다
 
 **`develop`을 `Docs/AWS_DEPLOY_GUIDE.md` 구성으로 실배포했을 때 발생 가능한 문제 30건을 원인·해결 방안과 함께 정리했다. 장애·배포 실패로 직결되는 P0가 4건이며, 이 중 ③·④는 설정 몇 줄로 해결 가능하다. 2차 재검토에서 10건을 추가하고 2건의 등급을 낮췄다(6절).**
 
@@ -31,17 +31,17 @@
 
 | ID | 등급 | 이슈 | 영향 | 조치 난이도 | 해결 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | P0 | App EC2 메모리 부족 | 컨테이너 강제 종료, 배포 실패 | 중 |  |
-| 2 | P0 | 재색인 중 RAG 전체 중단 | 수집·배포마다 상담 503 → 목업 답변 | 중 |  |
-| 3 | P0 | 동시 실행 그룹에 의한 배포 무단 취소 | main 병합 후 미배포, PR 체크 장시간 대기 | 하 |  |
-| 4 | P0 | 백업 cron 무음 실패 | 백업 미생성, 장애 시 복구 불가 | 하 |  |
+| 1 | P0 | App EC2 메모리 부족 | 컨테이너 강제 종료, 배포 실패 | 중 | `0f26b8d` |
+| 2 | P0 | 재색인 중 RAG 전체 중단 | 수집·배포마다 상담 503 → 목업 답변 | 중 | `ffc80dd` |
+| 3 | P0 | 동시 실행 그룹에 의한 배포 무단 취소 | main 병합 후 미배포, PR 체크 장시간 대기 | 하 | `9785908` |
+| 4 | P0 | 백업 cron 무음 실패 | 백업 미생성, 장애 시 복구 불가 | 하 | `2e70af5` |
 | 5 | P1 | App EC2 디스크 고갈 | 빌드·기동 실패 | 하 | `956fc7d` |
 | 6 | P1 | 배포마다 RAG 인덱스 이중 빌드 | 중단 구간·메모리 사용 증가 | 하 | `3cc4a5e` |
 | 7 | P1 | CI의 LLM 미검증 | 깨진 LLM 이미지가 운영 서버에서 처음 발견 | 하 | `77002c0` |
 | 8 | P1 | 영수증 OCR 지연·목업 저장 | 잘못된 지출 데이터 저장, LLM 요청 전반 지연 | 중 | `e254832` |
 | 9 | P1 | 시간대(UTC) 어긋남 | 00~09시(KST) D-day·마감·지출일 오류 | 하 | `f02593a` |
 | 10 | P1 | 세무 답변 캐시 미갱신 | 세법 개정 미반영 답변, 질의 지연 | 중 | `833fa15` |
-| 11 | P1 | 모바일 영수증 업로드 제약 | 휴대폰 원본 사진 거부, 판정 유실 | 중 |  |
+| 11 | P1 | 모바일 영수증 업로드 제약 | 휴대폰 원본 사진 거부, 판정 유실 | 중 | `4b1e88e` |
 | 12 | P1 | 장애 감지·자동 복구 없음 | 장애 장기화, 인지 지연 | 중 | `14f36ca` |
 | 13 | P1 | 프런트·Backend 타임아웃 불일치 | 성공한 작업도 실패로 표시, LLM 비용 낭비 | 하 | `55e0e86` |
 | 14 | P2 | LangSmith로 개인정보 외부 전송 | 질문·프로필·영수증 이미지 국외 SaaS 저장 | 하 |  |
@@ -80,6 +80,12 @@
 - 단기: compose에 `mem_limit` 지정(llm 우선 보호, presentation은 필요할 때만 기동), OCR warm-up을 인덱스 준비 완료 뒤 순차 실행, ⑥ 해결
 - 근본: 이미지를 GitHub Actions에서 빌드해 GHCR에 올리고 EC2는 `pull`만 수행, 또는 App EC2를 t3.large로 상향. 수집은 Data EC2 또는 별도 실행 환경으로 이동 검토
 
+**해결** (커밋 `0f26b8d`, develop 챕터 1)
+- `deploy.yml` build-images job이 4개 이미지를 GHCR에 게시하고, EC2는 `scripts/deploy_app.sh`로 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사만 수행(EC2 빌드 제거)
+- `docker-compose.app.yml`에 서비스별 `mem_limit`(`LLM_MEM_LIMIT`은 필수 값)
+- `LLM/src/serving/django_config/asgi.py`: 인덱스 warm-up 완료 후 OCR 모델 로드(메모리 피크 분리)
+- 남은 것: 운영 실측 후 `LLM_MEM_LIMIT` 지정. 상세는 `AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md` 참조
+
 **검증** 배포·수집 전후 `free -h`, `docker stats --no-stream`, `dmesg | grep -i oom` 확인.
 
 ### ② 재색인 중 RAG 전체 중단
@@ -95,6 +101,10 @@
 - 기존 인덱스를 유지한 채 새 Dense·BM25 인덱스를 별도로 만들고, 성공 시에만 교체(실패 시 기존 유지). 무효화는 "구성 실패 + 기존 인덱스 없음"일 때만 적용
 - 수집 workflow는 변경된 문서만 `documentIds`로 부분 재색인
 - 단, 메모리 BM25 두 벌이 잠시 공존하므로 ①과 함께 메모리 여유 확인 필요
+
+**해결** (커밋 `ffc80dd`, develop 챕터 1)
+- `rag_routes.py`: 새 인덱스를 별도로 구성해 성공 시에만 `publish_index`로 교체, 실패 시 기존 유지. `invalidate_index`는 구성 실패 + 기존 인덱스 없음일 때만 적용
+- 미적용: 수집 workflow의 `documentIds` 부분 재색인(전체 재색인 유지). 상세는 `AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md` 참조
 
 **검증** `docker compose exec -T llm curl -X POST localhost:8001/rag/reindex ...` 실행 중 `/api/health`의 `ragReady`와 채팅 응답 확인.
 
@@ -115,6 +125,11 @@
 - 수집 2종은 별도 그룹(예: `ec2-collect`)으로 분리하고, 서버 측 동시 실행은 배포·수집 스크립트 앞 `flock /tmp/ec2-app.lock`으로 방지
 - 보조: collect-retry 실행 주기 완화(예: 6시간)
 
+**해결** (커밋 `9785908`, develop 챕터 1)
+- `deploy.yml` concurrency를 deploy job 단위로 이동(PR 테스트 제외), `deploy`·`collect`·`collect-retry` 모두 `queue: max`로 대기 작업 취소 방지
+- 서버 측 `$HOME/.ec2-app.lock` `flock`으로 배포·수집 직렬화, 남은 collector 확인
+- 남은 것: deploy·PR 동시성 운영 재현. 상세는 `AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md` 참조
+
 **검증** collect 수동 실행 중 deploy → collect-retry·PR push 순으로 트리거해 deploy가 취소되지 않는지 Actions에서 확인.
 
 ### ④ 백업 cron 무음 실패
@@ -131,6 +146,10 @@
 - crontab 상단에 `PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin` 추가, 또는 스크립트에서 `AWS_BIN="${AWS_BIN:-/snap/bin/aws}"` 절대경로 사용
 - 업로드 후 `aws s3 ls`로 객체 크기 확인, 실패 시 알림(⑫와 통합)
 - 월 1회 복원 리허설
+
+**해결** (커밋 `2e70af5`, develop 챕터 1)
+- `scripts/backup_db.sh`: PATH에 `/snap/bin` 추가, `AWS_BIN` 지정 가능, 업로드 후 S3 객체 크기와 덤프 크기 비교
+- 남은 것: cron 자동 실행 확인, Data EC2 스크립트 반영. SNS 실패 알림은 운영 결정으로 제외. 상세는 `AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md` 참조
 
 **검증** `env -i /bin/sh -c 'PATH=/usr/bin:/bin bash scripts/backup_db.sh'`로 cron 환경 재현.
 
@@ -612,8 +631,8 @@
 
 | 순서 | 대상 | 이유 |
 | --- | --- | --- |
-| 1 | ③ ④ ⑨(해결) ⑭ ⑮ | 설정 몇 줄 수준, 영향 큼 |
-| 2 | ① ⑤(해결) ⑥(해결) ⑦(해결) ⑫(해결) ⑳ | 배포 안정화. 레지스트리 빌드 전환으로 ①·⑤·⑦·⑳ 함께 해결 가능 |
-| 3 | ② ⑧(해결) ⑩(해결) ⑪(해결) ⑬(해결) | 기능 정확성, 코드 변경 필요 |
+| 1 | ③(해결) ④(해결) ⑨(해결) ⑭ ⑮ | 설정 몇 줄 수준, 영향 큼 |
+| 2 | ①(해결) ⑤(해결) ⑥(해결) ⑦(해결) ⑫(해결) ⑳ | 배포 안정화. 레지스트리 빌드 전환으로 ①·⑤·⑦·⑳ 함께 해결 가능 |
+| 3 | ②(해결) ⑧(해결) ⑩(해결) ⑪(해결) ⑬(해결) | 기능 정확성, 코드 변경 필요 |
 | 4 | ⑯ ⑰ ⑱ ⑲ ㉑ ㉒ | 보안 강화 |
 | 5 | ㉓~㉚ | 성능·정리 |
