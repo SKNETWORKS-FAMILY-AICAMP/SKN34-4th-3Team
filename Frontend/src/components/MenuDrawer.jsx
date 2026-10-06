@@ -4,10 +4,11 @@ import { createPortal } from 'react-dom';
 import { api } from '../api.js';
 import { NAV_MENU } from '../constants.js';
 import { pad2 } from '../utils.js';
-import { useThemeToggle } from '../hooks.js';
+import { useThemePref } from '../web/theme.js';
 
 export function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {
-  const toggleTheme = useThemeToggle();
+  // 웹앱의 테마 값(마이페이지 > 설정의 '테마 변경'과 같은 값). 기본 페이지에서는 도구 줄이 숨겨져 쓰이지 않는다.
+  const [, theme, setTheme] = useThemePref();
   // 지금 화면에 사용 가이드(? 버튼)가 있는지. 메뉴를 열 때마다 확인한다.
   const [hasTour, setHasTour] = useState(false);
   useEffect(() => {
@@ -53,10 +54,11 @@ export function MenuDrawer({ open, onClose, onNavigate, user, onAuth }) {
             </li>
           ))}
         </ul>
-        {/* 반응형 웹앱의 휴대폰 폭에서만 보인다(web.css). 떠 있는 ?/◐ 버튼을 메뉴 안으로 옮긴 것. */}
+        {/* 반응형 웹앱에서만 보인다(web.css). 떠 있는 ?/◐ 버튼을 메뉴 안으로 옮긴 것.
+            다크 모드 전환은 마이페이지 > 설정의 '테마 변경'과 같은 값을 바꾼다(web/theme.js). */}
         <div className="drawer__tools">
-          <button type="button" className="drawer__tool" onClick={toggleTheme}>
-            <span aria-hidden="true">◐</span>다크 모드 전환
+          <button type="button" className="drawer__tool" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            <span aria-hidden="true">◐</span>{theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'}
           </button>
           {hasTour && (
             <button type="button" className="drawer__tool"

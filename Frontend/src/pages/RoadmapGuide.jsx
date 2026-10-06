@@ -11,7 +11,8 @@ import { rmIcon, rmDoneIcon } from '../components/roadmapIcons.jsx';
 // 같은 근거 등급끼리 묶어 이 순서로 보여준다(근거가 강한 순서).
 const GRADE_ORDER = ['법령', '공공기관', '참고', '방법론', '미확인'];
 
-export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
+// coachOpen · onCoachOpen: 웹앱 휴대폰 폭에서 헤더 버튼으로 코치 채팅을 열고 닫는다(SubPage가 상태를 든다).
+export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin, coachOpen = true, onCoachOpen }) {
   const [active, setActive] = useState('A');
   const [openTask, setOpenTask] = useState(null); // 근거를 펼친 목표(단계 안에서의 원래 순번)
   // 반응형 웹앱 휴대폰 폭에서만 쓰는 화면 나눔(AI 코치 · 할 일). 대화 위주라 AI 코치를 먼저 연다.
@@ -45,6 +46,7 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
   const taskQuestion = (t) => `'${t.t}' 어떻게 하면 되나요?`;
   const askTask = (t) => {
     setDockOpen(false);
+    if (!coachOpen && onCoachOpen) onCoachOpen(true); // 채팅을 닫아 둔 상태면 열고 묻는다
     if (askRef.current) askRef.current(taskQuestion(t));
   };
   // 추천 질문: 이 단계에서 아직 안 끝낸 할 일부터, 그다음 서버 추천 질문
@@ -65,37 +67,101 @@ export function RoadmapGuide({ user, done = {}, setDone, onRequireLogin }) {
     return t.length > 0 && t.every((_, i) => done[`${k}:${i}`]);
   };
 
+  // 웹앱: 단계 막대가 옆으로 더 이어진다는 표시(양 끝 흐림 + 아래 점). 스크롤할 때마다 보이는 단계를 다시 잰다.
+  const stripRef = useRef(null);
+  const [strip, setStrip] = useState({ overflow: false, left: false, right: false, seen: [] });
+  const measureStrip = () => {
+    const el = stripRef.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    const seen = [...el.querySelectorAll('.rz__step')].map((step) => {
+      const r = step.getBoundingClientRect();
+      const shown = Math.min(r.right, box.right) - Math.max(r.left, box.left);
+      return shown >= r.width * 0.6; // 60% 이상 보이면 '보이는 단계'
+    });
+    const max = el.scrollWidth - el.clientWidth;
+    setStrip({ overflow: max > 2, left: el.scrollLeft > 2, right: el.scrollLeft < max - 2, seen });
+  };
+  const scrollToStep = (index, smooth = true) => {
+    const el = stripRef.current;
+    const step = el && el.querySelectorAll('.rz__step')[index];
+    if (!step) return;
+    const offset = step.getBoundingClientRect().left - el.getBoundingClientRect().left;
+    el.scrollTo({ left: el.scrollLeft + offset - 16, behavior: smooth ? 'smooth' : 'auto' });
+  };
+  useEffect(() => {
+    if (!web) return undefined;
+    measureStrip();
+    window.addEventListener('resize', measureStrip);
+    return () => window.removeEventListener('resize', measureStrip);
+  }, [web]);
+  // 고른 단계(또는 처음 안 끝난 단계)가 화면 밖이면 보이게 옮긴다.
+  useEffect(() => {
+    if (!web) return;
+    const index = ROADMAP.findIndex((s) => s.k === active);
+    const el = stripRef.current;
+    const step = el && el.querySelectorAll('.rz__step')[index];
+    if (!step) return;
+    const box = el.getBoundingClientRect();
+    const r = step.getBoundingClientRect();
+    if (r.left < box.left || r.right > box.right) scrollToStep(index);
+  }, [web, active]);
+
   // 같은 등급끼리 붙여서 보여준다. 등급이 같으면 원래 순서를 유지한다.
   const sortedTasks = tasks
     .map((t, i) => ({ t, i }))
     .sort((a, b) => GRADE_ORDER.indexOf(a.t.grade) - GRADE_ORDER.indexOf(b.t.grade) || a.i - b.i);
 
+  const stageRow = (
+    <div className="rz__row" role="tablist" aria-label="창업 단계">
+      {ROADMAP.map((s, i) => (
+        <React.Fragment key={s.k}>
+          {i > 0 && <div className="rz__sep" aria-hidden="true">›</div>}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={s.k === active}
+            className={
+              'rz__step' +
+              (s.k === active ? ' is-active' : '') +
+              (stepDone(s.k) ? ' is-done' : '')
+            }
+            onClick={() => { picked.current = true; setActive(s.k); setOpenTask(null); }}
+          >
+            <span className="rz__ico">{stepDone(s.k) ? rmDoneIcon() : rmIcon(s.k)}</span>
+            <span className="rz__phase">{s.phase}</span>
+            <span className="rz__t">{s.t}</span>
+          </button>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
   return (
-    <div className={web ? 'rg2 rg2--web rg2--m-chat' + (dockOpen ? ' is-dock-open' : '') : 'rg2 rg2--m-' + mTab}>
-      <div className="rz rz--nav is-in">
-        <div className="rz__row" role="tablist" aria-label="창업 단계">
-          {ROADMAP.map((s, i) => (
-            <React.Fragment key={s.k}>
-              {i > 0 && <div className="rz__sep" aria-hidden="true">›</div>}
-              <button
-                type="button"
-                role="tab"
-                aria-selected={s.k === active}
-                className={
-                  'rz__step' +
-                  (s.k === active ? ' is-active' : '') +
-                  (stepDone(s.k) ? ' is-done' : '')
-                }
-                onClick={() => { picked.current = true; setActive(s.k); setOpenTask(null); }}
-              >
-                <span className="rz__ico">{stepDone(s.k) ? rmDoneIcon() : rmIcon(s.k)}</span>
-                <span className="rz__phase">{s.phase}</span>
-                <span className="rz__t">{s.t}</span>
-              </button>
-            </React.Fragment>
-          ))}
+    <div className={web
+      ? 'rg2 rg2--web rg2--m-chat' + (dockOpen ? ' is-dock-open' : '') + (coachOpen ? '' : ' is-coach-closed')
+      : 'rg2 rg2--m-' + mTab}>
+      {web && (
+        <div className={'rz-wrap' + (strip.left ? ' can-left' : '') + (strip.right ? ' can-right' : '')}>
+          <div className="rz rz--nav is-in" ref={stripRef} onScroll={measureStrip}>
+            {stageRow}
+          </div>
+          {strip.overflow && (
+            <div className="rz-dots" aria-label="단계 위치">
+              {ROADMAP.map((s, i) => (
+                <button key={s.k} type="button"
+                  className={'rz-dot' + (strip.seen[i] ? ' is-seen' : '') + (s.k === active ? ' is-active' : '')}
+                  aria-label={`${i + 1}단계 ${s.t} 보기`} onClick={() => scrollToStep(i)} />
+              ))}
+            </div>
+          )}
         </div>
+      )}
+      {!web && (
+      <div className="rz rz--nav is-in">
+        {stageRow}
       </div>
+      )}
 
       <p className="rg2__prog">
         전체 진행률 <b className="u-num">{overallPct}%</b> · {totalDone} / {totalTasks} 작업 완료

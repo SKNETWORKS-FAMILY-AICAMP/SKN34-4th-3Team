@@ -1302,8 +1302,8 @@ html.is-web .cvx__empty > button[type='button'] {
   }
 }
 
-/* ==== 06 마이페이지 메뉴: PC는 아이콘 달린 왼쪽 메뉴 + 맨 아래 로그아웃,
-        휴대폰 · 태블릿은 위쪽 칩 대신 대시보드 아래 메뉴 목록 + 하위 화면 '‹ 뒤로' 머리줄 ==== */
+/* ==== 06 마이페이지 메뉴: 홈 · 저장함 · 구독 · 설정 4개 ====
+   PC는 아이콘 달린 왼쪽 메뉴 + 맨 아래 로그아웃, 휴대폰 · 태블릿은 인사말 아래 탭 한 줄(스크롤 없이 다 보임). */
 html.is-web .mp-ico {
   flex: none;
   width: 18px;
@@ -1313,20 +1313,13 @@ html.is-web .mp-nav .mp-link {
   justify-content: flex-start;
   gap: 10px;
 }
-html.is-web .mp-nav .mp-link .mp-tag {
-  margin-left: auto;
-}
-html.is-web .mp-nav .mp-link--sub {
-  padding-left: 12px;
-}
 html.is-web .mp-head .mp-logout {
   display: none;
 }
 html.is-web .mp-head {
   align-items: center;
 }
-html.is-web .mp-back,
-html.is-web .mp-menulist {
+html.is-web .mp-wtabs {
   display: none;
 }
 @media (min-width: 1024px) {
@@ -1364,123 +1357,181 @@ html.is-web .mp-menulist {
   html.is-web .mp-side {
     display: none;
   }
-  /* 하위 화면: 인사말 대신 '‹ 화면 이름' 뒤로 가기 */
-  html.is-web .mp-main:not(.mp-main--dash) .mp-head__hello {
-    display: none;
-  }
-  html.is-web .mp-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 44px;
-    margin-left: -8px;
-    padding: 0 10px 0 6px;
-    border: 0;
-    border-radius: 10px;
-    background: none;
-    color: var(--ink);
-    font: inherit;
-    cursor: pointer;
-  }
-  html.is-web .mp-back span {
-    font-size: 26px;
-    line-height: 1;
-    color: var(--ink-soft);
-  }
-  html.is-web .mp-back b {
-    font-size: 19px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  html.is-web .mp-back:hover {
-    background: var(--blue-wash);
-  }
   html.is-web .mp-main {
     padding-top: 18px;
   }
-  /* 대시보드 맨 아래 메뉴 목록 */
-  html.is-web .mp-menulist {
-    order: 6;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    margin-top: 6px;
+  html.is-web .mp-head {
+    margin-bottom: 14px;
   }
-  html.is-web .mp-menulist__group {
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 18px;
-    background: var(--surface-solid);
-  }
-  html.is-web .mp-menulist__title {
-    margin: 0;
-    padding: 14px 18px 4px;
-    color: var(--ink-faint);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
-  html.is-web .mp-menulist ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  html.is-web .mp-menulist li + li {
-    border-top: 1px solid var(--line);
-  }
-  html.is-web .mp-menulist__row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    min-height: 54px;
-    padding: 0 16px 0 18px;
-    border: 0;
-    background: none;
-    color: var(--ink);
-    font: inherit;
-    font-size: 15px;
-    text-align: left;
-    cursor: pointer;
-  }
-  html.is-web .mp-menulist__row .mp-ico {
-    width: 20px;
-    height: 20px;
-    color: var(--blue);
-  }
-  html.is-web .mp-menulist__row:active {
-    background: var(--ground);
-  }
-  html.is-web .mp-menulist__label {
-    flex: 1;
-    min-width: 0;
-  }
-  html.is-web .mp-menulist__meta {
-    color: var(--ink-faint);
-    font-size: 13px;
-  }
-  html.is-web .mp-menulist__chev {
-    color: var(--ink-faint);
-    font-size: 20px;
-  }
-  html.is-web .mp-menulist__logout {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    min-height: 50px;
-    border: 1px solid var(--line);
+  /* 탭 4개를 같은 폭으로 한 줄에 둔다(로드맵 · 공고지원 탭과 같은 모양) */
+  html.is-web .mp-wtabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0 0 16px;
+    padding: 4px;
     border-radius: 14px;
-    background: var(--surface-solid);
+    background: var(--line);
+  }
+  html.is-web .mp-wtab {
+    min-height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
     color: var(--ink-soft);
     font: inherit;
-    font-size: 14.5px;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
     cursor: pointer;
   }
-  html.is-web .mp-menulist__logout .mp-ico {
-    width: 18px;
-    height: 18px;
+  html.is-web .mp-wtab.is-on {
+    background: var(--surface-solid);
+    color: var(--ink);
+    box-shadow: 0 2px 8px rgba(20, 26, 58, 0.08);
   }
+}
+
+/* 저장함: 공고 · 정책 / 사업계획서 고르기 */
+html.is-web .mp-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html.is-web .mp-seg {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 6px;
+}
+html.is-web .mp-seg__btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-solid);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+html.is-web .mp-seg__btn.is-on {
+  border-color: var(--blue);
+  background: var(--blue-wash);
+  color: var(--blue-deep);
+}
+
+/* 설정: 내 정보 · 테마 변경 · 알림 · 로그아웃 */
+html.is-web .mp-set {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+}
+html.is-web .mp-set__card {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface-solid);
+}
+html.is-web .mp-set__card h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+html.is-web .mp-set__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+html.is-web .mp-set__edit {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--blue-deep);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+html.is-web .mp-set__info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 14px 0 0;
+}
+html.is-web .mp-set__info dt {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+html.is-web .mp-set__info dd {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+html.is-web .mp-set__theme {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+}
+html.is-web .mp-set__opt {
+  min-height: 44px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html.is-web .mp-set__opt.is-on {
+  border-color: var(--blue);
+  background: var(--blue-wash);
+  color: var(--blue-deep);
+}
+html.is-web .mp-set .tool {
+  max-width: none;
+}
+html.is-web .mp-set__back {
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+html.is-web .mp-set__logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-solid);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+html.is-web .mp-set__logout:hover {
+  color: var(--red);
 }
 
 /* ==== 01 창업 로드맵: 할 일 + AI 코치를 한 카드로 ====
@@ -1806,5 +1857,138 @@ html.is-web .closing__cta h2 {
   }
   html.is-web .closing__cta .btn {
     width: 100%;
+  }
+}
+
+/* ==== 헤더 아이콘 버튼: 로드맵의 코치 채팅 열기/닫기(.wcoach) ====
+   햄버거 버튼과 같은 크기 · 테두리로 나란히 둔다. */
+html.is-web .rmhead__actions {
+  gap: 8px;
+}
+html.is-web .wcoach {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+html.is-web .wcoach svg {
+  width: 20px;
+  height: 20px;
+}
+html.is-web .wcoach.is-open {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+@media (max-width: 768px) {
+  html.is-web .wcoach {
+    width: 40px;
+    height: 40px;
+  }
+}
+/* 코치 채팅 토글은 대화와 할 일이 한 화면을 나눠 쓰는 휴대폰 폭에서만 쓴다 */
+@media (min-width: 769px) {
+  html.is-web .wcoach {
+    display: none;
+  }
+}
+
+/* ==== 로드맵 단계 막대: 옆으로 더 있다는 표시 ====
+   오른쪽 끝 단계가 반쯤 잘려 보이게 폭을 맞추고, 넘치는 쪽 끝을 흐리게, 아래 점으로 위치를 보여 준다. */
+html.is-web .rz-wrap {
+  position: relative;
+}
+html.is-web .rz-wrap::before,
+html.is-web .rz-wrap::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 18px;
+  width: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+html.is-web .rz-wrap::before {
+  left: 0;
+  background: linear-gradient(to right, var(--ground), transparent);
+}
+html.is-web .rz-wrap::after {
+  right: 0;
+  background: linear-gradient(to left, var(--ground), transparent);
+}
+html.is-web .rz-wrap.can-left::before,
+html.is-web .rz-wrap.can-right::after {
+  opacity: 1;
+}
+html.is-web .rz-dots {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin: 2px 0 8px;
+}
+html.is-web .rz-dot {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+html.is-web .rz-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: width 0.2s, background 0.2s;
+}
+html.is-web .rz-dot.is-seen::before {
+  background: color-mix(in srgb, var(--blue) 45%, transparent);
+}
+html.is-web .rz-dot.is-active::before {
+  width: 14px;
+  background: var(--blue);
+}
+@media (max-width: 768px) {
+  /* 4.5칸이 보이게: 다섯 번째 단계가 반쯤 걸쳐 보여 옆으로 넘길 수 있다는 걸 알린다 */
+  html.is-web .rg2--web .rz .rz__step {
+    flex-basis: calc((100vw - 24px) / 4.5);
+  }
+  html.is-web .rg2--web .rz--nav {
+    margin-bottom: 0;
+  }
+
+  /* 코치 채팅을 닫으면 그 자리를 할 일 목록이 채운다 */
+  html.is-web .rg2--web.is-coach-closed .rg2__chat {
+    display: none;
+  }
+  html.is-web .rg2--web.is-coach-closed .rg2__list {
+    flex: 1;
+    min-height: 0;
+  }
+  html.is-web .rg2--web.is-coach-closed .rg2__listbody {
+    display: block;
+    flex: 1;
+    max-height: none;
+    min-height: 0;
+    padding: 4px 12px 12px;
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+  }
+  html.is-web .rg2--web.is-coach-closed .rg2__dock {
+    cursor: default;
+  }
+  html.is-web .rg2--web.is-coach-closed .rg2__dock-chev {
+    display: none;
   }
 }

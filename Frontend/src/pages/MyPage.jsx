@@ -12,6 +12,7 @@ import {
 import { MenuDrawer } from '../components/MenuDrawer.jsx';
 import { GovDetailModal, OriginalButton } from './AnnouncementAnalyzer.jsx';
 import { isWebApp } from '../web/env.js';
+import { THEME_OPTIONS, useThemePref } from '../web/theme.js';
 
 export function MpCalendar({ full, savedPolicies = [], onEventsChanged }) {
   const today = new Date();
@@ -989,40 +990,70 @@ function MpIcon({ k }) {
   );
 }
 
-// 휴대폰 · 태블릿 웹앱: 대시보드 맨 아래 앱식 메뉴 목록 (PC는 왼쪽 메뉴를 쓴다)
-function MpMenuList({ onPick, onLogout, savedCount }) {
-  const groups = [];
-  MP_MENU.forEach((m) => {
-    if (m.key === 'home' || m.divider) return;
-    if (m.group) { groups.push({ title: m.group, items: [] }); return; }
-    if (!m.sub || !groups.length) groups.push({ title: '', items: [] });
-    groups[groups.length - 1].items.push(m);
-  });
-  const meta = { saved: savedCount ? `${savedCount}건` : '' };
+// 웹앱 마이페이지 메뉴는 4개로 줄인다. 공고 · 정책과 사업계획서는 '저장함' 안에서, 사업자 정보는 '설정 > 내 정보'에서 고친다.
+// 휴대폰 · 태블릿은 위쪽 탭 한 줄(스크롤 없이 다 보임), PC는 왼쪽 메뉴로 같은 4개를 보여 준다.
+const WEB_TABS = [
+  { key: 'home', label: '홈', icon: 'home' },
+  { key: 'saved', label: '저장함', icon: 'saved' },
+  { key: 'billing', label: '구독', icon: 'billing' },
+  { key: 'settings', label: '설정', icon: 'settings' },
+];
+const SAVED_SUBS = [
+  { key: 'gov', label: '공고 · 정책' },
+  { key: 'bizplans', label: '사업계획서' },
+];
+
+// 웹앱 설정: 내 정보(요약 + 수정하기) · 테마 변경 · 알림 · 로그아웃
+function WebSettings({ user, onSaved, onLogout }) {
+  const [editing, setEditing] = useState(false);
+  const [pref, , setPref] = useThemePref();
+  if (editing) {
+    return (
+      <div className="mp-set">
+        <button type="button" className="mp-set__back" onClick={() => setEditing(false)}>‹ 설정으로</button>
+        <ProfileSettings user={user} only="profile" onSaved={onSaved} />
+      </div>
+    );
+  }
+  const info = [
+    ['이름', user.name],
+    ['업종', user.biz],
+    ['사업장 지역', user.region],
+    ['대표자 연령', user.age ? `만 ${user.age}세` : ''],
+  ];
   return (
-    <nav className="mp-menulist" aria-label="마이페이지 메뉴">
-      {groups.map((g, i) => (
-        <section key={i} className="mp-menulist__group">
-          {g.title && <h2 className="mp-menulist__title">{g.title}</h2>}
-          <ul>
-            {g.items.map((m) => (
-              <li key={m.key}>
-                <button type="button" className="mp-menulist__row" onClick={() => onPick(m.key)}>
-                  <MpIcon k={m.key} />
-                  <span className="mp-menulist__label">{m.label}</span>
-                  {meta[m.key] && <span className="mp-menulist__meta">{meta[m.key]}</span>}
-                  <span className="mp-menulist__chev" aria-hidden="true">›</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      <button type="button" className="mp-menulist__logout" onClick={onLogout}>
+    <div className="mp-set">
+      <section className="mp-set__card" aria-labelledby="mp-set-me">
+        <div className="mp-set__head">
+          <h2 id="mp-set-me">내 정보</h2>
+          <button type="button" className="mp-set__edit" onClick={() => setEditing(true)}>수정하기</button>
+        </div>
+        <dl className="mp-set__info">
+          {info.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value || '미입력'}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section className="mp-set__card" aria-labelledby="mp-set-theme">
+        <h2 id="mp-set-theme">테마 변경</h2>
+        <div className="mp-set__theme" role="radiogroup" aria-labelledby="mp-set-theme">
+          {THEME_OPTIONS.map((o) => (
+            <button key={o.value} type="button" role="radio" aria-checked={pref === o.value}
+              className={'mp-set__opt' + (pref === o.value ? ' is-on' : '')} onClick={() => setPref(o.value)}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </section>
+      <ProfileSettings user={user} only="notif" />
+      <button type="button" className="mp-set__logout" onClick={onLogout}>
         <MpIcon k="logout" />
         <span>로그아웃</span>
       </button>
-    </nav>
+    </div>
   );
 }
 
@@ -1032,7 +1063,8 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
   const [calendarRevision, setCalendarRevision] = useState(0);
   const activeLabel = (MP_MENU.find((m) => m.key === menu) || {}).label || '';
   const web = isWebApp();
-  // 휴대폰 웹앱은 메뉴 목록이 대시보드 아래에 있어서, 화면을 바꾸면 맨 위부터 보여 준다.
+  const [savedSub, setSavedSub] = useState('gov'); // 웹앱 '저장함' 안의 공고 · 정책 / 사업계획서
+  // 웹앱은 탭을 바꾸면 맨 위부터 보여 준다.
   const goMenu = (key) => {
     setMenu(key);
     if (web) window.scrollTo(0, 0);
@@ -1081,7 +1113,14 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
           <BrandWord />
         </button>
         <nav className="mp-nav" aria-label="마이페이지 메뉴">
-          {MP_MENU.map((m, i) => {
+          {web && WEB_TABS.map((m) => (
+            <button key={m.key} type="button" className={'mp-link' + (menu === m.key ? ' mp-link--active' : '')}
+              aria-current={menu === m.key ? 'page' : undefined} onClick={() => goMenu(m.key)}>
+              <MpIcon k={m.icon} />
+              <span>{m.label}</span>
+            </button>
+          ))}
+          {!web && MP_MENU.map((m, i) => {
             if (m.group) return <div className="mp-group" key={`g-${i}`}>{m.group}</div>;
             if (m.divider) return <div className="mp-side__div" key={`d-${i}`} />;
             return (
@@ -1096,7 +1135,6 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
                 aria-current={menu === m.key ? 'page' : undefined}
                 onClick={() => goMenu(m.key)}
               >
-                {web && <MpIcon k={m.key} />}
                 <span>{m.label}</span>
                 {m.tag && <span className="mp-tag">{m.tag}</span>}
               </button>
@@ -1113,12 +1151,6 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
 
       <main className={'mp-main' + (menu === 'home' ? ' mp-main--dash' : '')}>
         <div className="mp-head">
-          {web && menu !== 'home' && (
-            <button type="button" className="mp-back" onClick={() => goMenu('home')} aria-label="마이페이지로 돌아가기">
-              <span aria-hidden="true">‹</span>
-              <b>{activeLabel}</b>
-            </button>
-          )}
           <div className="mp-head__hello">
             <h1 className="mp-hello">안녕하세요, {user.name}님</h1>
             <p className="mp-basis">사업자 정보 기준 · {user.biz} · {user.region}</p>
@@ -1144,6 +1176,17 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
           user={user}
           onAuth={onLoginClick}
         />
+
+        {web && (
+          <nav className="mp-wtabs" role="tablist" aria-label="마이페이지 메뉴">
+            {WEB_TABS.map((m) => (
+              <button key={m.key} type="button" role="tab" aria-selected={menu === m.key}
+                className={'mp-wtab' + (menu === m.key ? ' is-on' : '')} onClick={() => goMenu(m.key)}>
+                {m.label}
+              </button>
+            ))}
+          </nav>
+        )}
 
         {menu === 'home' ? (
           <div className="mp-dash">
@@ -1235,12 +1278,27 @@ export function MyPage({ user, onHome, onLogout, onNavigate, onLoginClick, onReq
               savedPolicies={savedPolicies}
               onEventsChanged={() => setCalendarRevision((n) => n + 1)}
             />
-            {web && <MpMenuList onPick={goMenu} onLogout={onLogout} savedCount={savedPolicies.length} />}
           </div>
         ) : menu === 'profile' ? (
           <ProfileSettings user={user} only="profile" onSaved={onProfileSaved} />
         ) : menu === 'billing' ? (
           <BillingPanel key={mpUserId} onRequireLogin={onRequireLogin} />
+        ) : web && menu === 'saved' ? (
+          <div className="mp-saved">
+            <div className="mp-seg" role="tablist" aria-label="저장함">
+              {SAVED_SUBS.map((t) => (
+                <button key={t.key} type="button" role="tab" aria-selected={savedSub === t.key}
+                  className={'mp-seg__btn' + (savedSub === t.key ? ' is-on' : '')} onClick={() => setSavedSub(t.key)}>
+                  {t.label}{t.key === 'gov' && savedPolicies.length ? ` ${savedPolicies.length}` : ''}
+                </button>
+              ))}
+            </div>
+            {savedSub === 'gov'
+              ? <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
+              : <BizplanManager onOpenBizplan={() => onNavigate && onNavigate('bizplan')} />}
+          </div>
+        ) : web && menu === 'settings' ? (
+          <WebSettings user={user} onSaved={onProfileSaved} onLogout={onLogout} />
         ) : menu === 'saved' ? (
           <SavedGov user={user} savedPolicies={savedPolicies} onToggleSave={onToggleSavedPolicy} />
         ) : menu === 'bizplans' ? (

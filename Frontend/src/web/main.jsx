@@ -4,23 +4,10 @@ import { createRoot } from 'react-dom/client';
 import App from '../App.jsx';
 import '../styles.css';
 import './web.css';
+import { applyThemePref } from './theme.js';
 
 document.documentElement.classList.add('is-web');
 
-// 다크 모드 선택을 기억한다(메뉴의 '다크 모드 전환'은 data-theme만 바꾸므로 그 변화를 저장 · 복원한다).
-const THEME_KEY = 'changeup:web-theme';
-try {
-  const saved = localStorage.getItem(THEME_KEY);
-  if (saved === 'dark' || saved === 'light') document.documentElement.setAttribute('data-theme', saved);
-} catch {
-  /* 저장소를 쓸 수 없으면 기본 테마 */
-}
-new MutationObserver(() => {
-  const t = document.documentElement.getAttribute('data-theme');
-  try {
-    if (t) localStorage.setItem(THEME_KEY, t);
-  } catch {
-    /* 무시 */
-  }
-}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+// 저장된 테마 선택(시스템 · 라이트 · 다크)을 첫 화면을 그리기 전에 적용한다(web/theme.js).
+applyThemePref();
 createRoot(document.getElementById('root')).render(<App variant="web" />);
