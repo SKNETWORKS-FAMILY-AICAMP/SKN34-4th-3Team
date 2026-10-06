@@ -188,3 +188,9 @@ CREATE TABLE IF NOT EXISTS collection_failures (
 );
 CREATE INDEX IF NOT EXISTS idx_collection_failures_open
     ON collection_failures (script) WHERE resolved_at IS NULL;
+
+-- TIMESTAMP 컬럼의 now() 기본값을 앱 컨테이너(TZ=Asia/Seoul)와 같은 한국 시간으로 기록한다. 새 연결부터 적용된다.
+DO $$
+BEGIN
+    EXECUTE format('ALTER DATABASE %I SET timezone TO %L', current_database(), 'Asia/Seoul');
+END $$;
