@@ -80,6 +80,9 @@ LLM_TIMEOUT_BIZPLAN = float(os.getenv("LLM_TIMEOUT_BIZPLAN", "120"))
 # 프런트보다 먼저(또는 같이) 끝나도록 여유를 두고 짧게 잡는다.
 LLM_TIMEOUT_OCR = float(os.getenv("LLM_TIMEOUT_OCR", "40"))
 LLM_TIMEOUT_REINDEX = float(os.getenv("LLM_TIMEOUT_REINDEX", "180"))
+# Backend 기동 시 LLM 자체 warm-up(첫 요청에서 인덱스 구성)이 끝나기를 기다리는 최대 시간(초).
+# 이 시간이 지나도 준비되지 않으면 그때만 재색인을 요청한다.
+LLM_WARMUP_WAIT = float(os.getenv("LLM_WARMUP_WAIT", "600"))
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:admin1234@127.0.0.1:5432/startup_platform")
 SMTP_HOST = os.getenv("SMTP_HOST", "")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
