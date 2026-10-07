@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="940" viewBox="0 0 1400 940" font-family="'Noto Sans CJK KR','Malgun Gothic',sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#5b6b78"/>
+    </marker>
+    <marker id="arrg" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#16845d"/>
+    </marker>
+    <marker id="arro" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L9,5 L0,10 Z" fill="#d98017"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="940" fill="#f4f7fb"/>
+  <text x="40" y="52" font-size="30" font-weight="bold" fill="#15241d">창업ON 시스템 아키텍처</text>
+  <text x="40" y="80" font-size="16" fill="#5b6b78">AWS 2-EC2 (App / Data) · Docker Compose · GitHub Actions CI/CD</text>
+
+  <!-- USER -->
+  <circle cx="92" cy="300" r="30" fill="#477688"/>
+  <circle cx="92" cy="289" r="11" fill="#fff"/>
+  <path d="M72 320 q20 -24 40 0 Z" fill="#fff"/>
+  <text x="92" y="362" font-size="18" font-weight="bold" fill="#33463d" text-anchor="middle">USER</text>
+  <text x="92" y="384" font-size="13" fill="#5b6b78" text-anchor="middle">브라우저 · PWA</text>
+
+  <!-- HTTPS arrow to App EC2 -->
+  <path d="M126 300 H 318" fill="none" stroke="#5b6b78" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="224" y="288" font-size="14" fill="#33463d" text-anchor="middle">HTTPS (443)</text>
+
+  <!-- AWS Cloud container -->
+  <rect x="330" y="110" width="1040" height="470" rx="18" fill="#fef6ec" stroke="#f0a94e" stroke-width="2"/>
+  <text x="356" y="142" font-size="20" font-weight="bold" fill="#d98017">AWS Cloud</text>
+
+  <!-- App EC2 -->
+  <rect x="356" y="162" width="560" height="392" rx="14" fill="#eef4f8" stroke="#9db8c6" stroke-width="1.5"/>
+  <text x="378" y="192" font-size="18" font-weight="bold" fill="#2b4a59">App EC2</text>
+  <text x="378" y="214" font-size="13" fill="#5b6b78">docker-compose.app.yml · Docker Compose</text>
+
+  <!-- Frontend(nginx) -->
+  <rect x="384" y="236" width="504" height="76" rx="12" fill="#e1f0f9" stroke="#477688" stroke-width="2"/>
+  <text x="408" y="270" font-size="18" font-weight="bold" fill="#15241d">Frontend (nginx)</text>
+  <text x="408" y="293" font-size="13" fill="#5b6b78">React · Vite 빌드 · HTTPS 종단 · /api 리버스 프록시</text>
+
+  <!-- Backend -->
+  <rect x="384" y="336" width="240" height="88" rx="12" fill="#e1f0f9" stroke="#477688" stroke-width="2"/>
+  <text x="504" y="372" font-size="17" font-weight="bold" fill="#15241d" text-anchor="middle">Backend</text>
+  <text x="504" y="396" font-size="12.5" fill="#5b6b78" text-anchor="middle">Django Ninja (:8000)</text>
+
+  <!-- LLM -->
+  <rect x="648" y="336" width="240" height="88" rx="12" fill="#efe9f9" stroke="#7a5fa6" stroke-width="2"/>
+  <text x="768" y="372" font-size="17" font-weight="bold" fill="#15241d" text-anchor="middle">LLM 서비스</text>
+  <text x="768" y="396" font-size="12.5" fill="#5b6b78" text-anchor="middle">RAG · OCR · 사업계획서 (:8001)</text>
+
+  <!-- arrows within App EC2 -->
+  <path d="M504 312 V 334" fill="none" stroke="#5b6b78" stroke-width="2.2" marker-end="url(#arr)"/>
+  <path d="M624 380 H 646" fill="none" stroke="#5b6b78" stroke-width="2.2" marker-end="url(#arr)"/>
+  <path d="M646 404 H 624" fill="none" stroke="#5b6b78" stroke-width="2.2" marker-end="url(#arr)"/>
+  <text x="458" y="328" font-size="12" fill="#5b6b78" text-anchor="middle">프록시</text>
+
+  <!-- Data EC2 -->
+  <rect x="946" y="162" width="398" height="392" rx="14" fill="#eef4f8" stroke="#9db8c6" stroke-width="1.5"/>
+  <text x="968" y="192" font-size="18" font-weight="bold" fill="#2b4a59">Data EC2</text>
+  <text x="968" y="214" font-size="13" fill="#5b6b78">docker-compose.data.yml</text>
+
+  <!-- PostgreSQL -->
+  <rect x="974" y="244" width="342" height="118" rx="12" fill="#e8f7eb" stroke="#16845d" stroke-width="2"/>
+  <text x="1145" y="284" font-size="17" font-weight="bold" fill="#143f31" text-anchor="middle">PostgreSQL 16</text>
+  <text x="1145" y="308" font-size="13.5" fill="#2f6b52" text-anchor="middle">+ pgvector (관계형 + 벡터 통합)</text>
+  <text x="1145" y="332" font-size="12" fill="#5b6b78" text-anchor="middle">tax_rag_cache · rag_documents (HNSW)</text>
+
+  <!-- Elasticsearch -->
+  <rect x="974" y="386" width="342" height="100" rx="12" fill="#e9f3f7" stroke="#477688" stroke-width="2"/>
+  <text x="1145" y="424" font-size="17" font-weight="bold" fill="#15241d" text-anchor="middle">Elasticsearch (Nori)</text>
+  <text x="1145" y="448" font-size="12.5" fill="#5b6b78" text-anchor="middle">BM25 재평가용 보존</text>
+  <text x="1145" y="468" font-size="12.5" fill="#5b6b78" text-anchor="middle">(운영 검색은 기본 BM25)</text>
+
+  <!-- internal network App<->Data (routed in the gap, not over boxes) -->
+  <path d="M888 362 C 925 332, 948 302, 972 300" fill="none" stroke="#16845d" stroke-width="2.5" stroke-dasharray="2 8" stroke-linecap="round" marker-end="url(#arrg)"/>
+  <path d="M888 398 C 925 410, 948 422, 972 428" fill="none" stroke="#16845d" stroke-width="2.5" stroke-dasharray="2 8" stroke-linecap="round" marker-end="url(#arrg)"/>
+  <rect x="612" y="470" width="276" height="30" rx="15" fill="#c3f4cf" stroke="#16845d" stroke-width="1.5"/>
+  <text x="750" y="490" font-size="13" fill="#143f31" text-anchor="middle">내부 네트워크 (Backend·LLM ↔ Data EC2)</text>
+
+  <!-- GitHub Actions CI/CD -->
+  <rect x="40" y="640" width="640" height="256" rx="16" fill="#eef4f0" stroke="#7f9188" stroke-width="1.8"/>
+  <text x="66" y="674" font-size="19" font-weight="bold" fill="#33463d">GitHub Actions (CI/CD)</text>
+  <rect x="66" y="692" width="588" height="52" rx="10" fill="#fff" stroke="#9db8c6" stroke-width="1.3"/>
+  <text x="82" y="714" font-size="13.5" font-weight="bold" fill="#2b4a59">deploy.yml</text>
+  <text x="82" y="733" font-size="12.5" fill="#5b6b78">4개 이미지 빌드 → GHCR 게시 → App EC2 가 --no-build pull</text>
+  <rect x="66" y="754" width="588" height="52" rx="10" fill="#fff" stroke="#9db8c6" stroke-width="1.3"/>
+  <text x="82" y="776" font-size="13.5" font-weight="bold" fill="#2b4a59">collect.yml (매주 월 03:00 KST) · collect-retry.yml (3시간마다)</text>
+  <text x="82" y="795" font-size="12.5" fill="#5b6b78">주간 수집 → POST /rag/reindex (변경 청크 임베딩 + ES 재색인)</text>
+  <rect x="66" y="816" width="588" height="52" rx="10" fill="#fff" stroke="#9db8c6" stroke-width="1.3"/>
+  <text x="82" y="838" font-size="13.5" font-weight="bold" fill="#2b4a59">backup_db.sh (cron)</text>
+  <text x="82" y="857" font-size="12.5" fill="#5b6b78">DB 덤프 → AWS S3 백업</text>
+
+  <!-- CI/CD arrows -->
+  <path d="M360 692 C 360 630, 430 580, 480 556" fill="none" stroke="#d98017" stroke-width="2.2" stroke-dasharray="6 5" marker-end="url(#arro)"/>
+  <text x="300" y="610" font-size="12.5" fill="#d98017">이미지 배포</text>
+
+  <!-- External sources -->
+  <rect x="720" y="640" width="640" height="256" rx="16" fill="#f0f4f8" stroke="#7f9188" stroke-width="1.8"/>
+  <text x="746" y="674" font-size="19" font-weight="bold" fill="#33463d">외부 수집원</text>
+  <text x="746" y="700" font-size="13.5" fill="#5b6b78">수집 스크립트(DB/run_collection.py)가 Data EC2 DB에 직접 적재</text>
+  <rect x="746" y="714" width="290" height="40" rx="9" fill="#fff" stroke="#9db8c6" stroke-width="1.2"/>
+  <text x="761" y="739" font-size="13" fill="#15241d">국가법령정보센터 (세법·해석례)</text>
+  <rect x="1046" y="714" width="290" height="40" rx="9" fill="#fff" stroke="#9db8c6" stroke-width="1.2"/>
+  <text x="1061" y="739" font-size="13" fill="#15241d">정부24 (공공서비스)</text>
+  <rect x="746" y="762" width="290" height="40" rx="9" fill="#fff" stroke="#9db8c6" stroke-width="1.2"/>
+  <text x="761" y="787" font-size="13" fill="#15241d">K-Startup · 기업마당 (지원공고)</text>
+  <rect x="1046" y="762" width="290" height="40" rx="9" fill="#fff" stroke="#9db8c6" stroke-width="1.2"/>
+  <text x="1061" y="787" font-size="13" fill="#15241d">온통청년 (청년정책)</text>
+  <rect x="746" y="810" width="590" height="40" rx="9" fill="#fff" stroke="#9db8c6" stroke-width="1.2"/>
+  <text x="761" y="835" font-size="13" fill="#15241d">생활법령정보 (창업 분야) — easylaw.go.kr</text>
+
+  <!-- External -> Data EC2 arrow -->
+  <path d="M1145 640 V 492" fill="none" stroke="#16845d" stroke-width="2.4" stroke-dasharray="6 5" marker-end="url(#arrg)"/>
+  <text x="1210" y="620" font-size="12.5" fill="#16845d" text-anchor="middle">주간 적재</text>
+</svg>

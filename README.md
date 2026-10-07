@@ -250,9 +250,7 @@
 
 ## 6. 시스템 아키텍처
 
-![시스템 아키텍처](Docs/data/2026-09-16_102812.png)
-
-> ⚠️ 위 아키텍처 이미지는 교체 예정이다(Elasticsearch·AWS 2-EC2 구성 반영). 이미지 교체 전까지 아래 설명은 현재 고도화된 구성을 기준으로 한다.
+![시스템 아키텍처](Docs/data/system_architecture.svg)
 
 - **Frontend → Backend**: 외부에 노출되는 유일한 진입점. Frontend가 실행되고, api 요청이 프록시를 거쳐 Backend로 감
 - **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답(스트리밍)·세액감면판정 근거 생성·공고문 요약·영수증 OCR·사업계획서 생성/출력을 담당
@@ -1850,7 +1848,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 - PWA를 지원하므로 브라우저의 "앱 설치"로 홈 화면에 추가해 앱처럼 쓸 수 있다.
 - `OPENAI_API_KEY` 등 서버 설정은 배포 환경에 구성되어 있어, 접속만으로 AI 기능까지 동작한다.
 
-
+<br>
 
 <details>
 <summary><b>&nbsp;&nbsp;로컬 개발 환경 실행 (개발자용)</b></summary>
@@ -1880,7 +1878,6 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 - 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 4절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
 
 </details>
-<br>
 
 ---
 
