@@ -240,6 +240,10 @@
 - One-shot 또는 Few-shot 활용 프롬프트 템플릿 작성
 - 사용할 LLM 모델 선택
 - LangChain 기반 RAG 기술로 벡터데이터베이스와 LLM 연동하여 질의응답 구현
+- 영수증 OCR 기반 경비처리 판정 및 지출 분류·통계
+- 공고 양식 기반 사업계획서 초안 생성 및 AI 예비진단
+- 하이브리드 검색(Dense + BM25 + RRF + Rerank)과 Semantic Cache로 검색·응답 품질·속도 고도화
+- AWS 클라우드 배포 및 CI/CD·데이터 수집 자동화
 - 구현 결과 테스트 및 개선
 
 ---
@@ -267,15 +271,17 @@
 ├── Backend/         # API 서버 (Django + Django Ninja, :8000)
 ├── Frontend/        # 사용자 화면 (React + Vite, :5173)
 ├── LLM/             # RAG 파이프라인, 임베딩, 프롬프트, 모델 서빙 (:8001)
-├── DB/              # DB 스키마, 수집 스크립트(scripts/), 수집 실행기(run_collection.py)
+├── DB/              # DB 스키마(01_schema.sql·app_extras.sql), 수집 스크립트(scripts/), 수집 실행기(run_collection.py)
 ├── elasticsearch/   # Nori 분석기를 설치한 Elasticsearch 이미지
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
 │   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
-│   └── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
+│   ├── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
+│   ├── data/        # README·문서용 이미지·수행결과 GIF
+│   └── branch_work/   # 브랜치별 작업 기록
 ├── Presentation/    # 발표자료(Slidev, /ppt/로 서빙)
-├── scripts/         # 운영 스크립트(backup_db.sh: DB 백업 → S3)
-├── .github/workflows/  # deploy(테스트·배포), collect(주간 수집), collect-retry(실패 재시도)
+├── scripts/         # 운영 스크립트(backup_db.sh: DB 백업 → S3, autoheal.sh, deploy_app.sh, tests/)
+├── .github/workflows/  # deploy(테스트·배포), collect(주간 수집), collect-retry(실패 재시도), health-check(상태 점검)
 ├── docker-compose.yml       # 로컬·단일 호스트
 ├── docker-compose.dev.yml   # 개발 오버라이드(--reload, frontend-dev)
 ├── docker-compose.app.yml   # AWS App EC2
@@ -1626,9 +1632,9 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 | 단계 | 작업 항목 | 상태 |
 | --- | --- | :---: |
-| **1. 고도화 기획** | 3차 결과 분석 → 고도화 범위·요구사항 재정의(기능 요구사항 정리 완료, 비기능·페르소나·우선순위 일부 미완) | 🔄 진행 중 |
+| **1. 고도화 기획** | 3차 결과 분석 → 고도화 범위·요구사항 재정의 | ✅ 완료 |
 | **2. 설계 보강** | 유스케이스·ERD·시퀀스·클래스·API 명세를 지출관리·사업계획서까지 반영해 갱신 | ✅ 완료 |
-| | 화면 설계(와이어프레임) | ⬜ 미착수 |
+| | 화면 설계(모바일용) | ✅ 완료 |
 | **3. 아키텍처 재정비** | 기술 스택 확정 · 시스템 아키텍처(Elasticsearch·AWS 2-EC2) · 모듈 구조 · 환경변수 정리 | ✅ 완료 |
 | **4. 데이터 확장** | 세법·정책 수집, 국세청 법령해석례·생활법령 추가, 지역명 정규화, 수집 실패 분류·재시도 스케줄러 | ✅ 완료 |
 | **5. 기능 개발(고도화)** | 지출관리(영수증 OCR 경비처리), 사업계획서 AI 작성, 대화방·사용자 개인화, 구독 플랜(목업), PWA·HTTPS | ✅ 완료 |
@@ -1844,10 +1850,11 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 - PWA를 지원하므로 브라우저의 "앱 설치"로 홈 화면에 추가해 앱처럼 쓸 수 있다.
 - `OPENAI_API_KEY` 등 서버 설정은 배포 환경에 구성되어 있어, 접속만으로 AI 기능까지 동작한다.
 
-<br>
 
-//토글로
-### 로컬 개발 환경 실행 (개발자용)
+
+<details>
+<summary><b>&nbsp;&nbsp;로컬 개발 환경 실행 (개발자용)</b></summary>
+<br>
 
 `.env`는 비밀키가 들어 있어 git으로 공유되지 않는다. **팀에서 파일로 받아 저장소 루트에 두고** 시작한다. 스크립트는 `.env`를 만들어 주지 않는다.
 
@@ -1871,6 +1878,9 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 - `OPENAI_API_KEY`가 없어도 화면·DB·정책 조회는 정상이고 AI 답변만 목업이 된다
 - Docker Compose v2.1.1 이상이 필요하다. `setup.bat`의 메시지는 cmd.exe 인코딩 제약 때문에 영문이다
 - 단계별 동작과 문제 해결은 `setup.sh` 상단 주석과 `Docs/STATUS.md` 4절 참고. LLM 서비스만 따로 띄우려면 `LLM/RUN_GUIDE.md`
+
+</details>
+<br>
 
 ---
 
