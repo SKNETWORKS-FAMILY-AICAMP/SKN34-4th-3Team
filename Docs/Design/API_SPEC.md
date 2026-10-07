@@ -43,7 +43,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | GET | /chat/categories/{category}/suggested-questions | 카테고리별 추천 질문 목록(하드코딩) | **불필요** | - | `{ category, questions: [...] }` (알 수 없는 category는 tax 목록) | FS-05 |
 | POST | /chat/messages/stream | 챗봇 질의 전송(스트리밍, **화면이 쓰는 경로**) | 필요 | `/chat/messages`와 같음 | NDJSON(`application/x-ndjson`) 한 줄당 이벤트 하나: `{ type: "draft", answer }`(생성 중 답변, 0회 이상) → 마지막에 `{ type: "done", result }`(`result`는 `/chat/messages` 응답과 같은 형태) | FS-05, FS-06, FS-07 |
-| POST | /chat/messages | 챗봇 질의 전송 (category: tax / expense / saving / policy / roadmap) | 필요 | `{ category, question, roadmapStep?, roomId? }` (`roadmapStep`은 `A`~`F`·`Z`, `roadmap`에서만 허용. `roomId`를 비우면 새 대화방) | `{ messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
+| POST | /chat/messages | 챗봇 질의 전송(비스트리밍, 현재 화면 호출자 없음 — `api.chat`) (category: tax / expense / saving / policy / roadmap) | 필요 | `{ category, question, roadmapStep?, roomId? }` (`roadmapStep`은 `A`~`F`·`Z`, `roadmap`에서만 허용. `roomId`를 비우면 새 대화방) | `{ messageId, roomId, answer, grounded, llmUsed, needsConfirmation, status, guardrailReason }` | FS-05, FS-06, FS-07 |
 | GET | /chat/messages | 내 대화 기록 조회 | 필요 | `?category`(선택) | `{ messages: [...] }` | FS-05 |
 | DELETE | /chat/messages | 내 대화방 전체(또는 카테고리 단위) 삭제 | 필요 | `?category`(선택). 예전 방식의 `?ids`는 `400`(대화방 하나는 `DELETE /chat/rooms/{roomId}`) | `{ deleted: true, count: n }` | FS-05 |
 | GET | /chat/rooms | 대화방 목록(최근 대화 순) | 필요 | `?category`(필수) | `{ rooms: [{ id, category, title, firstQuestion, createdAt, updatedAt }] }` (`title`이 없으면 `firstQuestion`을 제목으로 씀) | FS-05 |
@@ -73,7 +73,7 @@
 | POST | /tax/tax-reduction/check | 청년창업 세액감면 판정 실행 | 필요 | - (사용자·사업자 정보 기반). 나이·창업일이 없으면 400 | `{ eligible, reasons, legalBasis, llmUsed }` | FS-13 |
 | GET | /tax/tax-reduction/result | 최근 판정 결과 조회 | 필요 | - | `{ eligible, reasons, legalBasis, llmUsed }` (결과 없으면 404) | FS-13 |
 
-`tax` 그룹에서 현재 살아 있는 화면이 부르는 경로는 없다. `/tax/business-type/diagnosis`(FS-09)·`/tax/info`(FS-10)·`/tax/calendar`·`/tax/reminders`(FS-12)는 호출자가 없고, `/tax/tax-reduction/check`(FS-13)의 유일한 호출자 `Frontend/src/pages/TaxTool.jsx`는 어느 화면에서도 렌더되지 않는 죽은 코드다(파일 2행 주석). 홈·마이페이지 캘린더는 `tax` 그룹이 아니라 `GET /calendar`를 쓴다.
+`tax` 그룹에서 현재 살아 있는 화면이 부르는 경로는 없다. `/tax/business-type/diagnosis`(FS-09)·`/tax/info`(FS-10)·`/tax/calendar`·`/tax/reminders`(FS-12)는 호출자가 없고, `/tax/tax-reduction/check`(FS-13)의 호출자 `Frontend/src/pages/TaxTool.jsx`(파일 2행 주석)와 `Frontend/src/mobile/MTax.jsx`는 둘 다 어느 화면에서도 렌더되지 않는 죽은 코드다(모바일 앱은 `Frontend/src/App.jsx:26` 주석대로 연결하지 않음). 홈·마이페이지 캘린더는 `tax` 그룹이 아니라 `GET /calendar`를 쓴다.
 
 ## expenses — 지출 분석
 
@@ -81,20 +81,20 @@
 
 | Method | Endpoint | 설명 | 인증 | Request | Response | 관련 기능ID |
 | --- | --- | --- | --- | --- | --- | --- |
-| POST | /expenses/receipts | 영수증 등록(업로드, OCR 트리거) | 필요 | `multipart/form-data (image)` | `{ receiptId, status, ocrSource, proofType, proofTypeLabel }` (`ocrSource`: `ocr_llm` \| `vision` \| `mock`) | FS-14 |
-| GET | /expenses/receipts/{receiptId} | 영수증 OCR 추출 결과 조회 | 필요 | - | `{ date, vendor, amount, items, proofType, proofTypeLabel, ocrSource }` | FS-15 |
-| GET | /expenses/receipts/{receiptId}/image | 업로드한 원본 이미지 | 필요 | - | 이미지 바이너리(업로드 때의 `Content-Type`). 본인 것이 아니거나 이미지가 없으면 404 | FS-14 |
+| POST | /expenses/receipts | 영수증 등록(업로드, OCR 트리거) | 필요 | `multipart/form-data (image)` | `{ receiptId, status, ocrSource, proofType, proofTypeLabel }` (`ocrSource`: `ocr_llm` \| `vision`, LLM이 출처를 주지 않으면 `heuristic`). 읽지 못하면 저장하지 않고 `503` | FS-14 |
+| GET | /expenses/receipts/{receiptId} | 영수증 OCR 추출 결과 조회 | 필요 | - | `{ date, vendor, amount, items, proofType, proofTypeLabel, ocrSource }` (`ocrSource`는 항상 `heuristic` 고정값. 실제 읽기 방식은 `/analysis`의 `ocrSource`) | FS-15 |
+| GET | /expenses/receipts/{receiptId}/image | 업로드한 원본 이미지 | 필요 | - | 이미지 바이너리(`Content-Type`은 업로드 헤더가 아니라 파일 앞부분 바이트로 판별한 값). 본인 것이 아니거나 이미지가 없으면 404 | FS-14 |
 | GET | /expenses | 지출 내역(분류·판정 포함) 조회 | 필요 | `?from&to&category` | `{ expenses: [{ expenseId, receiptId, vendor, category, amount, date, uploadedAt, deductible, tier, tierLabel, proofType, proofTypeLabel, proofValid, missingFields, items }] }` | FS-16 |
 | PATCH | /expenses/{expenseId} | 지출항목 변경 후 재판정 | 필요 | `{ category }` (지원하지 않는 항목은 400) | `/deductibility`와 같음 | FS-16 |
 | DELETE | /expenses/{expenseId} | 지출 삭제 | 필요 | - | `{ deleted: true }` | FS-16 |
-| GET | /expenses/{expenseId}/analysis | 읽은 항목·판단 단계·관련 법령(LLM 호출 없이 즉시 응답) | 필요 | - | `{ fields, steps, laws, lawNote, tier, tierLabel, ocrSource, ocrConfidence }` | FS-15, FS-17 |
+| GET | /expenses/{expenseId}/analysis | 읽은 항목·판단 단계·관련 법령(LLM 호출 없이 즉시 응답) | 필요 | - | `{ fields, items, steps, laws, lawNote, tier, tierLabel, ocrSource, ocrConfidence }` | FS-15, FS-17 |
 | POST | /expenses/{expenseId}/items | OCR이 놓친 품목 직접 추가 | 필요 | `{ name, price? }` (`name` 1~200자, `price` 0 이상) | `/analysis`와 같음 | FS-15 |
 | DELETE | /expenses/{expenseId}/items/{itemIndex} | 품목 삭제(`itemIndex`는 화면 순서, 0부터) | 필요 | - | `/analysis`와 같음 | FS-15 |
-| PATCH | /expenses/{expenseId}/vendor | 상호 직접 수정 | 필요 | `{ vendor }` (1~200자) | `/analysis`와 같음 | FS-15 |
+| PATCH | /expenses/{expenseId}/vendor | 상호 직접 수정 | 필요 | `{ vendor }` (200자 이하, 빈 문자열이면 상호를 지움) | `/analysis`와 같음 | FS-15 |
 | GET | /expenses/{expenseId}/deductibility | 경비처리 가능성·세법 근거 | 필요 | - | `{ deductible, confidence, basis, llmUsed, sources, tier, tierLabel, proofType, proofTypeLabel, proofValid, missingFields }` | FS-17 |
 
 `POST /expenses/receipts`의 업로드 한도는 **4 MiB**이며 초과 시 `413`이다(`Backend/api/expenses.py`의 `MAX_RECEIPT_BYTES`).
-LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는다(그 밖의 형식은 `415`).
+형식은 업로드 헤더가 아니라 파일 앞부분 바이트로 판별하며 JPEG·PNG·WebP가 아니면 Backend가 `415`를 반환한다(`_sniff_image_media_type`). LLM 쪽도 같은 한도·형식을 다시 검사한다. 읽지 못한 영수증은 임의 값으로 저장하지 않고 `503`이다(`Backend/services/expense_service.py`의 `create_receipt`).
 
 - `category`: `사무용품`·`통신비`·`차량유지비`·`광고선전비`·`임차료`·`복리후생비`·`접대비`·`교육·도서`·`기타`
 - `tier`: `high`(인정 가능성 높음) \| `ambiguous`(애매함) \| `low`(인정 어려움). 신뢰도 0.7 이상이고 증빙이 적격이면 `high`
@@ -102,7 +102,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 - `analysis.fields[]`: `{ key, label, value, read, evidence }` — `read=false`면 못 읽은 값, `evidence`는 영수증 원문 인용
 - `analysis.steps[]`: `{ key, title, result, detail }` — `result`는 `pass`·`warn`·`fail`·`unknown`
 - `analysis.laws[]`: `{ law, article, title, point, who, url }` — `url`은 국가법령정보센터 링크
-- `ocrSource`(`analysis`): `ocr_llm` \| `vision` \| `mock` \| `legacy`(읽기 방식을 기록하기 전 영수증). `ocrConfidence`는 `ocr_llm`일 때만 값이 있는 평균 인식 신뢰도(%)
+- `ocrSource`(`analysis`): `ocr_llm` \| `vision` \| `heuristic` \| `legacy`(읽기 방식을 기록하기 전 영수증). `mock`은 실패 시 목 값을 저장하던 이전 동작에서 남은 행에만 있다. `ocrConfidence`는 `ocr_llm`일 때만 값이 있는 평균 인식 신뢰도(%)
 
 ## bizplan — 사업계획서
 
@@ -115,7 +115,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | POST | /bizplan/template-inspect | 제출 양식(PDF·HWPX) 입력 칸·출력 형식 검사 | 필요 | `{ fileName, contentBase64 }` (4 MiB 이하, PDF·HWPX 외 `422`, 초과 `413`) | `{ kind, fields, outputFormats }` (`kind`·`outputFormats`: `pdf` \| `hwpx`) | FS-29 |
 | POST | /bizplan/render | 사업계획서 파일 출력 | 필요 | `{ title, sections, format, template?, images? }` (`sections` 1~40개, `format`: `pdf` \| `hwpx`, `template`은 `template-inspect`와 같은 형태, `images[]`: `{ key, mimeType, contentBase64 }` 최대 20개·파일당 2 MiB·합계 4 MiB, 양식 없이 이미지만 보내면 `422`) | `{ fileName, mimeType, contentBase64 }` | FS-29 |
 | POST | /bizplan/evaluate | AI 예비진단(자체 채점) | 필요 | `{ sections: [{ key, label, content }], announcementId?, templateFields? }` (각 최대 40개) | `{ overallScore, overallComment, sections: [{ key, label, score, strengths, improvements }], llmUsed }` (점수 0~100) | FS-30 |
-| POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`) | FS-31 |
+| POST | /bizplan/coach | 아이디어 어시스턴트 질문 | 필요 | `{ question, businessName, tagline, targetCustomer, sections, conversationHistory }` (`question` 1~1000자, `sections`·`conversationHistory` 각 최대 20개) | `{ answer, inScope, redirect }` (`redirect`: `tax` \| `policy` \| `none`). 현재 프론트 호출자 없음 | FS-31 |
 | GET | /bizplan/draft | 사업계획서 임시저장 조회 | 필요 | - | `{ data, updatedAt }` (없으면 둘 다 `null`) | FS-29 |
 | PUT | /bizplan/draft | 사업계획서 임시저장(유저당 1건 덮어쓰기) | 필요 | `{ data }` (작성 화면 상태 객체, 양식·이미지 Base64 포함 12 MiB 이하, 초과 `413`) | `{ updated: true }` | FS-29 |
 | DELETE | /bizplan/draft | 내 임시저장 삭제(저장 문서는 유지) | 필요 | - | `{ deleted: true }`, `200` (이미 없어도 동일) | FS-29 |
@@ -137,7 +137,7 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 
 `templateText`를 비우면 `sections`는 기본 양식 13개 입력 칸(`LLM/src/rag/backend_tasks.py`의 `BUSINESS_PLAN_DEFAULT_FIELDS`)이고, 공고 양식을 넣으면 그 양식의 항목 제목·개수·순서를 따른다. `announcementId`를 주면 해당 공고명이 `targetProgram`을 덮어쓰고 공고 기준이 생성·예비진단에 반영된다(없는 공고는 `404`).
 
-임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. `/bizplan/documents` API는 Backend에만 남아 있고 현재 프론트에서 부르지 않는다(마이페이지 서류 탭은 `227dbfd`에서 제거됐고, 파일은 사업계획서 페이지에서 `/bizplan/render`로 바로 받는다). 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
+임시저장은 `bizplan_drafts`의 최신 1건을 유지하며 파일 8개 제한에 포함하지 않는다. `/bizplan/documents` API는 Backend에만 남아 있고 현재 프론트에서 부르지 않는다. `POST /bizplan/coach`(아이디어 어시스턴트)와 `DELETE /bizplan/draft`(`api.deleteBizplanDraft`)도 호출하는 화면이 없다(마이페이지 서류 탭은 `227dbfd`에서 제거됐고, 파일은 사업계획서 페이지에서 `/bizplan/render`로 바로 받는다). 목록 응답에는 작성 상태·양식·이미지 Base64가 포함되지 않는다.
 
 보관함(`bizplans`)은 작성 화면 상태 전체를 건별로 보관한다. 임시저장 `data.planId`가 지금 작성 화면에 열린 보관함 건을 가리키며, 목록의 `isCurrent`가 이 값으로 정해진다. 제목·진행 단계·점수는 저장할 때 `data`에서 뽑는다(`bizplan_service.plan_meta`). 보관함이 생기기 전의 임시저장은 목록 조회 시 한 건으로 옮겨진다. 개수 제한은 없다.
 
@@ -240,4 +240,4 @@ LLM 쪽도 같은 한도이고 `image/jpeg`·`image/png`·`image/webp`만 받는
 | `api.taxSchedule` (`api.js:336`) | `GET /tax/schedule` | Backend 미구현. 호출자 없음 |
 | `api.taxDocuments` (`api.js:337`) | `GET /tax/documents` | Backend 미구현. 호출자 없음 |
 
-`api.summarizeAnnouncement`(`api.js:361`)는 경로(`POST /announcements/summary`)가 Backend에 있으나 호출자가 없는 경우로, 위 세 개와 성격이 다르다(`policies` 절 참고).
+`api.summarizeAnnouncement`(`api.js:365`)는 경로(`POST /announcements/summary`)가 Backend에 있으나 호출자가 없는 경우로, 위 세 개와 성격이 다르다(`policies` 절 참고).

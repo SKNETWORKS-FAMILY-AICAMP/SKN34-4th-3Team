@@ -250,9 +250,9 @@ erDiagram
 - **AdminUser – Policy / TaxDocument**: 관리자가 등록한 데이터의 출처를 추적하기 위한 FK.
 - **RagDocument**: 원천 문서 참조와 실제 FK가 섞여 있는 구조다.
     - `source_type`(`tax_document`/`policy`/`announcement`) + `source_id`: `tax_documents`·`policies`·`announcements` 여러 테이블을 대상으로 하므로 DB 레벨 FK를 걸지 않은 논리적 참조다. 벡터DB 임베딩 상태(FS-27)도 여기서 추적한다.
-    - `policy_id`: `policies(id)`를 가리키는 실제 FK다. 정책 단위 검색 필터(`LLM/src/vectorstores/postgres.py:225`)와 정책 제목 조인(`:211-217`)에 쓰인다. 세법 문서 청크는 이 값이 `NULL`이라 관계가 `0..*`다.
+    - `policy_id`: `policies(id)`를 가리키는 실제 FK다. 정책 단위 검색 필터(`LLM/src/vectorstores/postgres.py:233`)와 정책 제목 조인(`:219`, `:225`)에 쓰인다. 세법 문서 청크는 이 값이 `NULL`이라 관계가 `0..*`다.
     - `chunk_id`: 청크 본문 hash 기반 UNIQUE 키다. 재색인 시 `ON CONFLICT (chunk_id) DO UPDATE`(`LLM/src/vectorstores/postgres.py:85`)로 중복 삽입 대신 갱신한다.
-    - ⚠️ `rag_documents.policy_id` FK에는 `ON DELETE` 옵션이 없다(`DB/01_schema.sql:170`, `calendar_events.policy_id`도 같음 `:75`). 청크나 POLICY 일정이 참조하는 `policies` 행을 지우면 CASCADE로 함께 지워지지 않고 FK 오류로 삭제가 실패한다. 정책 테이블을 다루는 마이그레이션·정리 스크립트는 참조 행을 먼저 정리해야 한다. Backend가 쓰기마다 `TRUNCATE policies ... CASCADE`를 실행하던 경로는 제거됐다 (`Docs/STATUS.md` P0-3).
+    - ⚠️ `rag_documents.policy_id` FK에는 `ON DELETE` 옵션이 없다(`DB/01_schema.sql:170`, `calendar_events.policy_id`도 같음 `:75`). 청크나 POLICY 일정이 참조하는 `policies` 행을 지우면 CASCADE로 함께 지워지지 않고 FK 오류로 삭제가 실패한다. 정책 테이블을 다루는 마이그레이션·정리 스크립트는 참조 행을 먼저 정리해야 한다. 같은 이유로 `app_extras.sql`이 추가한 `calendar_events.user_id`(`:4`)·`expenses.user_id`(`:8`)·`notifications.user_id`(`:29`)도 `ON DELETE`가 없어, 이 행이 남은 사용자는 삭제가 FK 오류로 실패한다. Backend가 쓰기마다 `TRUNCATE policies ... CASCADE`를 실행하던 경로는 제거됐다 (`Docs/STATUS.md` P0-3).
 - **TaxRagCache**: LLM 세금 질문 Semantic Cache(`LLM/src/rag/tax_cache.py`)가 쓰는 파생 테이블이다. 다른 테이블과 FK 없이 `cache_key`(질문·사용자 조건·버전 digest) 단위로 검색 근거와 근거 판정을 JSONB로 저장하고, `question_embedding` 코사인 유사도로 유사 질문을 찾는다. 근거는 `rag_documents.id`로 되살리므로 원천 데이터가 아니며 환경마다 새로 채운다.
 - **Notification**: 앱 알림함·메일 대기열·브라우저 푸시를 한 테이블로 담는다. `channel`로 전달 수단을, `status`로 발송 상태를, `read_flag`로 읽음 여부를 구분한다. 설계 초안에는 없던 엔티티이며 구현을 정식 수용한 것이다.
 - **PolicyEligibility(FS-20)**: 별도 테이블로 저장하지 않는다. `Policy.eligibility_rule`과 `User`/`BusinessProfile` 값을 요청 시점에 비교해 계산하는 값이라 저장이 불필요하다.
@@ -262,7 +262,7 @@ erDiagram
 
 위 다이어그램은 `DB/01_schema.sql`(PostgreSQL + pgvector)의 실제 테이블 구조에 맞춰 동기화했다.
 
-`01_schema.sql`이 명시적으로 만드는 인덱스는 `rag_documents.embedding`의 HNSW(`vector_cosine_ops`) 하나뿐이다. 나머지는 PK와 UNIQUE 제약이 만드는 암묵 인덱스이며, 조회용 보조 인덱스는 아직 두지 않았다.
+`01_schema.sql`이 명시적으로 만드는 인덱스는 `rag_documents.embedding`의 HNSW(`vector_cosine_ops`) 하나뿐이고, 나머지는 PK와 UNIQUE 제약이 만드는 암묵 인덱스다. 조회용 보조 인덱스는 `app_extras.sql`이 둔다: `tax_rag_cache_question_embedding_hnsw`(`:63`), `rag_documents_source_type_updated_at_idx`(`:66`), `idx_chat_rooms_user_cat`(`:78`), `idx_chat_messages_room`(`:81`), `idx_bizplans_user`(`:143`), `idx_bizplan_documents_user`(`:160`), `idx_collection_failures_open`(`:195`).
  컬럼 단위 제약(`NOT NULL`, `ON DELETE CASCADE` 등)과 `01_schema.sql` 작성 시점의 세부 결정 사유는 중복 기술하지 않고 `DB/01_schema.sql` 하단 "ERD와 다른 사항" 주석을 참조한다.
 
 ### 의도적으로 스키마에 두지 않은 항목
@@ -275,6 +275,8 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 
 `expenses.user_id`는 `receipt_id → receipts.user_id`로 유도할 수 있는 비정규화다. 조회 필터 편의를 위해 남겨 두었다.
 
+`app_extras.sql` 마지막 블록은 DB 기본 시간대를 `Asia/Seoul`로 둔다(`ALTER DATABASE … SET timezone`, `:199-202`). 새 연결부터 적용된다.
+
 `app_extras.sql`은 빈 볼륨에서는 initdb로 `01_schema.sql` 다음에 적용되고, 이후에는 `docker compose up`마다 `db-migrate` 서비스가 다시 적용한다. 모든 구문이 재실행에 안전하다(`IF NOT EXISTS`, 제약·`NOT NULL`은 `DO $$` 블록에서 확인 후 적용).
 
 ### 스키마 적용 경로
@@ -285,7 +287,7 @@ Backend가 참조하던 누락 테이블·컬럼은 `DB/app_extras.sql`이 채�
 - **`db-migrate`**: `db`가 healthy가 되면 `psql -v ON_ERROR_STOP=1`로 `app_extras.sql`을 적용하고 종료하는 one-shot 서비스다. `backend`·`llm`은 이 서비스가 성공해야 기동한다. 기존 볼륨에도 스키마 변경이 `docker compose up`만으로 반영된다. 수동 재적용은 `docker compose up -d db-migrate`
 - `db` healthcheck는 `pg_isready -h 127.0.0.1`(TCP)로 확인한다. initdb 중 임시 서버는 TCP를 열지 않아, 소켓으로 확인하면 init 도중 healthy가 되어 `db-migrate`가 연결 거부로 실패할 수 있다
 - `DB/run_all.sh`·`run_all.bat`은 수집 스크립트와 `08_link_policy_calendar.sql`만 실행한다. 스키마는 다루지 않는다
-- `Backend/core/db.py`의 `_apply_extras`는 파일 전체를 한 번에 실행하고 실패하면 `rollback()` 후 경고 로그만 남긴다. compose 컨테이너에서는 파일 경로(`/DB`)가 없어 건너뛴다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
+- `Backend/core/db.py`의 `_apply_extras`는 파일 전체를 한 번에 실행하고 실패하면 `rollback()` 후 경고 로그만 남긴다. 기본 compose 컨테이너에서는 파일 경로(`/DB`)가 없어 건너뛰고, 개발 오버라이드(`docker-compose.dev.yml`)는 `./DB:/DB:ro`를 마운트해 `--reload` 때 다시 적용한다. 적용 경로로 의존하지 않는다(`Docs/STATUS.md` 2절 P1-3)
 - `setup.sh`·`setup.bat`도 기동 때마다 `psql`로 다시 적용한다. `db-migrate`와 중복이지만 무해하다
 - compose 밖 DB에는 `psql -v ON_ERROR_STOP=1 -f DB/app_extras.sql`로 직접 적용한다
 
@@ -327,7 +329,7 @@ erDiagram
 
     user_roadmap_progress {
         int user_id PK "FK"
-        int version PK "DEFAULT 2"
+        smallint version PK "DEFAULT 2"
         string task_key PK "단계:인덱스 (예: A:0)"
         datetime done_at
     }

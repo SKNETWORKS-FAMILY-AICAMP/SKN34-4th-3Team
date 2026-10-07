@@ -89,8 +89,8 @@ flowchart LR
 - **LangChain**: 벡터데이터베이스와 LLM을 연동해 RAG 파이프라인을 구성한다.
 - **LLM**: 자연어 상담 및 공고문 분석
 - **Rule-based Engine**: 청년창업 세액감면 요건 자동 판정
-- **Hybrid 검색**: pgvector Dense 검색과 Elasticsearch Nori(한국어 형태소) BM25를 RRF로 결합하고 Cohere로 재정렬한다
-- **OCR**: 영수증을 Tesseract(`LLM/src/features/receipt_ocr.py`)로 읽고 LLM이 항목을 정리한다. Tesseract가 실패하거나 읽은 글자가 부족하면 OpenAI Vision으로 대체한다. 지출관리 화면이 부른다
+- **Hybrid 검색**: pgvector Dense 검색과 LLM 프로세스 안의 메모리 BM25(어절 + 2-gram)를 RRF로 결합하고 Cohere로 재정렬한다. 2026-10-02부터 Elasticsearch Nori BM25 대신 메모리 BM25를 쓰며, Elasticsearch 컨테이너는 남아 있으나 서빙 경로에서 조회하지 않는다(`Docs/Design/ARCHITECTURE.md`)
+- **OCR**: 영수증을 PaddleOCR PP-OCRv5 한국어 모델(`LLM/src/features/receipt_ocr.py`, paddle 불가 시 Tesseract)로 읽고 LLM이 항목을 정리한다. OCR이 실패·지연되거나 읽은 글자가 부족하면 OpenAI Vision으로 대체한다. 엔진 비교는 `Docs/OCR_PPOCRV5_BENCHMARK.md`. 지출관리 화면이 부른다
 - **Agent 구조**: 세무·정책 등 업무별 정보 검색 및 처리
 
 ## 7. 프로젝트 수행 범위
@@ -147,8 +147,8 @@ flowchart LR
 │   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
 │   └── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
 ├── Presentation/    # 발표자료(Slidev, /ppt/로 서빙)
-├── scripts/         # 운영 스크립트(backup_db.sh)
-├── .github/workflows/  # deploy, collect, collect-retry
+├── scripts/         # 운영 스크립트(backup_db.sh·deploy_app.sh·autoheal.sh, tests/)
+├── .github/workflows/  # deploy, collect, collect-retry, health-check
 ├── docker-compose.yml       # 로컬·단일 호스트
 ├── docker-compose.dev.yml   # 개발 오버라이드
 ├── docker-compose.app.yml   # AWS App EC2
@@ -274,6 +274,6 @@ docker compose exec -T db pg_dump -U <user> -Fc <db> > startup_platform.dump
 docker compose exec -T db pg_restore -U <user> -d <db> --clean --if-exists < startup_platform.dump
 ```
 
-복원 후 `GET /api/health` 의 `ragChunks` 가 원본 DB의 `rag_documents` 건수와 같은지로 확인한다. Elasticsearch 인덱스는 덤프에 들어 있지 않고 LLM 워밍업·재색인 때 `rag_documents` 에서 다시 만들어진다.
+복원 후 `GET /api/health` 의 `ragChunks` 가 원본 DB의 `rag_documents` 건수와 같은지로 확인한다. 검색용 메모리 BM25는 덤프에 들어 있지 않고 LLM 워밍업·재색인 때 DB 원본 문서에서 다시 만들어진다.
 
 덤프를 옮기는 대신 서버 노트북의 `.env` 에 `COMPOSE_DB_HOST=<데이터 있는 노트북 IP>` 를 넣어 DB만 원격으로 쓸 수도 있다. `docker-compose.yml` 의 `DATABASE_URL` 이 이미 이 변수를 받으므로 코드 변경은 필요 없다. 다만 노트북 두 대가 모두 켜져 있어야 해서 실패 지점이 늘어난다.

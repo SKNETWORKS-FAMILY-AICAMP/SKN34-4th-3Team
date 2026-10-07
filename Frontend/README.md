@@ -160,7 +160,7 @@ PC·휴대폰은 같은 화면을 쓴다. 폭 768px 이하에서는 `styles/14-m
 렌더되지 않지만 보존 중인 코드. 되살리려면 import 해서 렌더하면 된다.
 
 - `pages/GovExplorer.jsx`, `pages/TaxTool.jsx`
-- `src/mobile/*`(`useIsMobile.js` 제외), `styles/15-mobile-app.css` — 모바일 전용 앱. 2026-10-06 `/` 통합으로 연결 해제. PC 화면과 기능이 어긋나 다시 연결하지 않는다(`Docs/MOBILE_CSS_GUIDE.md` 1-1절)
+- `src/mobile/*`(`useIsMobile.js` 제외), `styles/15-mobile-app.css` — 모바일 전용 앱. 2026-10-06 `/` 통합으로 연결 해제. PC 화면과 기능이 어긋나 다시 연결하지 않는다(`Docs/MOBILE_CSS_GUIDE.md` 1-1절). `15-mobile-app.css`는 `styles.css` import가 남아 번들에 들어가지만 규칙이 모두 `.m-app` 아래라 현재 화면에 영향이 없다
 - `pages/MyPage.jsx` 의 `BizTypeDiagnosis`(사업자 유형 진단), `ChatLog`
 - 호출자가 없는 `api.js` 함수: `summarizeAnnouncement`(결함 40), `stats`·`announcements`·`policies`·`policy`·`recommendations`·`calendar`·`calendarUpcoming`·`taxSchedule`·`taxDocuments`(같은 경로를 `useApi`로 직접 부르는 화면은 있음), `useBackendStatus`
 
