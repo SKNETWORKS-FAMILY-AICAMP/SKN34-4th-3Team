@@ -15,6 +15,7 @@ from django.views.decorators.csrf import csrf_exempt
 from pydantic import BaseModel, ValidationError
 
 from src.core.config import get_settings
+from src.features.receipt_ocr import ocr_stalled
 from src.serving.api_schema import ROUTES, openapi_document
 from src.serving.errors import ApiError, error_payload
 from src.serving import rag_routes
@@ -156,6 +157,9 @@ async def _dispatch(
 async def health(request: HttpRequest) -> HttpResponse:
     if request.method != "GET":
         return _method_not_allowed("GET")
+    # 멈춘 OCR은 프로세스 안에서 풀 수 없어 healthcheck를 실패시켜 autoheal 재시작에 맡긴다.
+    if ocr_stalled():
+        return _error(503, "receipt OCR stalled")
     settings = get_settings()
     return _json_result(HealthResponse(
         service=settings.app_name,

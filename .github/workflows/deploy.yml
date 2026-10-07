@@ -16,6 +16,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 배포·백업·autoheal 스크립트를 가짜 docker·git으로 검증한다(외부 의존성 없음).
+      - name: Server script tests
+        run: python3 -m unittest discover scripts/tests
+
       - uses: astral-sh/setup-uv@v6
       - name: Backend tests
         working-directory: Backend

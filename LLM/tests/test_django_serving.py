@@ -2,13 +2,16 @@
 
 import asyncio
 import os
+import threading
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "src.serving.django_config.settings")
 
 import django
+import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client
+from django.test import AsyncClient, Client
 
+from src.features import receipt_ocr
 from src.serving import django_views
 from src.serving.django_config import asgi
 from src.serving.errors import ApiError
@@ -35,6 +38,46 @@ def test_health_ready_and_cors(monkeypatch) -> None:
     assert ready.json()["index_ready"] is False
     assert preflight.status_code == 200
     assert preflight.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+def test_health_fails_while_ocr_is_stalled(monkeypatch) -> None:
+    # 멈춘 OCR을 healthcheck 실패로 알려 autoheal이 컨테이너를 재시작하게 한다.
+    monkeypatch.setattr(django_views, "ocr_stalled", lambda: True)
+    response = Client().get("/health")
+    assert response.status_code == 503
+
+
+def test_stalled_ocr_scenario_blocks_uploads_and_fails_health(monkeypatch) -> None:
+    # ㉜ 운영 시나리오: OCR이 멈춰 대기열이 차면 업로드는 503, 상한이 지나면 /health도 503,
+    # 풀리면(재시작에 해당) 다시 정상.
+    release = threading.Event()
+    monkeypatch.setattr(receipt_ocr, "OCR_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr(receipt_ocr, "OCR_STALL_SECONDS", 0.3)
+    monkeypatch.setattr(receipt_ocr, "run_ocr", lambda _b: release.wait(10) and None)
+
+    async def scenario() -> list[int]:
+        client = AsyncClient()
+        statuses = []
+        for _ in range(receipt_ocr.OCR_MAX_PENDING):
+            with pytest.raises(TimeoutError):
+                await receipt_ocr.run_ocr_limited(b"image")
+        upload = SimpleUploadedFile("receipt.png", b"image-data", content_type="image/png")
+        statuses.append((await client.post("/ocr/receipt", {"image": upload})).status_code)
+        statuses.append((await client.get("/health")).status_code)
+        await asyncio.sleep(0.4)
+        statuses.append((await client.get("/health")).status_code)
+        release.set()
+        for _ in range(100):
+            if receipt_ocr._ocr_pending == 0:
+                break
+            await asyncio.sleep(0.01)
+        statuses.append((await client.get("/health")).status_code)
+        return statuses
+
+    try:
+        assert asyncio.run(scenario()) == [503, 200, 503, 200]
+    finally:
+        release.set()
 
 
 def test_chat_keeps_public_contract(monkeypatch) -> None:
@@ -110,6 +153,7 @@ def test_asgi_starts_index_warmup_once_on_http(monkeypatch) -> None:
 
     async def fake_warmup():
         calls.append("warmup")
+        return True
 
     async def fake_ocr_warmup():
         calls.append("ocr-warmup")
@@ -141,6 +185,7 @@ def test_ocr_warmup_waits_for_index_warmup(monkeypatch) -> None:
             started.set()
             await finish.wait()
             calls.append("index-ready")
+            return True
 
         async def ocr():
             calls.append("ocr")
@@ -155,6 +200,62 @@ def test_ocr_warmup_waits_for_index_warmup(monkeypatch) -> None:
         assert calls == ["index-ready", "ocr"]
 
     asyncio.run(exercise())
+
+
+def test_index_warmup_retries_with_backoff_until_ready(monkeypatch) -> None:
+    calls = []
+    results = iter([False, False, True])
+
+    async def index():
+        calls.append("index")
+        return next(results)
+
+    async def ocr():
+        calls.append("ocr")
+
+    async def fake_sleep(seconds):
+        calls.append(seconds)
+
+    monkeypatch.setattr(asgi, "_warm_up", index)
+    monkeypatch.setattr(asgi, "_warm_up_ocr", ocr)
+    monkeypatch.setattr(asgi.asyncio, "sleep", fake_sleep)
+    asyncio.run(asgi._warm_up_all())
+    # 첫 실패 뒤 OCR 모델은 한 번만 불러오고, 인덱스는 간격을 늘려 가며 준비될 때까지 다시 만든다.
+    assert calls == ["index", "ocr", 60.0, "index", 120.0, "index"]
+
+
+def test_db_outage_scenario_recovers_index_without_manual_action(monkeypatch) -> None:
+    # ㉝ 운영 시나리오: llm 기동 시 DB가 불통이면 첫 HTTP 요청의 warm-up이 실패하고,
+    # DB가 돌아오면 수동 조치 없이 인덱스를 다시 만든다.
+    attempts = []
+
+    async def create_index(body, runtime, settings):
+        attempts.append(body)
+        if attempts.count(None) <= 2:
+            raise ApiError(status_code=503, detail="database unavailable")
+        return IndexResponse(status="ready", source="cache", document_count=1, chunk_count=2)
+
+    async def ocr_warmup():
+        attempts.append("ocr")
+
+    async def fake_django(scope, receive, send):
+        return None
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(asgi, "_warmup_task", None)
+    monkeypatch.setattr(asgi.rag_routes, "create_index", create_index)
+    monkeypatch.setattr(asgi, "_warm_up_ocr", ocr_warmup)
+    monkeypatch.setattr(asgi, "_django_application", fake_django)
+    monkeypatch.setattr(asgi.asyncio, "sleep", no_wait)
+
+    async def exercise():
+        await asgi.application({"type": "http"}, None, None)
+        await asgi._warmup_task
+
+    asyncio.run(exercise())
+    assert attempts == [None, "ocr", None, None]
 
 
 def test_empty_reindex_body_and_legacy_http_error(monkeypatch) -> None:

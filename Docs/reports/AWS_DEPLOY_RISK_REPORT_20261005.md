@@ -373,7 +373,16 @@
 - pull 전에 여유 공간(예: 8GB) 미달이면 배포 중단
 - 이전 로컬 빌드 이미지 1회 정리, GHCR 보존 개수 정책 설정
 
-**검증** 연속 3회 배포 후 `docker images`에 SHA 태그 이미지가 2개 이하인지, `df -h /` 사용률이 늘지 않는지 확인.
+**해결**
+- pull 전 `/` 여유 공간이 `DEPLOY_MIN_FREE_GB`(기본 8GB) 미만이면 `::error::` 후 중단. pull·migration·`.env` 변경 없음(`scripts/deploy_app.sh`)
+- `.env` 갱신 전 직전 `APP_IMAGE_TAG` 보존. readiness 통과 후 `APP_IMAGE_REGISTRY` 이미지 중 현재·직전 태그 외 `docker image rm`(실패는 `::warning::`), 이어서 기존 `image prune`. readiness 실패 시 삭제 없음
+- GHCR 보존 정책은 미적용. 컨테이너 레지스트리 저장·전송은 현재 공개·비공개 모두 무료(GitHub 문서 "currently free", 과금 전 사전 공지). 롤백이 GHCR 이전 이미지에 의존하므로 유지. 과금 전환 시 비공개 무료 할당량(Free 500MB·Team 2GB)을 배포 1회분(약 6GB)이 넘으므로 그때 재검토
+- 남은 것: EC2 직접 빌드 시절 로컬 이미지 1회 수동 정리(`docker images`로 `ghcr.io` 외 앱 이미지 확인 후 `docker image rm`)
+- 확인: 현재·직전 보존 및 다른 레지스트리 이미지 미삭제, 여유 공간 부족 시 pull 전 중단, readiness 실패 시 미삭제 테스트 추가(`scripts/tests/test_deploy_app.py`). scripts 테스트 전체 통과
+
+**검증**
+- CI 자동: 위 배포 스크립트 테스트(PR·main 병합마다)
+- 운영 수동: 연속 3회 배포 후 `docker images`에 SHA 태그 이미지가 서비스별 2개 이하인지, `df -h /` 사용률이 늘지 않는지 확인
 
 ### ㉜ OCR 정지 시 영수증 업로드 영구 503
 
@@ -389,7 +398,16 @@
 - 실행 중 OCR의 시작 시각을 기록하고, 상한(예: 120초)을 넘기면 `/health`를 실패로 응답 → autoheal 재시작
 - 또는 OCR을 별도 프로세스로 분리해 시간 초과 시 프로세스 종료
 
-**검증** OCR 함수를 무한 대기로 바꾼 테스트 더블로 업로드 2건 후, 상한 시간 경과 시 `/health` 실패와 autoheal 재시작 확인.
+**해결**
+- 실행 중 OCR의 시작 시각 기록(`receipt_ocr._run_ocr_tracked`, 대기 시간 제외). `OCR_STALL_SECONDS`(120초) 초과 시 `ocr_stalled()` True
+- llm `/health`가 OCR 정지 중 503 응답(`LLM/src/serving/django_views.py`) → compose healthcheck unhealthy → autoheal 재시작
+- 별도 프로세스 분리는 미적용(paddle 모델 재로드·메모리 부담)
+- 확인: OCR 정지 감지·`/health` 503 테스트, 시나리오 테스트(대기열 가득 → 업로드 503 → 상한 경과 `/health` 503 → 해제 후 200), autoheal 재시작 테스트(`scripts/tests/test_autoheal.py`) 추가. LLM·scripts 테스트 전체 통과
+- `scripts/tests`를 CI(`deploy.yml` test job)에 추가. 기존 배포·백업 스크립트 테스트도 이제 CI에서 실행
+
+**검증**
+- CI 자동: 위 시나리오·autoheal 테스트(PR·main 병합마다)
+- 운영 수동(선택): OCR 함수를 무한 대기로 바꾼 테스트 더블로 업로드 2건 후, 상한 시간 경과 시 `/health` 실패와 autoheal 재시작 확인. 운영 이미지에 테스트 코드가 필요해 자동화하지 않음
 
 ### ㉝ llm warm-up 실패 후 RAG 재시도 없음
 
@@ -404,7 +422,15 @@
 - llm이 미준비 상태에서 warm-up을 간격(예: 60초, 점진 증가)을 두고 재시도
 - 또는 `/rag/ready` 미준비 응답 시 일정 간격으로 인덱스 구성을 다시 시작
 
-**검증** Data EC2 보안 그룹으로 5432를 잠시 막은 상태에서 llm 재시작 → 차단 해제 후 수동 조치 없이 `ragReady=true`로 돌아오는지 확인.
+**해결**
+- 인덱스 warm-up 실패 시 60초부터 2배씩, 최대 600초 간격으로 성공할 때까지 재시도(`LLM/src/serving/django_config/asgi.py`)
+- OCR warm-up은 첫 인덱스 시도 직후 1회(메모리 피크 분리 유지). Backend 재색인과 겹쳐도 `create_index`의 준비 확인·`index_lock`으로 중복 구성 없음
+- 확인: 실패→재시도 간격 테스트, 시나리오 테스트(첫 HTTP 요청 warm-up이 DB 불통으로 2회 실패 → 수동 조치 없이 3회째 인덱스 준비) 추가. LLM 테스트 전체 통과
+
+**검증**
+- CI 자동: 위 시나리오 테스트(PR·main 병합마다)
+- 운영 감시: `health-check.yml`이 6시간마다 `ragReady` 확인, 미복구 시 실패 메일
+- 운영 수동(선택): Data EC2 보안 그룹으로 5432를 잠시 막은 상태에서 llm 재시작 → 차단 해제 후 수동 조치 없이 `ragReady=true`로 돌아오는지 확인. 실제 장애·AWS 권한이 필요해 자동화하지 않음
 
 ## 5. P2 — 보안·개인정보·비용
 
