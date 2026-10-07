@@ -1,12 +1,12 @@
 # 진행 현황
 
-- 갱신일: 2026-10-01
-- 기준 브랜치/커밋: `develop` / `402dbcc`
+- 갱신일: 2026-10-07
+- 기준 브랜치/커밋: `develop` / `4b62f33`
 
 `Docs/TODO.md`가 전체 작업 흐름과 체크리스트라면, 이 문서는 현재 코드 기준의 실제 상태를 정리한 것이다.
 해결된 이슈는 3절에 한 줄로만 남긴다. 상세 경위는 커밋에 있다.
 
-**미해결 4건, 일부 해결 2건, 보류 1건이다.** 결함 번호는 2026-09-10·09-14 통합·시연 결함 목록(`INTEGRATION_ISSUES_0910.md` 1~42, `INTEGRATION_ISSUES_0914.md` 43~55) 기준이다. 두 목록은 2026-10-01 삭제했고(원문은 git 이력), 다른 문서가 번호로 참조하는 미해결 결함은 2절로 옮겼다. 이전 저장소 기준 위생 항목(24~30·33 등)은 옮기지 않았다.
+**미해결 3건, 일부 해결 2건, 보류 1건이다.** 결함 번호는 2026-09-10·09-14 통합·시연 결함 목록(`INTEGRATION_ISSUES_0910.md` 1~42, `INTEGRATION_ISSUES_0914.md` 43~55) 기준이다. 두 목록은 2026-10-01 삭제했고(원문은 git 이력), 다른 문서가 번호로 참조하는 미해결 결함은 2절로 옮겼다. 이전 저장소 기준 위생 항목(24~30·33 등)은 옮기지 않았다.
 
 ## 1. 병합 현황
 
@@ -68,6 +68,11 @@
 | `feature/merge_test` | `0c101a8` (PR #38) | 마이페이지 서류 탭 제거, 병합 이슈 해결 |
 | `feature/server` | `bfda1f3` (PR #40) | 주간 수집 → 임베딩 → ES 재색인 자동화(`collect.yml`) |
 | `feature/DB` | `402dbcc` (PR #41) | 수집 실패 분류·기록(`collection_failures`)과 일시 장애 재시도(`collect-retry.yml`), 생활법령 재수집 속도 개선 |
+| `feature/docs` | `425dd4b` (PR #43) | 문서 정리·링크 최신화 |
+| `feature/server` | `b3137db` (PR #44), `b27baa0` (PR #45) | 근거 데이터 추가 후 Retriever 개선(서빙 BM25를 Elasticsearch Nori에서 메모리 BM25로 전환, `1ab40f5`), 재색인·준비 상태 결함 수정 |
+| `feature/pwa-mobile` | `a90c348` (PR #46) | 영수증 OCR 기본 엔진 PP-OCRv5 한국어 교체, 반응형 웹앱 진입점(모바일 전용 앱 `src/mobile/*`은 연결하지 않음) |
+| `feature/LLM-patch` | `fe097f9` (PR #50) | AWS 챕터 1 검증 가이드·해결 보고서 |
+| `feature/refactoring` | `5f4c45f` (PR #51), `fc25b42` (PR #54) | 배포 위험 보고서 ⑤~⑬·㉛~㉝ 해결: 영수증 판독 실패 시 503(목 값 저장 제거)·OCR 대기열 상한, health-check workflow·autoheal, Backend 워밍업이 LLM warm-up을 기다림, DB·컨테이너 시간대 Asia/Seoul, 세무 캐시 유효성·HNSW 인덱스, GHCR 이미지 배포 |
 
 ## 2. 미해결·보류 항목
 
@@ -78,7 +83,6 @@
 | 결함 14. `.env.example`대로 하면 compose가 기동하지 않음 | 미해결(완화) | `POSTGRES_USER`·`POSTGRES_PASSWORD`·`POSTGRES_DB`가 빈 값이면 `db`가 기동을 거부하고 `backend`·`llm`이 `service_healthy`에서 무한 대기한다. `setup.sh`·`setup.bat`가 빌드 전에 빈 값을 잡으므로 compose를 직접 부를 때만 남는다 |
 | 결함 44. 세액감면 계산이 사용자 입력 6개를 한꺼번에 요구함 | 일부 해결 | 대상·자격 질문은 추가 정보를 최대 2개만 묻고(`c1eae08`), 감면액 계산은 프로필 값을 선채움한다(`97df684`). 남은 것: `REQUIRED_USER_INPUTS`(`LLM/src/rag/graph.py`)가 6개이고 `eligible_tax_krw`·`first_startup`은 항상 묻는다. `first_startup` 기본값 도입 여부는 미결정 (09-16 보고 기준) |
 | 결함 45. AI 답변이 느림 | 일부 해결 | `reasoning_effort="low"`, 객체 재사용, 세금 Semantic Cache(평균 17.69초 → 12.46초), 채팅 스트리밍(`/chat/messages/stream`, PR #20)으로 개선했다. 남은 것: `category=tax`·`expense`는 route가 확정되는데도 Router LLM 호출이 돈다(코드 재확인). 정책 질문 첫 검색어 fan-out(최대 7개) 지연은 미측정 |
-| 결함 54. `GET /tax/tax-reduction/result`가 500 | 미해결 | `repo.insert_tax_reduction`이 `reasons`를 JSON 문자열로 저장하는데 `tax_service.latest_tax_reduction`이 그대로 리스트 필드에 담아 응답 검증에서 실패한다. 조치 방향: 조회 시 `json.loads`로 되돌림. 이 경로를 부르는 화면은 없다 (09-16 보고 기준) |
 | 결함 55. 같은 응답의 `llmUsed`가 항상 false | 미해결 | `tax_reduction_results`에 `llm_used` 컬럼이 없어 조회 시 항상 `false`다(코드 재확인). 조치 방향: `app_extras.sql`에 컬럼을 추가해 저장·조회에 태우거나, API_SPEC에 "판정 실행 응답에서만 의미 있음"을 명시 |
 
 ## 3. 해결된 이슈
@@ -106,6 +110,7 @@
 | 지출 분석(FS-14~17) 화면 부재 | 보류했던 지출관리를 `Frontend/src/pages/ExpenseTracker.jsx`로 다시 연결(`SubPage.jsx`에서 렌더) | PR #7 `1f6405e`, PR #12 `82abd5c` |
 | P1-3 결함 12. `_apply_extras` 실패 시 트랜잭션 오염 | 실패를 `rollback()` 없이 삼켰음 | `Backend/core/db.py`가 파일 전체 실행 후 실패 시 `rollback()`·경고 로그 |
 | LLM 테스트 4개 수집 실패 | judge 실험 테스트(`test_judge_ml_pipeline.py` 등 4개)가 저장소에 없는 `ML` 패키지를 import해 pytest 수집이 실패했음 | 미채택 실험이라 테스트 삭제 `a3d520e` |
+| 결함 54. `GET /tax/tax-reduction/result`가 500 | `reasons`가 JSON 문자열로 저장돼 리스트 응답 검증에서 실패했음 | `Backend/core/db.py`가 모든 조회 행의 `reasons`를 `json.loads`로 되돌림(2026-10-07 코드 재확인) |
 | 프론트 챗 타임아웃이 서버 예산보다 짧음 | `apiPost` 기본 30초가 tax 예산 120초보다 짧았음. `api.chat`이 tax 계열 135초·그 외 60초를 씀 | `e619d23` |
 
 **교훈 두 가지.**
@@ -124,7 +129,7 @@
 1. `compose build`
 2. `db` 기동 후 `DB/app_extras.sql`을 `psql`로 다시 적용 — initdb는 볼륨이 비어 있을 때만 돌기 때문이다. 전 문장이 재실행에 안전하고 기존 행을 지우지 않는다. 기존 볼륨에 LLM 세금 캐시 테이블 `tax_rag_cache`를 추가하는 것도 이 단계다. 3단계에서 `docker-compose.yml`의 `db-migrate` 서비스가 같은 파일을 다시 적용하므로 중복이지만 무해하다. `docker compose up`을 직접 불러도 `db-migrate`가 적용한다
 3. `backend`·`llm` 기동
-4. 헬스체크. `/health`의 `storage`가 `postgres`인지, `ragReady`가 참인지 확인해 각각 폴백·목업 상태를 경고. 응답이 없으면 해당 컨테이너 로그 30줄을 찍고 멈춘다
+4. 헬스체크. llm(`:8001/health`)·backend(`:8000/health`)가 응답하는지 기다린 뒤 backend `/health`의 `ragReady`가 참인지 확인해 아니면 목업 답변 상태를 경고. 응답이 없으면 해당 컨테이너 로그 30줄을 찍고 멈춘다
 
 이후 `Frontend`에서 필요할 때만 `npm ci`를 돌리고 Vite 개발 서버를 실행한다. `--no-frontend`를 주면 4단계까지만 하고 끝난다.
 

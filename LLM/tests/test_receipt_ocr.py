@@ -272,6 +272,35 @@ def test_run_ocr_limited_times_out_but_keeps_slot_until_ocr_ends(monkeypatch: py
         release.set()
 
 
+def test_ocr_stalled_only_while_running_past_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    release, started = threading.Event(), threading.Event()
+    monkeypatch.setattr(ocr, "OCR_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr(ocr, "OCR_STALL_SECONDS", 0.5)
+    monkeypatch.setattr(
+        ocr, "run_ocr", lambda _b: started.set() or (release.wait(5) and _result(("합계", 90.0)))
+    )
+
+    async def scenario() -> tuple[bool, bool, bool]:
+        assert not ocr.ocr_stalled()
+        with pytest.raises(TimeoutError):
+            await ocr.run_ocr_limited(b"image")
+        started.wait(5)
+        before_limit = ocr.ocr_stalled()
+        await asyncio.sleep(0.6)
+        past_limit = ocr.ocr_stalled()
+        release.set()
+        for _ in range(100):
+            if ocr._ocr_pending == 0:
+                break
+            await asyncio.sleep(0.01)
+        return before_limit, past_limit, ocr.ocr_stalled()
+
+    try:
+        assert asyncio.run(scenario()) == (False, True, False)
+    finally:
+        release.set()
+
+
 def test_group_rows_keeps_rows_apart_when_vertical_gap_is_large() -> None:
     lines = ocr._group_rows([
         ("둘째 줄", 90.0, 0, 40, 50, 60),

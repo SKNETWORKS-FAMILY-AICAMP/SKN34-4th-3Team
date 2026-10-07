@@ -29,7 +29,12 @@ profiles="${COMPOSE_PROFILES:-$(sed -n 's/^COMPOSE_PROFILES=//p' .env | tr -d '\
 if [[ ",$profiles," = *,presentation,* ]]; then
   services+=(presentation)
 fi
+# 이전 이미지가 남아 pull 도중 디스크가 고갈되지 않게 미리 중단한다.
+free_gb=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+[ "$free_gb" -ge "${DEPLOY_MIN_FREE_GB:-8}" ] || { echo "::error::App EC2 여유 공간 ${free_gb}GB 부족" >&2; exit 1; }
 "${compose[@]}" pull "${services[@]}"
+# 롤백용으로 직전 배포 이미지는 남긴다.
+previous_tag=$(sed -n 's/^APP_IMAGE_TAG=//p' .env | tail -1 | tr -d '\r"')
 # 비밀값을 로그에 출력하지 않고 기존 .env의 다른 키를 유지한다.
 sed '/^APP_IMAGE_REGISTRY=/d; /^APP_IMAGE_TAG=/d' .env > .env.deploy-tmp
 printf '\nAPP_IMAGE_REGISTRY=%s\nAPP_IMAGE_TAG=%s\n' "$APP_IMAGE_REGISTRY" "$APP_IMAGE_TAG" >> .env.deploy-tmp
@@ -47,6 +52,11 @@ for attempt in $(seq 1 "${DEPLOY_READY_ATTEMPTS:-60}"); do
   sleep "${DEPLOY_READY_INTERVAL_SECONDS:-10}"
 done
 [ "$ready" = true ] || { echo '::error::DB/LLM/RAG readiness check failed' >&2; exit 1; }
+# SHA 태그 이미지는 dangling이 아니므로 현재·직전 외 배포 이미지를 직접 삭제한다.
+docker image ls --format '{{.Repository}}:{{.Tag}}' | while IFS=: read -r repo tag; do
+  [[ "$repo" == "$APP_IMAGE_REGISTRY"/* && "$tag" != "$RELEASE_SHA" && "$tag" != "$previous_tag" ]] || continue
+  docker image rm "$repo:$tag" || echo "::warning::이미지 삭제 실패: $repo:$tag"
+done
 docker image prune -f
 docker builder prune -f --filter until=168h
 usage=$(df --output=pcent / | tail -1 | tr -dc '0-9')

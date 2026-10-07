@@ -36,6 +36,7 @@ case "$*" in
   *"pull backend"*) exit "${FAIL_PULL:-0}" ;;
   *"run --rm db-migrate"*) exit "${FAIL_MIGRATE:-0}" ;;
   *"exec -T backend"*) exit "${FAIL_READY:-0}" ;;
+  "image ls"*) printf '%s' "${FAKE_IMAGES:-}" ;;
   *) exit 0 ;;
 esac
 ''',
@@ -49,7 +50,7 @@ esac
             "PATH": self.bin.as_posix() + os.pathsep + os.environ["PATH"],
             "RELEASE_SHA": SHA, "FAKE_SHA": SHA,
             "GHCR_REPOSITORY": "Owner/Repo", "GHCR_TOKEN": "",
-            "DEPLOY_READY_ATTEMPTS": "2",
+            "DEPLOY_READY_ATTEMPTS": "2", "DEPLOY_MIN_FREE_GB": "0",
             "FAKE_CALLS": self.calls.as_posix(),
             "TEST_SCRIPT": self.script.as_posix(),
             "TEST_BIN": ("/" + self.bin.drive[0].lower() + self.bin.as_posix()[2:]) if os.name == "nt" else self.bin.as_posix(),
@@ -96,7 +97,29 @@ esac
         result = self.run_deploy(FAIL_READY="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("image prune", self.calls.read_text())
+        self.assertNotIn("image rm", self.calls.read_text())
         self.assertIn("readiness check failed", result.stderr)
+
+    def test_low_disk_stops_before_pull(self):
+        result = self.run_deploy(DEPLOY_MIN_FREE_GB="999999")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("pull", self.calls.read_text())
+        self.assertEqual(self.config.read_text(), self.initial)
+        self.assertIn("여유 공간", result.stderr)
+
+    def test_removes_old_release_images_but_keeps_current_and_previous(self):
+        previous, old = "b" * 40, "c" * 40
+        self.config.write_text(self.initial + f"APP_IMAGE_TAG={previous}\n", encoding="utf-8", newline="\n")
+        registry = "ghcr.io/owner/repo"
+        images = [f"{registry}/llm:{SHA}", f"{registry}/llm:{previous}", f"{registry}/llm:{old}",
+                  f"{registry}/backend:{old}", "pgvector/pgvector:pg16", "<none>:<none>"]
+        result = self.run_deploy(FAKE_IMAGES="\n".join(images) + "\n")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        removed = [line.removeprefix("image rm ") for line in self.calls.read_text().splitlines()
+                   if line.startswith("image rm ")]
+        self.assertEqual(removed, [f"{registry}/llm:{old}", f"{registry}/backend:{old}"])
+        calls = self.calls.read_text()
+        self.assertLess(calls.index("image rm"), calls.index("image prune"))
 
 
 if __name__ == "__main__":

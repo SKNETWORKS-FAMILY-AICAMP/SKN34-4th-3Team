@@ -42,20 +42,22 @@ Frontend/src/
     ├── 01-base.css
     ├── …
     ├── 13-billing.css
-    └── 14-mobile.css     ← 새로 만든다
+    ├── 14-mobile.css     ← 모바일 규칙은 여기
+    └── 15-mobile-app.css ← 연결 해제된 모바일 앱 전용(.m-app 범위)
 ```
 
 - 웹앱 전용 배치(휴대폰 하단 탭바 등)는 `src/web/web.css`에 있다. 모든 규칙이 `html.is-web`(진입점 `src/web/main.jsx`가 붙인다) 아래에서만 동작한다
-- `styles/15-mobile-app.css`는 연결 해제된 모바일 전용 앱(`src/mobile`)용이라 수정하지 않는다(1-1절)
+- `styles/15-mobile-app.css`는 연결 해제된 모바일 전용 앱(`src/mobile`)용이라 수정하지 않는다(1-1절). `styles.css`의 import는 남아 있어 번들에는 들어가지만, 모든 규칙이 `.m-app` 안에서만 동작해 현재 화면에 영향이 없다
 
 ### 2-2. `styles.css` 맨 마지막 줄에 추가
 
 ```css
 @import './styles/13-billing.css';
-@import './styles/14-mobile.css';   /* 반드시 맨 마지막 */
+@import './styles/14-mobile.css';      /* 화면에 쓰이는 규칙 중 맨 마지막 */
+@import './styles/15-mobile-app.css';  /* .m-app 범위 전용, 위 규칙과 겹치지 않음 */
 ```
 
-- **맨 마지막에 둬야 하는 이유**: CSS는 나중에 불러온 규칙이 이깁니다(선택자 강도가 같을 때). 마지막에 두어야 모바일 규칙이 기존 규칙을 덮어씁니다.
+- **맨 마지막에 둬야 하는 이유**: CSS는 나중에 불러온 규칙이 이깁니다(선택자 강도가 같을 때). 마지막에 두어야 모바일 규칙이 기존 규칙을 덮어씁니다. 그 뒤의 `15-mobile-app.css`는 `.m-app` 아래 규칙만 있어 순서와 무관합니다.
 - `styles.css`의 기존 import 순서는 바꾸지 않습니다. 파일 상단 주석에도 같은 경고가 있습니다.
 
 ---
@@ -221,7 +223,7 @@ Frontend/src/
 
 ### 7-3. 실제 휴대폰에서 보기
 
-- 휴대폰을 PC와 **같은 와이파이**에 연결하고 `http://<PC의 IP>:5173` 접속(현재 `192.168.0.67`, 바뀔 수 있음. PC에서 `ipconfig`로 확인)
+- 휴대폰을 PC와 **같은 와이파이**에 연결하고 `http://<PC의 IP>:5173` 접속(PC에서 `ipconfig`로 IPv4 주소 확인)
 - Windows 방화벽이 막으면 접속되지 않을 수 있음
 - 휴대폰에서는 HTTPS가 아니어서 **앱 설치는 안 되고 화면 확인만** 가능. 휴대폰 설치 확인은 배포된 HTTPS 사이트에서 한다
 

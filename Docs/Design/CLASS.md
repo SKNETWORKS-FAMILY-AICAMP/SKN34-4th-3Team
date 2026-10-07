@@ -302,7 +302,7 @@ classDiagram
 
 ## 2. Service 클래스
 
-`Docs/Design/API_SPEC.md`의 라우트 그룹 12개(auth/users/chat/calendar/tax/expenses/bizplan/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 `Backend/services/*.py` 모듈 단위로 옮긴 클래스다. 실제 코드는 클래스가 아니라 모듈 함수이며, 메서드명과 인자는 `Backend/services/*.py`의 함수 선언을 camelCase로 그대로 옮긴 것이다(밑줄 없는 공개 함수만 싣고 `_`로 시작하는 내부 헬퍼는 뺐다). 따라서 여기 없는 이름은 코드에도 없다. `stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없다. `AdminService`도 대응 모듈이 없는 **논리 묶음**이다. 관리자 라우트(`Backend/api/admin.py`)가 `core.repo`와 `llm_client`를 직접 부르고, 관리자 로그인만 `auth_service.admin_login`에 있다. `/tax/calendar`·`/tax/reminders` 라우트는 `CalendarService`를 부른다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다.
+`Docs/Design/API_SPEC.md`의 라우트 그룹 12개(auth/users/chat/calendar/tax/expenses/bizplan/policies/stats/system/notifications/admin) 중 비즈니스 로직이 있는 그룹을 `Backend/services/*.py` 모듈 단위로 옮긴 클래스다. 실제 코드는 클래스가 아니라 모듈 함수이며, 메서드명과 인자는 `Backend/services/*.py`의 함수 선언을 camelCase로 그대로 옮긴 것이다(밑줄 없는 공개 함수만 싣고 `_`로 시작하는 내부 헬퍼는 뺐다). 따라서 여기 없는 이름은 코드에도 없다. `stats`·`system`은 라우트가 `core.repo`를 직접 조회해 Service가 없다. `AdminService`도 대응 모듈이 없는 **논리 묶음**이다. 관리자 라우트(`Backend/api/admin.py`)가 `core.repo`와 `llm_client`를 직접 부르고, 관리자 로그인만 `auth_service.admin_login`에 있다. `/tax/calendar`·`/tax/reminders` 라우트는 `CalendarService`를 부른다. `LLMServiceClient`는 `Docs/Design/ARCHITECTURE.md`·`Docs/Design/SEQUENCE.md`에 나온 Backend→LLM 내부 REST 호출을 추상화한 클래스로, LLM 서비스 자체의 내부 구조(`LLM/src/*`)는 다루지 않는다. LLM 모듈 구성은 `Docs/Design/ARCHITECTURE.md` 3절과 `LLM/LANGGRAPH_ARCHITECTURE.md`를 따른다.
 
 ```mermaid
 classDiagram
@@ -431,7 +431,7 @@ classDiagram
     class LLMServiceClient {
         <<external>>
         +llmStatus() Status
-        +ensureIndexReady() IndexState
+        +ensureIndexReady() bool
         +ragAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
         +asyncRagAnswer(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Answer
         +asyncRagAnswerStream(question, category, userContext, noticeResults, conversationHistory, roadmapStep) Event[]
@@ -447,6 +447,13 @@ classDiagram
         +summarizeAnnouncement(rawContent, source) Summary
         +reindex()
     }
+
+    class LLMRequestError {
+        <<exception>>
+        +statusCode int
+        +message str
+    }
+    LLMServiceClient ..> LLMRequestError : refine·inspect·render
 
     AuthService ..> User
     AuthService ..> AdminUser
@@ -489,7 +496,7 @@ classDiagram
     CalendarService ..> Notification
 ```
 
-`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `async_rag_answer`, `async_rag_answer_stream`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `generate_business_plan`, `evaluate_business_plan`, `bizplan_coach`, `refine_business_plan`, `inspect_business_plan_template`, `render_business_plan`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 실패 시 예외 대신 `None`을 돌려준다(`async_rag_answer_stream`만 예외를 던지고 `ChatService`가 받아 fallback 처리). **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구, 영수증은 목 값으로 내려가지만, 사업계획서 초안·예비진단·어시스턴트·정리·양식 검사·출력과 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
+`LLMServiceClient`의 메서드명은 `Backend/core/llm_client.py`의 함수와 1:1로 대응한다(`llm_status`, `ensure_index_ready`, `rag_answer`, `async_rag_answer`, `async_rag_answer_stream`, `explain_tax_reduction`, `extract_receipt`, `explain_expense`, `generate_business_plan`, `evaluate_business_plan`, `bizplan_coach`, `refine_business_plan`, `inspect_business_plan_template`, `render_business_plan`, `summarize_announcement`, `reindex`). 각 호출이 실제로 어느 엔드포인트로 가는지는 `Docs/Design/LLM_API_SPEC_V1.md`를 따른다. `reindex()`는 항상 `documentIds: []`(전체 재색인)를 보낸다. `llm_status`는 상태 dict, `ensure_index_ready`는 bool을 돌려주고, 나머지 호출은 대부분 실패 시 예외 대신 `None`을 돌려준다. 예외는 둘이다. `async_rag_answer_stream`은 예외를 던지고 `ChatService`가 받아 fallback 처리한다. 사업계획서 문서 API 세 개(`refine_business_plan`·`inspect_business_plan_template`·`render_business_plan`)는 `_post_strict`로 호출해 LLM의 4xx 사유를 잃지 않도록 `LLMRequestError(status_code, message)`를 던진다(시간 초과 504, 연결 실패 503). `BizplanService`가 400·404·413·415·422·429·503·504는 그대로, 나머지는 503으로 바꿔 내려보낸다. **어떤 호출도 재시도하지 않는다** (`Docs/Design/LLM_API_SPEC_V1.md` 9절). `None`일 때 서비스의 처리는 다르다. 챗봇은 목업 답변, 세액감면은 고정 근거 문구로 내려가지만, 영수증은 저장하지 않고 503(읽지 못한 값을 지출로 남기지 않음), 사업계획서 초안·예비진단·어시스턴트와 붙여넣기 공고 요약은 503, 저장 공고 요약은 404, 관리자 재색인은 502로 실패를 드러낸다.
 
 `Receipt`·`ReceiptExtraction`·`Expense`와 `ExpenseService`, `LLMServiceClient`의 `extract_receipt`·`explain_expense`는 지출 분석(FS-14~17)용이며 지출관리 화면이 부른다. `BizplanService`는 사업계획서(FS-29~31)용이다. 생성·예비진단·어시스턴트·정리·양식 검사·출력은 LLM 결과만 돌려주고, 임시저장(`BizplanDraft`)·보관함(`Bizplan`)·서류(`BizplanDocument`·`BizplanDocumentFile`)는 DB에 저장한다. `SubscriptionService`는 구독 플랜(목업 결제)을 `UserSubscription`에 저장하고 이번 달 상담 수를 `ChatMessage`에서 센다.
 

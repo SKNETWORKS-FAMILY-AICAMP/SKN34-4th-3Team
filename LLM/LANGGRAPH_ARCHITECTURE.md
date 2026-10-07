@@ -9,7 +9,7 @@
 재작성한 뒤 Structured Output Router에서 `policy`, `notice`, `tax`, `out_of_scope` 중
 하나로 분류한다. Backend `category`는 허용 route 제약으로 적용된다.
 
-- Policy: 패싯 검색어별 Dense + BM25(Postgres 모드는 Elasticsearch Nori) → RRF → Cohere Rerank → Unified Answer
+- Policy: 패싯 검색어별 Dense + 메모리 BM25 → RRF → Cohere Rerank → Unified Answer
 - Notice: Backend가 전달한 실제 공고 결과 → Unified Answer
 - Tax: Tax Intent → (계산 시 Planner) → Semantic Cache 조회 → miss면 Hybrid Retrieval →
   비율 정규화 → Evidence 평가 → 필요 시 Multi-hop → 선택적 deterministic 계산 →
@@ -36,9 +36,9 @@ LLM은 `TaxCalculationPlan`만 만들고 `calculate_tax_plan()`이 `Decimal`로 
 | `src/rag/answer.py` | 공통 Structured Answer와 안전한 fallback |
 | `src/rag/roadmap.py` | 로드맵 범위·압축 Context·단일 호출 코치 |
 | `src/data/tax_normalization.py` | `N분의 M` 비율의 deterministic 추출/표현 |
-| `src/vectorstores/hybrid.py` | 메모리 BM25, RRF, Dense+BM25 orchestration(in-memory 모드, 법령 참조 정확 검색) |
-| `src/vectorstores/nori_hybrid.py` | `NoriHybridSearch`: pgvector Dense + ES Nori BM25 RRF(Postgres 모드 기본) |
-| `src/vectorstores/elasticsearch.py` | `ElasticsearchBM25Search`: Nori 분석기 BM25 검색·준비 확인 |
+| `src/vectorstores/hybrid.py` | 메모리 BM25(`BM25Search`, 운영 BM25), RRF, Dense+BM25 orchestration(in-memory 모드, 법령 참조 정확 검색) |
+| `src/vectorstores/nori_hybrid.py` | `NoriHybridSearch`: pgvector Dense + 메모리 BM25 원본 문서 단위 RRF(Postgres 모드 기본). 2026-10-02(`1ab40f5`)부터 BM25 쪽에 ES 대신 `hybrid.BM25Search`를 넣는다 |
+| `src/vectorstores/elasticsearch.py` | `ElasticsearchBM25Search`: Nori 분석기 BM25 검색·준비 확인(평가 스크립트 전용, 서빙 미사용) |
 | `src/features/elasticsearch_indexing.py` | pgvector 청크 → 새 ES 인덱스 Bulk 적재 후 alias 교체 |
 | `src/vectorstores/postgres.py` | pgvector 저장·Dense 검색 |
 | `src/rag/reranker.py` | Cohere Rerank와 공통 결과 schema 유지 |
@@ -539,9 +539,9 @@ PostgreSQL 원천:
 파생 캐시 저장소는 `tax_rag_cache`다(10.3).
 
 현재 `RagRuntime.ready`는 DB에 Embedding이 존재한다는 뜻이 아니라 현재 프로세스에
-검색 객체가 조립됐다는 뜻이다. 서버를 재시작하면 pgvector 데이터와 ES 인덱스는 남지만
-프로세스의 검색 객체는 다시 준비해야 한다. Postgres 모드에서는 `elasticsearch_synced`까지
-참이어야 `/rag/ready`가 `ready`이며, 동기화 전에는 Nori BM25를 건너뛰고 Dense만 쓴다.
+검색 객체가 조립됐다는 뜻이다. 서버를 재시작하면 pgvector 데이터는 남지만 메모리 BM25와
+프로세스의 검색 객체는 다시 준비해야 한다. Postgres 모드에서는 Dense와 DB 원본 문서로 만든
+메모리 BM25가 모두 준비돼야 `/rag/ready`가 `ready`다(`RagRuntime.ready`).
 
 LLM 프로세스는 첫 HTTP 요청(헬스체크 포함) 때 `django_config/asgi.py`의 워밍업 task로
 검색기를 백그라운드 준비한다. `/rag/reindex` 또는 `/internal/rag/index`도 검색기를 준비하며,
@@ -600,7 +600,7 @@ cd LLM
 uv run pytest -q
 ```
 
-테스트 파일 42개, 테스트 함수 385개다(2026-10-01 기준). 주요 테스트:
+테스트 파일 46개, 테스트 함수 426개다(2026-10-07 기준). 주요 테스트:
 
 - `tests/test_graph.py`: Router, Policy/Notice branch, isolation
 - `tests/test_tax_graph.py`: single/multi-hop, 3-way edge, Reference 우선, MAX_HOPS,

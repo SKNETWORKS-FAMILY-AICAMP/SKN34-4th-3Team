@@ -54,7 +54,7 @@ RAG 기반 API의 `status`는 다음 값만 사용한다.
 | `404` | 지정한 문서 또는 리소스가 없음 |
 | `409` | RAG 인덱스 미준비 등 현재 상태와 요청이 충돌함. `/rag/legal-basis`·`/rag/deductibility`만 인덱스 미준비에 `409`를 쓴다. `/rag/chat`은 200 + `status=integration_unavailable`로 응답한다 |
 | `413` | 업로드 파일 크기 초과 |
-| `415` | 지원하지 않는 이미지 형식 |
+| `415` | 지원하지 않는 이미지 형식, JSON Endpoint에 `application/json`이 아닌 본문, `/ocr/receipt`에 `multipart/form-data`가 아닌 요청 |
 | `422` | JSON 또는 필드 검증 실패 |
 | `429` | 외부 모델 호출 한도 초과 |
 | `500` | 처리되지 않은 내부 예외(`INTERNAL_ERROR`) |
@@ -68,7 +68,7 @@ Backend는 오류의 HTTP 상태와 `error.code`를 로그에 남긴다. 사용�
 
 ### `GET /health`
 
-프로세스가 요청을 받을 수 있는지만 확인한다. 외부 모델이나 DB를 호출하지 않는다.
+프로세스가 요청을 받을 수 있는지만 확인한다. 외부 모델이나 DB를 호출하지 않는다. 예외로, 영수증 OCR 한 장이 120초(`OCR_STALL_SECONDS`)를 넘겨 멈춘 상태면 `503 receipt OCR stalled`를 돌려 컨테이너 healthcheck를 실패시킨다(autoheal 재시작 대상, `LLM/src/serving/django_views.py`의 `health`).
 
 ```json
 {
@@ -87,7 +87,7 @@ Backend는 오류의 HTTP 상태와 `error.code`를 로그에 남긴다. 사용�
 
 ### `GET /rag/ready`
 
-RAG 요청 처리 준비 상태를 확인한다. 이 요청 자체는 인덱스를 생성하지 않는다. `VECTOR_STORE_BACKEND=postgres`에서는 pgvector 인덱스뿐 아니라 Elasticsearch(Nori BM25) 동기화·연결까지 확인돼야 `index_ready=true`다.
+RAG 요청 처리 준비 상태를 확인한다. 이 요청 자체는 인덱스를 생성하지 않는다. `VECTOR_STORE_BACKEND=postgres`에서는 pgvector Dense 인덱스와 DB 원본 문서로 만든 메모리 BM25가 모두 준비돼야 `index_ready=true`다(`RagRuntime.ready`). Elasticsearch 연결은 확인하지 않는다(2026-10-02 `1ab40f5`부터 서빙 BM25가 메모리 BM25).
 
 ```json
 {
@@ -275,8 +275,11 @@ Backend의 `POST /expenses/receipts`가 호출하며 지출관리 화면에서 �
 - 파일 필드명: `image`
 - 허용 형식: `image/jpeg`, `image/png`, `image/webp`
 - 최대 크기: 4 MiB
-- 처리 방식: Tesseract OCR(`kor+eng`, `LLM/src/features/receipt_ocr.py`)로 글자·위치·줄별 신뢰도를 읽고, LLM은 OCR이 읽은 글자만 받아 필드를 정리한다(`source=ocr_llm`). Tesseract가 없거나 실패했거나 읽은 글자가 8자 미만이면 이미지를 Vision LLM에 직접 넣어 대신 읽는다(`source=vision`)
-- 이미지 보정: EXIF 회전 적용, 흑백·대비·노이즈(median·unsharp) 보정, 긴 변을 1200~2000px로 맞춤. 잘 읽히지 않으면 90/270/180도로 돌려 재시도하고 가장 잘 읽힌 결과를 쓴다. Tesseract 1회 실행 제한은 15초, 전처리·회전 재시도 전체 예산은 25초이며 예산을 넘기면 남은 회전을 건너뛴다(`OCR_TIMEOUT_SECONDS`·`OCR_TOTAL_BUDGET_SECONDS`)
+- 처리 방식: PaddleOCR PP-OCRv5 한국어(`PP-OCRv5_mobile_det` + `korean_PP-OCRv5_mobile_rec`, `LLM/src/features/receipt_ocr.py`)로 글자·위치·줄별 신뢰도를 읽고, LLM은 OCR이 읽은 글자만 받아 필드를 정리한다(`source=ocr_llm`). paddle을 불러오지 못하거나 실행에 실패하면 Tesseract(`kor+eng`)로 대신 읽는다. 엔진 비교는 `Docs/OCR_PPOCRV5_BENCHMARK.md`
+- Vision 대체(`source=vision`): OCR을 쓸 수 없거나, 15초(`OCR_WAIT_SECONDS`) 안에 끝나지 않거나, 읽은 글자가 8자 미만이면 이미지를 Vision LLM에 직접 넣어 읽는다. OCR→LLM 결과에 날짜·상호·금액이 하나도 없을 때도 Vision으로 한 번 더 읽는다(`LLM/src/serving/rag_routes.py`)
+- 동시 처리: OCR은 전용 스레드 하나에서 한 장씩 돈다. 실행 중 1장 + 대기 1장(`OCR_MAX_PENDING=2`)을 넘으면 `503 receipt OCR is busy`
+- 이미지 보정: EXIF 회전 적용, 긴 변 2000px 초과 사진은 축소. PP-OCR 검출 긴 변 상한은 1600px이고 CPU 스레드는 `OCR_CPU_THREADS`(기본 min(4, 코어 수))로 정한다. Tesseract 대체 경로는 흑백·대비·노이즈(median·unsharp)·지역 이진화 보정 후 90/270/180도 회전 재시도를 하며, 1회 15초·전체 25초 예산(`OCR_TIMEOUT_SECONDS`·`OCR_TOTAL_BUDGET_SECONDS`)을 넘기면 남은 회전을 건너뛴다
+- 오류: 빈 이미지 `422`, 4 MiB 초과 `413`, 형식 불일치 `415`, OCR 혼잡 `503`
 
 #### Response
 
@@ -303,7 +306,7 @@ Backend의 `POST /expenses/receipts`가 호출하며 지출관리 화면에서 �
 - `proofType`: `tax_invoice`, `card_receipt`, `cash_receipt`, `simple_receipt`, `unknown`(기본값)
 - `dateText`·`vendorText`·`amountText`·`proofEvidence`: 값을 읽은 자리의 영수증 원문 글자. 없으면 `null`
 - `ocrConfidence`: OCR 줄별 신뢰도를 글자 수로 가중한 평균(0~100). `source=vision`이면 `null`
-- LLM은 모르는 필드를 샘플 값으로 채우지 않고, OCR에 없는 글자를 만들지 않으며, 뜻을 알 수 없게 깨진 줄은 품목에 넣지 않는다. 수동 보완 또는 목업 전환은 Backend 책임이다.
+- LLM은 모르는 필드를 샘플 값으로 채우지 않고, OCR에 없는 글자를 만들지 않으며, 뜻을 알 수 없게 깨진 줄은 품목에 넣지 않는다. 수동 보완은 Backend 책임이다(Backend는 추출 실패 시 저장하지 않고 `503`을 돌려준다).
 
 ## 6. 경비처리 가능성 분석
 
@@ -345,7 +348,7 @@ legal-basis와 같은 규칙으로 검색 결과가 없으면 `no_result`(`llmUs
 
 ## 6-1. 사업계획서
 
-Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다. 모든 Endpoint가 RAG 검색 그래프를 거치지 않고 RAG 인덱스 준비 여부와 무관하다. `business-plan`·`-refine`·`-evaluate`·`-coach`는 단일 LLM 호출이며 모델 설정 오류는 `503`, 그 밖의 모델 호출 실패는 공통 오류 응답으로 돌려준다. `-template-inspect`·`-render`는 LLM을 부르지 않는 문서 처리(`LLM/src/features/business_plan_documents.py`)이고 양식·입력 오류는 `422`다(`LLM/src/serving/rag_routes.py`).
+Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다. 단, `-coach`(아이디어 어시스턴트)를 부르는 `POST /bizplan/coach`는 현재 화면 호출자가 없다. 모든 Endpoint가 RAG 검색 그래프를 거치지 않고 RAG 인덱스 준비 여부와 무관하다. `business-plan`·`-refine`·`-evaluate`·`-coach`는 단일 LLM 호출이며 모델 설정 오류는 `503`, 그 밖의 모델 호출 실패는 공통 오류 응답으로 돌려준다. `-template-inspect`·`-render`는 LLM을 부르지 않는 문서 처리(`LLM/src/features/business_plan_documents.py`)이고 양식·입력 오류는 `422`다(`LLM/src/serving/rag_routes.py`).
 
 ### `POST /rag/business-plan`
 
@@ -473,8 +476,8 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 - `force=true`: 대상 문서의 기존 캐시를 무시하고 다시 Embedding한다.
 - 이미 runtime 인덱스가 준비됐더라도 명시적인 재색인 요청은 생략하지 않는다.
 - 원천 `policies`, `announcements`, `tax_documents`를 수정하거나 DB schema를 변경하지 않는다.
-- `VECTOR_STORE_BACKEND=postgres`에서는 pgvector 갱신 후 Elasticsearch Nori 인덱스도 다시 만든다(`reindex_postgres_to_elasticsearch`, `LLM/src/features/elasticsearch_indexing.py`).
-- 호출자: Backend `POST /admin/rag-documents/reindex`·기동 워밍업, 그리고 GitHub Actions `collect.yml`(주간 수집 후 App EC2의 llm 컨테이너 안에서 직접 `POST /rag/reindex` `{documentIds:[], force:false}`).
+- `VECTOR_STORE_BACKEND=postgres`에서는 재색인 동안 새 검색 요청을 막고, pgvector 갱신 후 DB 원본 문서를 다시 읽어 메모리 BM25를 만든 뒤 `ready`로 복구한다(`require_hybrid_index`). Elasticsearch Nori 인덱스는 다시 만들지 않는다. 필요하면 수동 CLI `LLM/src/features/elasticsearch_indexing.py`로 만든다.
+- 호출자: Backend `POST /admin/rag-documents/reindex`·기동 워밍업, 그리고 GitHub Actions `collect.yml`(주간 수집 후)·`collect-retry.yml`(3시간마다 실패분 재수집 후, 재시도 대상이 없으면 생략). 둘 다 App EC2에서 `localhost:8001/rag/reindex`로 `{documentIds:[], force:false}`를 직접 보낸다.
 
 #### Response
 
@@ -508,7 +511,7 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 | `POST /rag/deductibility` | 30 | `LLM_TIMEOUT_DEDUCTIBILITY` |
 | `POST /rag/summarize-announcement` | 45 | `LLM_TIMEOUT_SUMMARIZE` |
 | `POST /rag/business-plan`, `-refine`, `-template-inspect`, `-render`, `-evaluate`, `-coach` | 120 | `LLM_TIMEOUT_BIZPLAN` |
-| `POST /ocr/receipt` | 40 | `LLM_TIMEOUT_OCR` (프론트 업로드 제한 45초보다 짧게 유지) |
+| `POST /ocr/receipt` | 40 | `LLM_TIMEOUT_OCR` (프론트 업로드 제한 50초보다 짧게 유지, `Frontend/src/api.js`의 `uploadReceipt`) |
 | `POST /rag/reindex` | 180 | `LLM_TIMEOUT_REINDEX` |
 
 `LLM_TIMEOUT_SECONDS`(기본 25)는 위 표에 없는 호출의 기본값으로만 남아 있다.
@@ -528,7 +531,7 @@ Backend의 `POST /bizplan/*`가 호출하며 사업계획서 화면에서 쓴다
 | 실제 공고 DB 조회·필터 | Y | N |
 | 세액감면 Rule 판정 | Y | N |
 | 답변·근거 생성 | N | Y |
-| 영수증 OCR(Tesseract)·필드 추출 | N | Y |
+| 영수증 OCR(PP-OCRv5, Tesseract 대체)·필드 추출 | N | Y |
 | 경비 인정 규칙 판정(적격증빙·3단계) | Y | N |
 | 사업계획서 초안·채점·어시스턴트 생성 | N | Y |
 | 공고 요약 캐시 | Y | N |
@@ -561,5 +564,5 @@ LLM은 위 계약의 공개 Endpoint 14개(`/rag/ready`·`reindex`·`chat`·`cha
 ### 남은 검증
 
 - 실제 OpenAI·Cohere·PostgreSQL을 쓴 통합 테스트는 아직 승인·실시 전이다
-- Tesseract OCR은 실제 휴대폰 사진 한 장에서 이미지 보정 후 평균 신뢰도가 39%에서 60%로 오른 것만 확인했다. 흐린 사진·기울어진 사진·작은 글씨·손글씨의 정확도는 실제 영수증으로 더 검증해야 한다(`Docs/FEATURE_ROADMAP_EXPENSE.md` 4절)
+- 영수증 OCR은 실제 영수증 5장 실측(2026-10-02)에서 PP-OCRv5가 Tesseract보다 정확하고(정답 34개 중 33개 vs 28개) 빨랐다(5장 12.1초 vs 25.9초, `Docs/OCR_PPOCRV5_BENCHMARK.md`). 표본이 작아 흐린 사진·기울어진 사진·작은 글씨·손글씨의 정확도는 실제 영수증으로 더 검증해야 한다
 - 원본 `policies`, `announcements`, `tax_documents`는 변경하지 않았다
