@@ -2,7 +2,7 @@
 
 > 이 문서는 AWS 콘솔에서 직접 수행하는 단계별 절차. 구성 개요는 `Docs/Design/ARCHITECTURE.md` 4절. 처음에는 도메인 없이 Elastic IP + HTTP로 배포하고 HTTPS는 12절에서 적용하는 순서로 작성했다.
 >
-> **현재 코드 상태(2026-10-01):** 12-4절의 HTTPS 구성(`Frontend/nginx.https.conf`, `docker-compose.app.yml` frontend의 `443`·`/etc/letsencrypt` 마운트)과 PWA는 이미 `main`에 반영돼 있다. 따라서 App EC2를 새로 띄울 때는 **8절 `up` 전에 12-1~12-3절(도메인·443 보안그룹·인증서 발급)을 먼저 끝내야 한다.** 인증서가 없으면 frontend(nginx)가 기동하지 못한다.
+> **현재 코드 상태(2026-10-07):** 12-4절의 HTTPS 구성(`Frontend/nginx.https.conf`, `docker-compose.app.yml` frontend의 `443`·`/etc/letsencrypt` 마운트)과 PWA는 이미 `main`에 반영돼 있다. 따라서 App EC2를 새로 띄울 때는 **8절 `up` 전에 12-1~12-3절(도메인·443 보안그룹·인증서 발급)을 먼저 끝내야 한다.** 인증서가 없으면 frontend(nginx)가 기동하지 못한다.
 
 ## 구성 요약
 
@@ -224,7 +224,7 @@ LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은
 3. Settings → Branches → `main` 보호 규칙: PR 필수, 상태 검사 `test` 통과 필수
 4. Actions → deploy → **Run workflow**로 수동 실행해 동작 확인
 
-이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(Backend `unittest`, LLM `pytest` + 이미지 빌드, Frontend `node --test` + `npm run build`) → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 → 이미지·빌드 캐시 정리 → 디스크 사용률 확인(80% 이상이면 경고) 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
+이후 `main` 병합 시 `.github/workflows/deploy.yml`이 테스트(서버 스크립트 `scripts/tests` `unittest`, Backend `unittest`, LLM `pytest` + 이미지 빌드, Frontend `node --test` + `npm run build`) → 4개 App 이미지 빌드·GHCR 게시 → 동일 커밋 checkout 확인 → 디스크 여유 확인(`DEPLOY_MIN_FREE_GB`, 기본 8GB 미만이면 중단) → 이미지 pull → `db-migrate` → `up --no-build --wait` → DB·LLM·RAG 준비 검사 → 현재·직전 배포 이미지만 남기고 정리(롤백용 직전 1개 보존)·빌드 캐시 정리 → 디스크 사용률 확인(80% 이상이면 경고) 순서로 자동 배포한다. 게시 job에는 `packages: write`, 배포 job에는 `packages: read` 권한이 필요하다. 서버 `.env`의 이미지 경로·태그는 배포 커밋으로 갱신된다. 이미 최신 main이 아닌 요청은 로그에 이유를 남기고 배포하지 않는다.
 
 - PR run(`pull_request` 이벤트)의 deploy job은 항상 skipped가 정상. 배포 결과는 `main` push run의 deploy job에서 확인
 - PR 테스트는 운영 대기열에 들어가지 않는다. deploy job·수집·재시도는 `ec2-app` 그룹과 `queue: max`로 직렬 실행한다(대기 최대 100개).
@@ -237,7 +237,7 @@ LLM이 Postgres 원본 기반 검색 상태를 준비한다. 기존 임베딩은
 
 | workflow | 주기 | 동작 |
 |---|---|---|
-| `.github/workflows/collect.yml` | 매주 월 03:00 KST (`0 18 * * 0` UTC), 수동 실행 가능 | `docker compose -f docker-compose.app.yml run --rm collector`(`DB/run_collection.py` 전체 수집) → llm 컨테이너 안에서 `POST /rag/reindex`(변경 청크만 임베딩 → pgvector → ES 재색인). 수집이 일부 실패해도 성공분은 재색인하고 실패는 마지막에 알림 |
+| `.github/workflows/collect.yml` | 매주 월 03:00 KST (`0 18 * * 0` UTC), 수동 실행 가능 | `docker compose -f docker-compose.app.yml run --rm collector`(`DB/run_collection.py` 전체 수집) → llm 컨테이너 안에서 `POST /rag/reindex`(변경 청크만 임베딩 → pgvector → 메모리 BM25 재구성). 수집이 일부 실패해도 성공분은 재색인하고 실패는 마지막에 알림 |
 | `.github/workflows/collect-retry.yml` | 3시간마다 (`0 */3 * * *` UTC) | `collection_failures`의 `transient` 중 `next_retry_at`이 지난 스크립트만 `run_collection.py --retry`로 재실행한 뒤 `POST /rag/reindex`. 재시도할 것이 없으면 종료 코드 3 → 재색인 없이 성공 처리 |
 
 - collector는 App EC2 `.env`의 `LAW_API_KEY`·`GOV24_API_KEY`·`ONTONG_YOUTH_API_KEY`와 `COMPOSE_DB_HOST`로 Data EC2 DB에 쓴다

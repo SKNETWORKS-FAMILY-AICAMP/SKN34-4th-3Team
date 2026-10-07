@@ -182,11 +182,13 @@ DB 원천 조회 → 텍스트 노이즈 정제 → 의미 라벨을 붙여 검�
 
 관련 코드: `LLM/src/vectorstores/postgres.py`
 
-#### 3.2.5 Elasticsearch(Nori) 키워드 인덱스
+#### 3.2.5 키워드(BM25) 인덱스
 
-pgvector 적재가 끝나면 같은 청크를 Elasticsearch로 옮겨 Nori 형태소 분석 BM25 인덱스를 만든다. 새 물리 인덱스에 Bulk 적재가 모두 성공한 뒤에만 검색 alias(`rag-documents`)를 교체하고, 쓰지 않는 이전 인덱스는 정리한다. 하이브리드 검색에서 Dense(pgvector) 결과와 RRF로 합쳐진다. `POST /rag/reindex`가 pgvector 갱신 직후 자동으로 수행하므로 수집 후 재색인 한 번이면 두 인덱스가 함께 갱신된다.
+pgvector 적재가 끝나면 LLM이 DB 원본 문서를 다시 읽어 프로세스 메모리에 BM25 인덱스(어절 + 문자 2-gram)를 만든다. 하이브리드 검색에서 Dense(pgvector) 결과와 원본 문서 단위 RRF로 합쳐진다. `POST /rag/reindex`가 pgvector 갱신 직후 함께 다시 만들므로 수집 후 재색인 한 번이면 두 검색기가 함께 갱신된다.
 
-관련 코드: `LLM/src/features/elasticsearch_indexing.py`, `LLM/src/vectorstores/nori_hybrid.py`, 분석기 설치 `elasticsearch/Dockerfile`
+2026-10-02(`1ab40f5`) 이전에는 Elasticsearch Nori 형태소 분석 BM25 인덱스를 썼다. 해당 재색인 코드(새 물리 인덱스 Bulk 적재 후 alias `rag-documents` 교체)는 평가 스크립트·수동 CLI용으로 남아 있으며 `/rag/reindex`는 부르지 않는다.
+
+관련 코드: `LLM/src/vectorstores/hybrid.py`(`BM25Search`), `LLM/src/vectorstores/nori_hybrid.py`, 원본 문서 로더 `LLM/src/features/elasticsearch_indexing.py`
 
 ---
 
@@ -201,7 +203,7 @@ pgvector 적재가 끝나면 같은 청크를 Elasticsearch로 옮겨 Nori 형�
 | LLM | 검색용 본문 구성 | 필드에 한글 라벨을 붙여 임베딩 모델이 의미 구분 가능하게 함 |
 | LLM | 청크 단위 분할 | 한국어 문장 경계를 고려해 1,000자(overlap 150자) 단위로 분할 |
 | LLM | 임베딩·Vector DB 적재 | 변경된 청크만 재임베딩하여 `rag_documents`에 적재 |
-| LLM | Elasticsearch 재색인 | pgvector 청크를 Nori BM25 인덱스로 옮겨 하이브리드 검색에 사용 |
+| LLM | BM25 재구성 | DB 원본 문서로 메모리 BM25를 다시 만들어 하이브리드 검색에 사용 |
 
 | 데이터 | 건수 |
 | --- | --- |

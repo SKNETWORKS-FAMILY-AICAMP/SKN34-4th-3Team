@@ -64,27 +64,30 @@
 글자를 읽는 일과 해석하는 일을 나눴습니다.
 
 ```
-영수증 사진 → ① OCR(Tesseract): 사진에서 글자만 읽음
+영수증 사진 → ① OCR(PP-OCRv5 한국어, 안 되면 Tesseract): 사진에서 글자만 읽음
             → ② LLM(OpenAI): 읽은 글자를 보고 상호·금액·품목 등을 정리
             → ③ 세법 검색(RAG): 관련 세법 자료를 찾아 경비 처리 가능성 판단
 ```
 
-- **OCR**: 사진 속 글자를 텍스트로 바꾸는 기술. 무료 오픈소스인 Tesseract를 서버 안에서 돌려 외부 API 비용이 없습니다.
+- **OCR**: 사진 속 글자를 텍스트로 바꾸는 기술. 무료 오픈소스인 PaddleOCR PP-OCRv5 한국어 모델을 서버 안에서 돌려 외부 API 비용이 없습니다. paddle을 쓸 수 없으면 Tesseract로 대신 읽습니다.
+- **못 읽으면 저장하지 않습니다.** 예전에는 임의 값(목 값)으로 저장했지만, 잘못된 지출이 남지 않도록 지금은 "다시 올려 달라"는 안내(503)를 돌려줍니다.
 - **LLM은 OCR이 읽은 글자만 씁니다.** 없는 글자를 지어내지 않고, 못 읽은 값은 "인식 못 함"으로 남깁니다.
 - 글자를 거의 못 읽은 경우에만 사진을 AI에게 직접 보여주는 방식(Vision)으로 대신 읽습니다.
 
-**OCR 엔진, 왜 Tesseract를 쓰나요? (비교 실험)**
+> **2026-10-02 갱신**: 아래 실험 이후 PP-OCRv5 **한국어 인식 모델**(`korean_PP-OCRv5_mobile_rec`)로 다시 재 보니 Tesseract보다 정확하고(정답 34개 중 33개 vs 28개) 빨라(5장 12.1초 vs 25.9초) 기본 엔진을 PP-OCRv5로 바꿨습니다(`Docs/OCR_PPOCRV5_BENCHMARK.md`). 아래 표와 전처리 실험은 Tesseract를 쓰던 시기의 기록이며, 전처리는 지금 Tesseract 대체 경로에 남아 있습니다.
+
+**OCR 엔진, 왜 Tesseract를 썼나요? (비교 실험, 2026-10-02 이전 기록)**
 휴대폰 사진은 인식률이 낮아지는 문제가 있어, 무료로 쓸 수 있는 대체 엔진 4종을 검토했습니다.
 
 | 엔진 | 특징 | 판단 |
 | --- | --- | --- |
-| **Tesseract**(현재) | 시스템 패키지만 설치, 용량 부담 없음 | 채택 |
-| PaddleOCR | GPU 없이도 설치 가능한 유일한 후보 | 실측 후 보류 |
+| **Tesseract** | 시스템 패키지만 설치, 용량 부담 없음 | 당시 채택(현재는 대체 경로) |
+| PaddleOCR | GPU 없이도 설치 가능한 유일한 후보 | 당시 보류 → 2026-10-02 PP-OCRv5 한국어로 채택 |
 | EasyOCR / Surya / docTR | PyTorch 기반이라 CPU 서버인데도 NVIDIA CUDA 라이브러리가 딸려 와 이미지가 수 GB 늘어남 | 제외 |
 
 **PaddleOCR 실측 결과** (같은 영수증 사진으로 비교)
 
-| 항목 | Tesseract(현재) | PaddleOCR |
+| 항목 | Tesseract | PaddleOCR(당시 설정) |
 | --- | --- | --- |
 | 처리 시간 | **2.4초** | **27~28초** (약 11배 느림) |
 | 평균 신뢰도 | 57.9% | 58~63% |
@@ -151,7 +154,7 @@ Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합
 | 구분 | 이름 | 용도 |
 | --- | --- | --- |
 | LLM 서비스(자체) | `/ocr/receipt`, `/rag/deductibility` | 영수증 읽기, 경비 처리 판단 |
-| 서버 내부 | Tesseract OCR | 사진에서 글자 읽기 (LLM 컨테이너 안에서 실행, 외부 호출 없음) |
+| 서버 내부 | PaddleOCR PP-OCRv5 한국어 (대체: Tesseract) | 사진에서 글자 읽기 (LLM 컨테이너 안에서 실행, 외부 호출 없음) |
 | 외부 API | OpenAI | 읽은 글자 해석, Vision 대체 읽기, 세법 검색용 임베딩 |
 | 외부 API | Cohere Rerank | 찾은 세법 자료 중 관련도 높은 순으로 재정렬 |
 | DB | PostgreSQL | 영수증 이미지·읽은 결과·판정 저장 |
@@ -228,7 +231,7 @@ Backend API는 모두 로그인 토큰(`Authorization: Bearer ...`)이 필요합
 
 ## 부록: 개발자 참고
 
-**실행 시 주의**: OCR 때문에 LLM 서비스 이미지에 Tesseract가 들어 있어, 처음 한 번은 `docker compose build llm`(또는 `setup.bat`/`setup.sh`)로 이미지를 다시 빌드해야 합니다. DB 컬럼은 `DB/app_extras.sql`로 추가되며 `docker compose up` 시 자동 적용됩니다.
+**실행 시 주의**: OCR 때문에 LLM 서비스 이미지에 paddle·PP-OCRv5 모델과 Tesseract가 들어 있어, 처음 한 번은 `docker compose build llm`(또는 `setup.bat`/`setup.sh`)로 이미지를 다시 빌드해야 합니다. DB 컬럼은 `DB/app_extras.sql`로 추가되며 `docker compose up` 시 자동 적용됩니다.
 
 **주요 파일**
 
