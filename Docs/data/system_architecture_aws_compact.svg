@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1536 894" width="1536" height="894">
+  <defs><marker id="ah1D4ED8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#1D4ED8"/></marker><marker id="ah24292F" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#24292F"/></marker><marker id="ah3F8624" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#3F8624"/></marker><marker id="ah475569" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#475569"/></marker><marker id="ah6D28D9" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#6D28D9"/></marker><marker id="ah8C4FFF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#8C4FFF"/></marker><marker id="ahB45309" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#B45309"/></marker><marker id="ahC7254E" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#C7254E"/></marker></defs>
+  <rect width="1536" height="894" fill="#FFFFFF"/>
+  <g transform="translate(44,0)">
+  <rect x="275" y="18" width="930" height="864" rx="12" fill="#FFFBF4" stroke="#E07B00" stroke-width="2"/>
+  <rect x="275" y="18" width="120.4" height="30" rx="12" fill="#E07B00" stroke="none" stroke-width="1"/>
+  <rect x="275" y="33" width="120.4" height="15" rx="0" fill="#E07B00" stroke="none" stroke-width="1"/>
+  <text x="288" y="39.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="17.6" font-weight="700" fill="#FFFFFF" text-anchor="start">AWS Cloud</text>
+  <text x="407.4" y="39.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="15.4" font-weight="400" fill="#64748B" text-anchor="start">Seoul (ap-northeast-2)</text>
+  <rect x="297" y="62" width="886" height="696" rx="10" fill="#FDFCFF" stroke="#8C4FFF" stroke-width="2"/>
+  <rect x="297" y="62" width="59.9" height="30" rx="10" fill="#8C4FFF" stroke="none" stroke-width="1"/>
+  <rect x="297" y="77" width="59.9" height="15" rx="0" fill="#8C4FFF" stroke="none" stroke-width="1"/>
+  <text x="310" y="83.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="17.6" font-weight="700" fill="#FFFFFF" text-anchor="start">VPC</text>
+  <text x="368.9" y="83.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="15.4" font-weight="400" fill="#64748B" text-anchor="start">단일 AZ</text>
+  <rect x="319" y="106" width="842" height="356" rx="10" fill="#F5FAEC" stroke="#5E8E10" stroke-width="2"/>
+  <rect x="319" y="106" width="140.0" height="30" rx="10" fill="#5E8E10" stroke="none" stroke-width="1"/>
+  <rect x="319" y="121" width="140.0" height="15" rx="0" fill="#5E8E10" stroke="none" stroke-width="1"/>
+  <text x="332" y="127.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="17.6" font-weight="700" fill="#FFFFFF" text-anchor="start">Public subnet</text>
+  <rect x="319" y="480" width="842" height="260" rx="10" fill="#EEF6FC" stroke="#147EBA" stroke-width="2"/>
+  <rect x="319" y="710" width="146.9" height="30" rx="10" fill="#147EBA" stroke="none" stroke-width="1"/>
+  <rect x="319" y="710" width="146.9" height="15" rx="0" fill="#147EBA" stroke="none" stroke-width="1"/>
+  <text x="332" y="731.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="17.6" font-weight="700" fill="#FFFFFF" text-anchor="start">Private subnet</text>
+  <rect x="283" y="300" width="28" height="160" rx="6" fill="#8C4FFF" stroke="none" stroke-width="1"/>
+  <text x="302" y="380" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="15.4" font-weight="800" fill="#FFFFFF" text-anchor="middle" transform="rotate(-90 302 380)">IGW</text>
+  <rect x="354" y="394" width="104" height="50" rx="9" fill="#FFFFFF" stroke="#8C4FFF" stroke-width="1.8"/>
+  <text x="406" y="413.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="800" fill="#0F172A" text-anchor="middle">NAT</text>
+  <text x="406" y="433.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="13.8" font-weight="400" fill="#64748B" text-anchor="middle">Gateway</text>
+  <path d="M354,419 L311,419" fill="none" stroke="#8C4FFF" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah8C4FFF)"/>
+  <rect x="500" y="124" width="642" height="320" rx="11" fill="#FFFFFF" stroke="#D45B07" stroke-width="2.2"/>
+  <circle cx="528" cy="150" r="16" fill="#FFFFFF" stroke="#D45B07" stroke-width="1.2"/>
+  <rect x="521" y="143" width="14" height="6" rx="1.5" fill="none" stroke="#D45B07" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="521" y="151" width="14" height="6" rx="1.5" fill="none" stroke="#D45B07" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="524.5" cy="146" r="0.6" fill="#D45B07"/><circle cx="524.5" cy="154" r="0.6" fill="#D45B07"/>
+  <text x="554" y="157.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="22.0" font-weight="800" fill="#0F172A" text-anchor="start">App EC2</text>
+  <text x="655.4" y="157.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="400" fill="#64748B" text-anchor="start">t3.medium · Elastic IP</text>
+  <rect x="514" y="176" width="615" height="256" rx="10" fill="#F7FAFF" stroke="#1D63ED" stroke-width="1.6" stroke-dasharray="8 4"/>
+  <text x="528" y="426.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="700" fill="#1D63ED" text-anchor="start">Docker Compose</text>
+  <rect x="528" y="202" width="160" height="206" rx="10" fill="#EEF4FF" stroke="#1D4ED8" stroke-width="2"/>
+  <rect x="542" y="225" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="551" y="225" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="560" y="225" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="551" y="216" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <text x="578" y="234.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="20.9" font-weight="700" fill="#0F172A" text-anchor="start">frontend</text>
+  <text x="544" y="264.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="700" fill="#1D4ED8" text-anchor="start">nginx · HTTPS</text>
+  <text x="676" y="397.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="15.4" font-weight="700" fill="#1D4ED8" text-anchor="end">:80 :443</text>
+  <rect x="706" y="202" width="220" height="96" rx="10" fill="#F5F0FF" stroke="#6D28D9" stroke-width="2"/>
+  <rect x="720" y="225" width="7.5" height="7.5" rx="1.2" fill="#6D28D9" stroke="none" stroke-width="1"/>
+  <rect x="729" y="225" width="7.5" height="7.5" rx="1.2" fill="#6D28D9" stroke="none" stroke-width="1"/>
+  <rect x="738" y="225" width="7.5" height="7.5" rx="1.2" fill="#6D28D9" stroke="none" stroke-width="1"/>
+  <rect x="729" y="216" width="7.5" height="7.5" rx="1.2" fill="#6D28D9" stroke="none" stroke-width="1"/>
+  <text x="756" y="234.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="20.9" font-weight="700" fill="#0F172A" text-anchor="start">llm</text>
+  <text x="722" y="264.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="700" fill="#6D28D9" text-anchor="start">RAG · OCR · LangGraph</text>
+  <text x="914" y="287.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="15.4" font-weight="700" fill="#6D28D9" text-anchor="end">:8001</text>
+  <rect x="706" y="312" width="220" height="96" rx="10" fill="#EEF4FF" stroke="#1D4ED8" stroke-width="2"/>
+  <rect x="720" y="335" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="729" y="335" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="738" y="335" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <rect x="729" y="326" width="7.5" height="7.5" rx="1.2" fill="#1D4ED8" stroke="none" stroke-width="1"/>
+  <text x="756" y="344.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="20.9" font-weight="700" fill="#0F172A" text-anchor="start">backend</text>
+  <text x="722" y="374.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="700" fill="#1D4ED8" text-anchor="start">Django API</text>
+  <text x="914" y="397.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="15.4" font-weight="700" fill="#1D4ED8" text-anchor="end">:8000</text>
+  <rect x="984" y="196" width="137" height="218" rx="10" fill="#E6EEFC" stroke="none" stroke-width="1"/>
+  <rect x="990" y="202" width="125" height="96" rx="9" fill="#FFFFFF" stroke="#1D63ED" stroke-width="1.6" stroke-dasharray="6 3"/>
+  <text x="1052.5" y="245.3" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="17.6" font-weight="700" fill="#0F172A" text-anchor="middle">db-migrate</text>
+  <text x="1052.5" y="268.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.9" font-weight="400" fill="#64748B" text-anchor="middle">배포 시 1회</text>
+  <rect x="990" y="312" width="125" height="96" rx="9" fill="#FFFFFF" stroke="#1D63ED" stroke-width="1.6" stroke-dasharray="6 3"/>
+  <text x="1052.5" y="355.3" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="17.6" font-weight="700" fill="#0F172A" text-anchor="middle">collector</text>
+  <text x="1052.5" y="378.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.9" font-weight="400" fill="#64748B" text-anchor="middle">수집 시 1회</text>
+  <path d="M688,360 L706,360" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah1D4ED8)"/>
+  <path d="M816,312 L816,298" fill="none" stroke="#6D28D9" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah6D28D9)"/>
+  <rect x="500" y="498" width="642" height="224" rx="11" fill="#FFFFFF" stroke="#D45B07" stroke-width="2.2"/>
+  <circle cx="528" cy="524" r="16" fill="#FFFFFF" stroke="#D45B07" stroke-width="1.2"/>
+  <ellipse cx="528" cy="519" rx="7" ry="2.6" fill="none" stroke="#D45B07" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M521,519 L521,529 C521,532.5 535,532.5 535,529 L535,519 M521,524 C521,527.5 535,527.5 535,524" fill="none" stroke="#D45B07" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="554" y="531.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="22.0" font-weight="800" fill="#0F172A" text-anchor="start">Data EC2</text>
+  <text x="661.1" y="531.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="400" fill="#64748B" text-anchor="start">t3.large</text>
+  <rect x="514" y="550" width="615" height="156" rx="10" fill="#F7FAFF" stroke="#1D63ED" stroke-width="1.6" stroke-dasharray="8 4"/>
+  <text x="1115" y="700.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="700" fill="#1D63ED" text-anchor="end">Docker Compose</text>
+  <rect x="528" y="576" width="275" height="100" rx="10" fill="#F8FAFC" stroke="#94A3B8" stroke-width="2" stroke-dasharray="6 3"/>
+  <rect x="542" y="599" width="7.5" height="7.5" rx="1.2" fill="#94A3B8" stroke="none" stroke-width="1"/>
+  <rect x="551" y="599" width="7.5" height="7.5" rx="1.2" fill="#94A3B8" stroke="none" stroke-width="1"/>
+  <rect x="560" y="599" width="7.5" height="7.5" rx="1.2" fill="#94A3B8" stroke="none" stroke-width="1"/>
+  <rect x="551" y="590" width="7.5" height="7.5" rx="1.2" fill="#94A3B8" stroke="none" stroke-width="1"/>
+  <text x="578" y="608.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="20.9" font-weight="700" fill="#64748B" text-anchor="start">ES</text>
+  <text x="544" y="638.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="400" fill="#64748B" text-anchor="start">서빙 미사용</text>
+  <text x="791" y="665.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="15.4" font-weight="700" fill="#94A3B8" text-anchor="end">:9200</text>
+  <rect x="823" y="576" width="292" height="100" rx="10" fill="#FFF6EA" stroke="#B45309" stroke-width="2"/>
+  <rect x="837" y="599" width="7.5" height="7.5" rx="1.2" fill="#B45309" stroke="none" stroke-width="1"/>
+  <rect x="846" y="599" width="7.5" height="7.5" rx="1.2" fill="#B45309" stroke="none" stroke-width="1"/>
+  <rect x="855" y="599" width="7.5" height="7.5" rx="1.2" fill="#B45309" stroke="none" stroke-width="1"/>
+  <rect x="846" y="590" width="7.5" height="7.5" rx="1.2" fill="#B45309" stroke="none" stroke-width="1"/>
+  <text x="873" y="608.9" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="22.0" font-weight="700" fill="#0F172A" text-anchor="start">db</text>
+  <text x="839" y="639.3" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="17.6" font-weight="700" fill="#B45309" text-anchor="start">PostgreSQL + pgvector</text>
+  <text x="1103" y="665.5" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="15.4" font-weight="700" fill="#B45309" text-anchor="end">:5432</text>
+  <path d="M953,250 L953,568" fill="none" stroke="#B45309" stroke-width="2"/>
+  <path d="M953,566 L953,576" fill="none" stroke="#B45309" stroke-width="2" stroke-linejoin="round" marker-end="url(#ahB45309)"/>
+  <path d="M953,250 L926,250" fill="none" stroke="#B45309" stroke-width="2" stroke-linejoin="round" marker-end="url(#ahB45309)"/>
+  <path d="M953,360 L926,360" fill="none" stroke="#B45309" stroke-width="2" stroke-linejoin="round" marker-end="url(#ahB45309)"/>
+  <circle cx="953" cy="360" r="4" fill="#B45309"/>
+  <path d="M973,250 L973,568" fill="none" stroke="#B45309" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M973,566 L973,576" fill="none" stroke="#B45309" stroke-width="2" stroke-linejoin="round" marker-end="url(#ahB45309)"/>
+  <path d="M973,250 L990,250" fill="none" stroke="#B45309" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M973,360 L990,360" fill="none" stroke="#B45309" stroke-width="2" stroke-dasharray="6 4"/>
+  <circle cx="973" cy="360" r="4" fill="#B45309"/>
+  <rect x="901.5066" y="460.22" width="42.9868" height="21.560000000000002" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="923" y="476.5" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="15.4" font-weight="700" fill="#B45309" text-anchor="middle">SQL</text>
+  <rect x="979.48955" y="460.99" width="131.02089999999998" height="20.02" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="1045" y="476.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="700" fill="#B45309" text-anchor="middle">스키마 · 수집 적재</text>
+  <path d="M500,570 L406,570 L406,444" fill="none" stroke="#8C4FFF" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah8C4FFF)"/>
+  <rect x="415.457875" y="561.145" width="75.08425000000001" height="17.71" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="453.0" y="574.6" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="12.7" font-weight="700" fill="#8C4FFF" text-anchor="middle">아웃바운드</text>
+  <rect x="815" y="780" width="150" height="80" rx="11" fill="#F3F9EE" stroke="#3F8624" stroke-width="2"/>
+  <circle cx="842" cy="807" r="16" fill="#FFFFFF" stroke="#3F8624" stroke-width="1.2"/>
+  <path d="M836,812 L848,812 C852,812 852,805 847,805 C846,800 838,799 837,805 C832,805 832,812 836,812 Z" fill="none" stroke="#3F8624" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="867" y="814.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">S3</text>
+  <text x="833" y="842.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">DB 백업</text>
+  <rect x="995" y="780" width="150" height="80" rx="11" fill="#FDF2F5" stroke="#C7254E" stroke-width="2"/>
+  <circle cx="1022" cy="807" r="16" fill="#FFFFFF" stroke="#C7254E" stroke-width="1.2"/>
+  <path d="M1017,807 L1020.5,811 L1028,802.5" fill="none" stroke="#C7254E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1047" y="814.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">SNS</text>
+  <text x="1013" y="842.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">백업 실패 알림</text>
+  <path d="M890,676 L890,780" fill="none" stroke="#3F8624" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah3F8624)"/>
+  <rect x="857.8344" y="739.76" width="64.33120000000001" height="18.48" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="890" y="753.8" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="13.2" font-weight="700" fill="#3F8624" text-anchor="middle">pg_dump</text>
+  <path d="M1070,722 L1070,780" fill="none" stroke="#C7254E" stroke-width="1.8" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ahC7254E)"/>
+  <path d="M1115,360 L1254,360" fill="none" stroke="#475569" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah475569)"/>
+  <path d="M883,202 L883,187 L1254,187" fill="none" stroke="#6D28D9" stroke-width="2" stroke-linejoin="round" marker-end="url(#ah6D28D9)"/>
+  <path d="M311,350 L528,350" fill="none" stroke="#1D4ED8" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#ah1D4ED8)"/>
+  <rect x="365.4745" y="325.99" width="61.05100000000001" height="20.02" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="396" y="341.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="700" fill="#1D4ED8" text-anchor="middle">HTTPS</text>
+  <path d="M311,372 L500,372" fill="none" stroke="#24292F" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah24292F)"/>
+  <rect x="352.8864" y="362.76" width="114.2272" height="18.48" rx="4" fill="#FFFFFF" fill-opacity="0.95" stroke="none" stroke-width="1"/>
+  <text x="410" y="376.8" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="13.2" font-weight="700" fill="#24292F" text-anchor="middle">SSH · image pull</text>
+  <rect x="1254" y="302" width="220" height="116" rx="11" fill="#F1F5F9" stroke="#475569" stroke-width="2"/>
+  <circle cx="1281" cy="329" r="16" fill="#FFFFFF" stroke="#475569" stroke-width="1.2"/>
+  <circle cx="1281" cy="329" r="7.5" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1273.5,329 L1288.5,329 M1281,321.5 C1277,326 1277,332 1281,336.5 M1281,321.5 C1285,326 1285,332 1281,336.5" fill="none" stroke="#475569" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1306" y="336.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">공공 데이터</text>
+  <text x="1272" y="371.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">법령 · 국세청 · 정부24</text>
+  <text x="1272" y="397.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">K-Startup · 온통청년</text>
+  <rect x="1254" y="129" width="220" height="116" rx="11" fill="#F5F0FF" stroke="#6D28D9" stroke-width="2"/>
+  <circle cx="1281" cy="156" r="16" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.2"/>
+  <path d="M1281,148 C1282,154 1283,155 1289,156 C1283,157 1282,158 1281,164 C1280,158 1279,157 1273,156 C1279,155 1280,154 1281,148 Z" fill="none" stroke="#6D28D9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1306" y="163.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">AI APIs</text>
+  <text x="1272" y="198.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">OpenAI · Cohere</text>
+  <text x="1272" y="224.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">LangSmith</text>
+  </g>
+  <rect x="18" y="304" width="232" height="92" rx="11" fill="#EEF4FF" stroke="#1D4ED8" stroke-width="2"/>
+  <circle cx="45" cy="331" r="16" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="1.2"/>
+  <circle cx="45" cy="328" r="3.6" fill="none" stroke="#1D4ED8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M38.5,338 C38.5,332 51.5,332 51.5,338" fill="none" stroke="#1D4ED8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="70" y="338.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">Users</text>
+  <text x="36" y="373.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">청년 · 1인 창업자</text>
+  <path d="M250,350 L327,350" fill="none" stroke="#1D4ED8" stroke-width="2.2" stroke-linejoin="round" marker-end="url(#ah1D4ED8)"/>
+  <rect x="18" y="432" width="232" height="246" rx="11" fill="#F6F8FA" stroke="#24292F" stroke-width="2"/>
+  <circle cx="45" cy="459" r="16" fill="#FFFFFF" stroke="#24292F" stroke-width="1.2"/>
+  <circle cx="45" cy="459" r="3" fill="none" stroke="#24292F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M45,451 L45,454 M45,464 L45,467 M37,459 L40,459 M50,459 L53,459 M39.4,453.4 L41.5,455.5 M48.5,462.5 L50.6,464.6 M50.6,453.4 L48.5,455.5 M41.5,462.5 L39.4,464.6" fill="none" stroke="#24292F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="70" y="466.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">GitHub Actions</text>
+  <rect x="30" y="488" width="208" height="40" rx="7" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.2"/>
+  <text x="42" y="513.7" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="16.0" font-weight="700" fill="#0F172A" text-anchor="start">deploy</text>
+  <text x="228" y="513.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="400" fill="#64748B" text-anchor="end">main 병합</text>
+  <rect x="30" y="534" width="208" height="40" rx="7" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.2"/>
+  <text x="42" y="559.7" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="16.0" font-weight="700" fill="#0F172A" text-anchor="start">collect</text>
+  <text x="228" y="559.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="400" fill="#64748B" text-anchor="end">매주</text>
+  <rect x="30" y="580" width="208" height="40" rx="7" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.2"/>
+  <text x="42" y="605.7" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="16.0" font-weight="700" fill="#0F172A" text-anchor="start">collect-retry</text>
+  <text x="228" y="605.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="400" fill="#64748B" text-anchor="end">3시간</text>
+  <rect x="30" y="626" width="208" height="40" rx="7" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1.2"/>
+  <text x="42" y="651.7" font-family="'JetBrains Mono', Consolas, 'D2Coding', monospace" font-size="16.0" font-weight="700" fill="#0F172A" text-anchor="start">health-check</text>
+  <text x="228" y="651.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="14.3" font-weight="400" fill="#64748B" text-anchor="end">6시간</text>
+  <rect x="18" y="708" width="232" height="86" rx="11" fill="#FFFFFF" stroke="#24292F" stroke-width="2"/>
+  <circle cx="45" cy="735" r="16" fill="#FFFFFF" stroke="#24292F" stroke-width="1.2"/>
+  <path d="M39,740 L51,740 C55,740 55,733 50,733 C49,728 41,727 40,733 C35,733 35,740 39,740 Z" fill="none" stroke="#24292F" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="70" y="742.1" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="19.8" font-weight="700" fill="#0F172A" text-anchor="start">GHCR</text>
+  <text x="36" y="777.9" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="16.5" font-weight="600" fill="#0F172A" text-anchor="start">컨테이너 이미지</text>
+  <path d="M134,678 L134,708" fill="none" stroke="#24292F" stroke-width="1.8" stroke-linejoin="round" marker-end="url(#ah24292F)"/>
+  <text x="144" y="698.5" font-family="Pretendard, 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Segoe UI', sans-serif" font-size="15.4" font-weight="700" fill="#24292F" text-anchor="start">push</text>
+  <path d="M250,459 L288,459" fill="none" stroke="#24292F" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M250,751 L288,751 L288,372" fill="none" stroke="#24292F" stroke-width="2" stroke-dasharray="6 4"/>
+  <path d="M288,372 L327,372" fill="none" stroke="#24292F" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6 4" marker-end="url(#ah24292F)"/>
+</svg>
