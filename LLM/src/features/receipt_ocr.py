@@ -85,6 +85,9 @@ OCR_MAX_PENDING = 2
 # 이 시간 안에 OCR이 끝나지 않으면 기다리지 않고 Vision으로 읽는다. OCR + LLM 정리 + Vision이
 # Backend의 LLM_TIMEOUT_OCR(40초) 안에 끝나야 한다.
 OCR_WAIT_SECONDS = 15.0
+# 한 장의 OCR이 이 시간을 넘기면 멈춘 것으로 보고 /health를 실패시킨다(autoheal이 컨테이너를 재시작).
+# 멈춘 OCR은 대기열 자리를 계속 차지해 이후 업로드가 모두 503이 되기 때문이다.
+OCR_STALL_SECONDS = 120.0
 
 _logger = logging.getLogger(__name__)
 _paddle_pipeline: Any = None
@@ -94,6 +97,8 @@ _paddle_lock = threading.Lock()
 _ocr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="receipt-ocr")
 # 실행 중 + 대기 중인 OCR 수. 이벤트 루프 스레드에서만 바꾼다.
 _ocr_pending = 0
+# 실행 중인 OCR의 시작 시각(time.monotonic). OCR 스레드에서만 바꾼다.
+_ocr_started_at: float | None = None
 
 
 class OcrUnavailableError(RuntimeError):
@@ -171,9 +176,25 @@ async def run_ocr_limited(image_bytes: bytes) -> OcrResult:
     if _ocr_pending >= OCR_MAX_PENDING:
         raise OcrBusyError("receipt OCR queue is full")
     _ocr_pending += 1
-    future = asyncio.get_running_loop().run_in_executor(_ocr_executor, run_ocr, image_bytes)
+    future = asyncio.get_running_loop().run_in_executor(_ocr_executor, _run_ocr_tracked, image_bytes)
     future.add_done_callback(_release_ocr_slot)
     return await asyncio.wait_for(asyncio.shield(future), OCR_WAIT_SECONDS)
+
+
+def _run_ocr_tracked(image_bytes: bytes) -> OcrResult:
+    """대기 시간을 빼고 실제 실행 시간만 재도록 시작 시각을 기록하며 run_ocr을 돌린다."""
+    global _ocr_started_at
+    _ocr_started_at = time.monotonic()
+    try:
+        return run_ocr(image_bytes)
+    finally:
+        _ocr_started_at = None
+
+
+def ocr_stalled() -> bool:
+    """실행 중인 OCR이 OCR_STALL_SECONDS를 넘겼으면 True."""
+    started_at = _ocr_started_at
+    return started_at is not None and time.monotonic() - started_at > OCR_STALL_SECONDS
 
 
 def _release_ocr_slot(future: asyncio.Future) -> None:
