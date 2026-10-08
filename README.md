@@ -230,7 +230,7 @@
 
 ![시스템 아키텍처](Docs/data/system_architecture_aws_compact.svg)
 
-- **사용자 → App EC2 (Public subnet)**: 사용자는 IGW를 거쳐 App EC2의 **Frontend(nginx · HTTPS 443)**로 접속하는 것이 유일한 외부 진입점. Frontend가 api 요청을 Backend로 프록시
+- **사용자 → App EC2 (Public subnet)**: 사용자는 IGW를 거쳐 App EC2의 Frontend(nginx · HTTPS 443)로 접속하는 것이 유일한 외부 진입점. Frontend가 api 요청을 Backend로 프록시
 - **Backend → LLM**: LLM 서비스는 외부에 노출되지 않고 Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답(스트리밍)·세액감면 근거 생성·공고문 요약·영수증 OCR·사업계획서 생성/출력을 담당하며, 필요한 외부 AI API(OpenAI · Cohere · LangSmith)를 호출
 - **Data EC2 (Private subnet)**: db(PostgreSQL + pgvector)가 관계형·벡터 데이터를 통합 관리하고, App EC2가 SQL·스키마/수집 적재로 접속.
 - **Elasticsearch**: Nori BM25 검색기로 도입했으나 재평가에서 기본 BM25 대비 우위가 재현되지 않아 서빙에는 미사용(기본 BM25 운영), 코드·컨테이너로만 보존
@@ -1645,7 +1645,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 | **6. 테스트·평가** | 단위 테스트(LLM 42·Backend 16·Frontend 2 파일), holdout250 성능 평가, 데스크탑·모바일 QA | 🔄 진행 중 |
 | | 통합 테스트(실제 OpenAI·Cohere·PostgreSQL 연동) | 🔄 진행 중 |
 | | 버그 수정 | 🔄 남은 결함은 `Docs/STATUS.md` 2절 |
-| **7. 배포** | Docker Compose 구성(`docker-compose*.yml`, `setup.sh`, `setup.bat`) | ✅ 완료 |
+| **7. 배포** | Docker Compose 구성(`docker-compose.yml`, `setup.sh`, `setup.bat`) | ✅ 완료 |
 | | CI/CD(GitHub Actions `deploy.yml`·`collect.yml`·`collect-retry.yml`) | ✅ 완료 |
 | | AWS App/Data EC2 배포, 주간 수집→임베딩→재색인 자동화 | ✅ 완료 |
 | | 배포 안정화(동시 실행 잠금·백업 cron·메모리 한도·무중단 재색인 등 운영 이슈 대응) | 🔄 진행 중 |
@@ -1899,7 +1899,7 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 | Backend API 문서 | http://localhost:8000/docs |
 | LLM API 문서 | http://localhost:8001/docs |
 
-- 로컬 개발에서는 `db`·`db-migrate`(스키마 적용 후 종료)·`elasticsearch`·`llm`·`backend`가 Docker Compose로 뜨고 **Frontend는 호스트에서 돈다.** Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend`·`presentation` 서비스는 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다
+- 로컬 개발에서는 `db`·`db-migrate`(스키마 적용 후 종료)·`elasticsearch`·`llm`·`backend`가 Docker Compose로 뜨고 Frontend는 호스트에서 돈다. Vite 프록시 대상이 호스트 주소이기 때문이다. compose의 `frontend`·`presentation` 서비스는 프로필에 묶여 있어 평소에는 빌드도 기동도 되지 않는다
 - 코드 수정을 바로 반영하는 개발 모드: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d` (backend·llm `--reload`, Vite 컨테이너 `frontend-dev` :5173)
 - AWS 배포는 [Docs/AWS_DEPLOY_GUIDE.md](Docs/AWS_DEPLOY_GUIDE.md), 학원 내부망 단일 서버 배포는 `Docs/README.md` 12절
 - `Ctrl+C`는 Frontend만 멈춘다. 컨테이너까지 내리려면 `docker compose down`
