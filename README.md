@@ -70,22 +70,18 @@
 
 ### 프로젝트 필요성
 
-- 세금 및 세액감면 조건이 복잡하여 스스로 판단하기 어렵습니다.
-- 정부·지자체 지원사업이 여러 기관에 분산되어 있습니다.
-- 긴 공고문을 직접 읽고 지원 대상 및 신청 조건을 확인해야 합니다.
-- 일반 AI에게 질문할 경우 존재하지 않는 정책이나 부정확한 세무 정보를 제공할 위험이 있습니다.
-- 영수증·지출의 경비처리 가능 여부와 근거 법령을 창업자가 직접 판단하기 어렵습니다.
-- 지원사업 제출용 사업계획서를 공고 양식에 맞춰 작성하는 데 많은 시간과 노하우가 필요합니다.
+- 세금·세액감면 조건과 정부·지자체 지원사업이 여러 기관·공고문에 분산·복잡하게 흩어져 있어, 창업자가 혜택을 스스로 찾고 판단하기 어렵습니다. 
+- 일반 AI는 존재하지 않는 정책·부정확한 세무 정보를 줄 위험이 있어 근거 기반 안내가 필요합니다.
+- **영수증·지출의 경비처리 가능 여부와 근거 법령**을 창업자가 직접 판단하기 어렵습니다.
+- **지원사업 제출용 사업계획서**를 공고 양식에 맞춰 작성하는 데 많은 시간과 노하우가 필요합니다.
 
 <br>
 
 ### 프로젝트 목표
 
-- 환각을 방지하고 원하는 내외부 데이터 범위 안에서 RAG 기반 LLM 질의응답 시스템을 구현하여, 근거 없는 정책·세무 정보를 제공하는 위험을 차단합니다.
-- 세법·정책 문서를 벡터 형태로 임베딩하여 벡터데이터베이스에 저장하고 검색합니다.
-- LangChain을 활용해 벡터데이터베이스와 LLM을 연동하고, 조건 기반 판정 로직과 결합해 사용자 맞춤 답변을 제공합니다.
-- 영수증 OCR과 세법 RAG를 결합해 지출의 경비처리 가능성을 근거 법령과 함께 판정하고, 지출 분류·통계까지 자동화합니다.
-- 공고 양식을 반영한 사업계획서 초안을 LLM으로 생성하고 AI 예비진단으로 채점하여, 제출용 문서 작성을 지원합니다.
+- 세법·정책 문서를 벡터로 임베딩한 RAG 기반 LLM 질의응답에 조건 기반 판정을 결합해, 환각 없이 근거 있는 맞춤 답변을 제공합니다.
+- **영수증 OCR과 세법 RAG를 결합**해 지출의 경비처리 가능성을 근거 법령과 함께 판정하고, 지출 분류·통계까지 자동화합니다.
+- **공고 양식을 반영한 사업계획서 초안**을 LLM으로 생성하고 AI 예비진단으로 채점하여, 제출용 문서 작성을 지원합니다.
 
 <br>
 
@@ -97,12 +93,7 @@
 <summary>&nbsp;&nbsp;AI를 통한 세무 업무 지원</summary>
 <br>
 
-- 사업자등록 유형 진단
-- 사용자 맞춤 세금 정보 제공
-- 세금 신고·납부 일정 및 지원금 신청기한을 통합한 홈 화면 캘린더
-- 맞춤형 세금 리마인더
-- 경비처리·절세 Q&A
-- 세법 및 국세청 자료 기반 RAG 답변
+세법·국세청 자료 기반 RAG로 세금·경비처리·절세 Q&A에 답하고, 맞춤 세금 정보·통합 캘린더·리마인더를 함께 제공한다.
 
 </details>
 
@@ -113,8 +104,7 @@
 <summary>&nbsp;&nbsp;청년창업 세액감면 요건 충족 여부 자동 판정</summary>
 <br>
 
-- 사용자의 나이, 지역, 업종, 창업 여부 및 창업 시점 등의 조건을 분석하여 판정함.
-- 단순 LLM 답변이 아닌, 조건 기반 판정 + 관련 법령 및 공식 자료를 근거로 결과 제공.
+나이·업종·창업 시점 등 조건을 Rule로 판정하고, 단순 LLM 답변이 아니라 관련 법령·공식 자료를 근거로 결과를 제시한다.
 
 </details>
 
@@ -124,11 +114,7 @@
 <summary>&nbsp;&nbsp;사용자에게 적합한 조건의 지원 정책을 쉽게 확인할 수 있게 함</summary>
 <br>
 
-- 정부·지자체 지원사업 수집
-- 사용자 조건 기반 맞춤 정책 추천
-- 지원 자격 비교
-- 신청기간 및 신청방법 안내(홈 화면 캘린더에 신청 마감일 연동)
-- 관심 정책 저장
+정부·지자체 지원사업을 수집해 사용자 조건에 맞는 정책을 추천하고, 자격 비교·신청기간 안내·관심 정책 저장을 지원한다.
 
 </details>
 
@@ -138,40 +124,32 @@
 <summary>&nbsp;&nbsp;AI가 공고문을 분석하여 중요 정보를 구조화</summary>
 <br>
 
-- 지원 대상
-- 지원 내용 및 금액
-- 신청 기간
-- 신청 방법
-- 제출 서류
-- 주요 유의사항
-
-또한 답변에 공식 출처와 근거 문서를 함께 제공하여 정보 신뢰성을 높임.
+긴 공고문을 지원대상·내용·기간·서류·유의사항으로 구조화해 요약하고, 공식 출처·근거 문서를 함께 제공한다.
 
 </details>
 
 #### ⑤ 영수증 지출관리 - OCR 경비처리 판정
 
-<details>
+<details open>
 <summary>&nbsp;&nbsp;영수증 사진을 올리면 경비 처리 가능 여부를 근거와 함께 판정</summary>
 <br>
 
-- PP-OCRv5 한국어 OCR로 상호·금액·날짜·품목 인식(실패 시 Tesseract 폴백, Vision LLM 대체)
-- 세법 검색(RAG)으로 경비 처리 가능성 판정 — `높음` / `확인 필요` / `어려움`
-- 증빙 종류·지출 항목(9종) 분류와 판단 근거 법령 제시
-- 품목별 금액 수정, OCR이 놓친 품목 직접 추가, 지출 통계·엑셀 보고서
+- PP-OCRv5 한국어 OCR로 상호·금액·날짜·품목을 인식한다.
+- RAG를 통한 세법 검색으로 경비 처리 가능성을 판정한다.
+- 증빙 종류·지출 항목(9종) 분류와 판단 근거의 법령을 제시한다.
 
 </details>
 
 #### ⑥ 사업계획서 AI 작성
 
-<details>
+<details open>
 <summary>&nbsp;&nbsp;아이디어를 입력하면 공고 양식에 맞춘 사업계획서 초안을 생성·채점</summary>
 <br>
 
-- PSST 흐름(문제인식·실현가능성·성장전략·팀구성) 기반 초안 자동 작성
-- 지원 공고의 목차를 붙여넣거나 제출 양식 파일(HWPX·PDF)을 올리면 그 항목·순서에 맞춰 작성
-- AI 예비진단으로 0~100점 채점과 항목별 강점·보완점 제시
-- 한글(HWPX)·PDF 다운로드, 보관함에서 여러 건 저장·관리
+- PSST 흐름(문제인식·실현가능성·성장전략·팀구성) 기반 초안을 생성한다.
+- 지원 공고의 목차를 붙여넣거나 제출 양식 파일(HWPX·PDF)을 올리면 그 항목·순서에 맞춰 작성한다.
+- AI 예비진단으로 0~100점 채점과 항목별 강점·보완점을 제시한다.
+- 생성된 초안을 한글(HWPX)·PDF 형식 파일으로 다운로드하고, 보관함에서 여러 건 저장·관리할 수 있다.
 
 </details>
 
@@ -250,14 +228,16 @@
 
 ## 6. 시스템 아키텍처
 
-![시스템 아키텍처](Docs/data/system_architecture.svg)
+![시스템 아키텍처](Docs/data/system_architecture_aws_compact.svg)
 
-- **Frontend → Backend**: 외부에 노출되는 유일한 진입점. Frontend가 실행되고, api 요청이 프록시를 거쳐 Backend로 감
-- **Backend → LLM**: LLM 서비스는 외부에 직접 노출되지 않고, Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답(스트리밍)·세액감면판정 근거 생성·공고문 요약·영수증 OCR·사업계획서 생성/출력을 담당
-- **DB**: 관계형 데이터와 벡터 데이터를 Postgres + pgvector 하나로 통합 관리. Backend와 LLM이 각자 필요한 부분에 직접 접속
-- **Elasticsearch**: Nori(한국어 형태소) BM25 검색기로 도입했으나, 근거 데이터 확대 후 재평가에서 기본 BM25 대비 우위가 재현되지 않아 운영 키워드 검색은 기본 BM25로 두고, Elasticsearch는 향후 데이터 변화 시 재평가를 위해 코드·컨테이너로 보존
-- **외부 시스템**: 국가법령정보·국세청·정부24·온통청년 등에서 받아온 원천 데이터는 수집 스크립트(`DB/run_collection.py`)가 DB에 직접 적재. 관리자 API는 소량 수기 등록용
-- **배포**: 단일 호스트 `docker-compose.yml`, AWS는 App EC2(`docker-compose.app.yml`)·Data EC2(`docker-compose.data.yml`) 2대 구성(`Docs/AWS_DEPLOY_GUIDE.md`). 상세는 `Docs/Design/ARCHITECTURE.md`
+- **사용자 → App EC2 (Public subnet)**: 사용자는 IGW를 거쳐 App EC2의 **Frontend(nginx · HTTPS 443)**로 접속하는 것이 유일한 외부 진입점. Frontend가 api 요청을 Backend로 프록시
+- **Backend → LLM**: LLM 서비스는 외부에 노출되지 않고 Backend가 Docker 내부 네트워크에서 호출. RAG 질의응답(스트리밍)·세액감면 근거 생성·공고문 요약·영수증 OCR·사업계획서 생성/출력을 담당하며, 필요한 외부 AI API(OpenAI · Cohere · LangSmith)를 호출
+- **Data EC2 (Private subnet)**: db(PostgreSQL + pgvector)가 관계형·벡터 데이터를 통합 관리하고, App EC2가 SQL·스키마/수집 적재로 접속.
+- **Elasticsearch**: Nori BM25 검색기로 도입했으나 재평가에서 기본 BM25 대비 우위가 재현되지 않아 서빙에는 미사용(기본 BM25 운영), 코드·컨테이너로만 보존
+- **일회성 작업**: db-migrate(배포 시 1회 스키마 적용)와 collector(수집 시 1회)가 App EC2에서 실행
+- **외부 공공데이터**: 법령·국세청·정부24·K-Startup·온통청년의 데이터를 수집 스크립트를 통해 수집해 db에 직접 적재
+- **CI/CD (GitHub Actions)**: `deploy`(main 병합)·`collect`(매주)·`collect-retry`(3시간)·`health-check`(6시간). 이미지를 빌드해 GHCR에 push하고, App EC2가 SSH · image pull로 받아 배포
+- **백업·알림**: db를 pg_dump로 S3에 백업하고, 실패 시 SNS로 알림. 
 
 
 ---
@@ -1361,6 +1341,10 @@ classDiagram
 <a id="seq-tax-reduction"></a>
 **① 청년창업 세액감면 자동판정 (FS-13)**
 
+<details>
+<summary>&nbsp;&nbsp;다이어그램 보기</summary>
+<br>
+
 ```mermaid
 sequenceDiagram
     participant FE as Frontend
@@ -1398,10 +1382,16 @@ Rule 기반 판정과 RAG 근거 제시를 결합하는 것이 핵심 차별점(
 LLM이 준 `sources`는 판정 결과에 저장하지 않음.
 
 </details>
+
+</details>
 <br>
 
 <a id="seq-chat-qa"></a>
 **② AI 챗봇 Q&A + 답변 근거 확인 (FS-05, FS-06, FS-08)**
+
+<details>
+<summary>&nbsp;&nbsp;다이어그램 보기</summary>
+<br>
 
 ```mermaid
 sequenceDiagram
@@ -1447,9 +1437,15 @@ Service는 LLM을 부르기 전에 `userContext`(로그인 사용자 프로필),
 근거 문서를 못 찾으면 LLM이 `status`로 알리고, Backend는 `status≠success`면 `needsConfirmation=true`로 표시.
 
 </details>
+
+</details>
 <br>
 
 **③ 기동 시 RAG 인덱스 워밍업**
+
+<details>
+<summary>&nbsp;&nbsp;다이어그램 보기</summary>
+<br>
 
 ```mermaid
 sequenceDiagram
@@ -1480,6 +1476,8 @@ sequenceDiagram
 인덱스가 준비되지 않은 채로는 모든 질의가 LLM의 `integration_unavailable` 응답으로 끝나므로, 누가 재색인을 부를 때까지 기다리지 않고 기동 시 한 번 확인. 
 워밍업이 기동을 막지 않게 하기 위해서 데몬 스레드로 작동. 
 `rag_documents`가 이미 임베딩을 갖고 있고 청크 content가 바뀌지 않았으면 캐시로 로드되어 재호출이 없고, 변경된 청크만 그만큼 다시 임베딩.
+
+</details>
 
 </details>
 <br>
@@ -1578,6 +1576,10 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 ### ③ LLM 질문 라우팅 처리
 
+<details>
+<summary>&nbsp;&nbsp;처리 흐름 · 다이어그램 보기</summary>
+<br>
+
 라우터 LLM이 질문을 **공고 / 정책 / 세금** 세 카테고리로 분류하고, 카테고리별로 다른 방식을 적용해 처리함.  
 ②번 "LLM 서비스" 단계가 실제로 이 흐름을 실행함.
 
@@ -1593,6 +1595,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 </details>
 
+</details>
+
 
 ### ④ 영수증 OCR 경비처리 판정
 처리 흐름: [9.4 시퀀스 다이어그램](#seq-expense-ocr) 참고
@@ -1602,8 +1606,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <br>
 
 - **OCR**: PP-OCRv5 한국어로 영수증 글자·위치·신뢰도를 읽고(실패 시 Tesseract 폴백, 글자 부족 시 Vision LLM 대체), LLM이 날짜·상호·금액·품목을 정리
-- **지출 분류**: LLM 분류 → (없으면) 상호·품목 키워드 규칙으로 9개 지출항목(사무용품·통신비·차량유지비·광고선전비·임차료·복리후생비·접대비·교육·도서·기타) 태깅
-- **경비처리 판정**: 적격증빙 판정(소득세법 제160조의2 — 세금계산서·카드전표·현금영수증은 적격, 간이영수증은 건당 3만 원 이하만) + 세법 RAG 근거로 3단계(`높음`/`애매함`/`어려움`) 판정. 세법 자료로 뒷받침된 응답만 규칙 판정을 덮어씀
+- **지출 분류**: LLM 분류 -> 상호·품목 키워드 규칙으로 9개 지출항목(사무용품·통신비·차량유지비·광고선전비·임차료·복리후생비·접대비·교육·도서·기타) 태깅
+- **경비처리 판정**: 소득세법 제160조의2 기준으로 적격증빙을 판정(세금계산서·카드전표·현금영수증은 적격, 간이영수증은 건당 3만 원 이하만 적격)하고, 세법 RAG 근거와 결합해 경비처리 가능성을 3단계(인정 / 확인 필요 / 불인정)로 판정. 세법 자료로 뒷받침된 응답만 규칙 판정을 덮어씀
 
 </details>
 
@@ -1614,10 +1618,10 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <summary><b>&nbsp;&nbsp;작성 단계</b></summary>
 <br>
 
-- **입력 정리**(`/bizplan/refine`): 기초 정보·아이디어 입력 문장을 정리
-- **초안 생성**(`/bizplan/generate`): 공고 목차(`templateText`)나 제출 양식 파일을 반영해 항목별 초안 생성(없으면 기본 13개 칸). 검색 없이 LLM 1회 호출
-- **AI 예비진단**(`/bizplan/evaluate`): 0~100점 채점 + 한 줄 총평 + 항목별 강점·보완점(참고용 자체 채점)
-- **출력·보관**(`/bizplan/render`, `/bizplan/plans`): HWPX·PDF 다운로드, 보관함에서 여러 건 저장·관리
+- **입력 정리**: 기초 정보·아이디어 입력 문장을 정리
+- **초안 생성**: 공고 목차나 제출 양식 파일을 반영해 항목별 초안 생성(없으면 기본 13개 칸). 검색 없이 LLM 1회 호출
+- **AI 예비진단**: 0~100점 채점 + 한 줄 총평 + 항목별 강점·보완점(참고용 자체 채점)
+- **출력·보관**: HWPX·PDF 다운로드, 보관함에서 여러 건 저장·관리
 
 </details>
 
@@ -1626,7 +1630,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 ## 11. WBS
 
-> 본 프로젝트는 3차 프로젝트를 **고도화**하며 시작했으므로, WBS도 신규 주제 선정이 아니라 **고도화 기획 → 설계 보강 → 데이터·기능 확장 → 평가 → 배포**를 기준으로 구성한다.
+> 본 프로젝트는 3차 프로젝트를 고도화하며 시작했으므로, WBS도 신규 주제 선정이 아니라 **고도화 기획 → 설계 보강 → 데이터·기능 확장 → 평가 → 배포**를 기준으로 구성하였다.
 
 | 단계 | 작업 항목 | 상태 |
 | --- | --- | :---: |
@@ -1694,8 +1698,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 ### 트러블슈팅 기록
 
-<details open>
-<summary>&nbsp;&nbsp;LLM 파트</summary>
+<details>
+<summary>&nbsp;&nbsp;LLM 파트  <sub>(3차)</sub></summary>
 
 <br>
 
@@ -1734,8 +1738,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 <br>
 
-1. **Elasticsearch Nori BM25 도입 시도** — 한국어 형태소 분석으로 키워드 검색을 고도화하기 위해 기본 BM25를 Elasticsearch Nori BM25로 교체. 구형 데이터(원본 문서 10,892건)에서는 정책 Hit@5가 84.1%→92.1%로 개선을 관측.
-2. **데이터 확대 후 재평가에서 우위 미재현 (최종: 기본 BM25 운영)** — 근거 데이터가 추가돼 원본 문서가 14,550건으로 늘어난 뒤 새 평가셋으로 다시 비교하자, 정책 적중률은 동률이고 순위 지표(MRR·MAP)와 세금 자동검사는 오히려 기본 BM25가 우세. 운영 키워드 검색은 **기본 BM25로 전환**하고, Elasticsearch는 향후 데이터 변화 시 재평가를 위해 코드·컨테이너로 **보존**. "검색엔진 교체 자체보다 후보 결합·검색 질의가 결과를 좌우한다"는 점을 확인(`Docs/reports/ELASTICSEARCH_REPORT/RETRIEVER_FINAL_REPORT.md`).
+1. **Elasticsearch Nori BM25 도입 시도** — 한국어 형태소 분석으로 키워드 검색을 고도화하기 위해 기본 BM25를 Elasticsearch Nori BM25로 교체. 구형 데이터(원본 문서 10,892건)에서는 정책 Hit@5가 84.1% -> 92.1%로 개선을 관측.
+2. **데이터 확대 후 재평가에서 우위 미재현 (최종: 기본 BM25 운영)** — 근거 데이터가 추가돼 원본 문서가 14,550건으로 늘어난 뒤 새 평가셋으로 다시 비교하자, 정책 적중률은 동률이고 순위 지표(MRR·MAP)와 세금 자동검사는 오히려 기본 BM25가 우세. 운영 키워드 검색은 **기본 BM25로 전환**하고, Elasticsearch는 향후 데이터 변화 시 재평가를 위해 코드·컨테이너로 **보존**. "검색엔진 교체 자체보다 후보 결합·검색 질의가 결과를 좌우한다"는 점을 확인 ([RETRIEVER_FINAL_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/RETRIEVER_FINAL_REPORT.md)).
 
 </details>
 
@@ -1745,7 +1749,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <br>
 
 1. **LLM Judge → ML(CatBoost) 대체 시도 (미채택)** — 세금 근거 충분성 판정의 LLM 호출이 응답 지연의 병목이라, 이를 전통 ML 모델(CatBoost 등)로 대체해 속도를 줄이려 함. 정책·세금 500건씩 LLM Teacher 라벨로 학습.
-2. **운영 그래프 E2E 비교 후 LLM Judge 유지** — 운영 그래프에서 Judge만 CatBoost로 교체해 세금 법령 18턴을 비교하자, 턴 통과율이 77.8%→22.2%로 급락하고 평균 지연도 12.46초→16.49초로 오히려 증가. 정확도·속도 모두 개선하지 못해 **기존 LLM Judge를 유지**(`Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md`).
+2. **운영 그래프 E2E 비교 후 LLM Judge 유지** — 운영 그래프에서 Judge만 CatBoost로 교체해 세금 법령 18턴을 비교하자, 턴 통과율이 77.8% -> 22.2%로 급락하고 평균 지연도 12.46초 -> 16.49초로 오히려 증가. 정확도·속도 모두 개선하지 못해 기존 LLM Judge를 유지 ([REPALCE_JUDGE_MODEL_RESULT.md](Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md)).
 
 </details>
 
@@ -1755,7 +1759,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <br>
 
 1. **휴대폰 촬영 영수증 인식률 저하** — 기울어지고 조명이 고르지 않은 사진에서 Tesseract 인식률이 낮아, 경비처리 판정의 출발점인 OCR 품질이 흔들림. 무료로 쓸 수 있는 대체 엔진 4종(Tesseract·PaddleOCR·EasyOCR·docTR)을 비교.
-2. **PP-OCRv5 한국어 채택 (최종)** — 초기 PaddleOCR 조합은 느려 보류했으나, 검출 모델·설정을 재탐색해 **PP-OCRv5 한국어**를 채택. 영수증 5장(정답 34개) 실측에서 정확도 82%→97%, 5장 처리 25.9초→12.1초로 개선. PaddleOCR을 쓸 수 없는 환경에서는 Tesseract로 자동 폴백하도록 안전장치를 둠(`Docs/OCR_PPOCRV5_BENCHMARK.md`).
+2. **PP-OCRv5 한국어 채택 (최종)** — 초기 PaddleOCR 조합은 느려 보류했으나, 검출 모델·설정을 재탐색해 **PP-OCRv5 한국어**를 채택. 영수증 5장(정답 34개) 실측에서 정확도 82% -> 97%, 5장 처리 25.9초 -> 12.1초로 개선. PaddleOCR을 쓸 수 없는 환경에서는 Tesseract로 자동 폴백하도록 안전장치를 둠 ([OCR_PPOCRV5_BENCHMARK](Docs/OCR_PPOCRV5_BENCHMARK.md)).
 
 </details>
 
@@ -1765,7 +1769,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <br>
 
 1. **운영 데이터 유실 위험 차단** — 서비스 쓰기 작업이 벡터 색인을 비우거나(`TRUNCATE ... CASCADE`가 `rag_documents`까지 삭제), 잘못된 삭제 요청이 전체 대화 기록을 지우는 문제를 확인. 색인 경로 분리·삭제 요청 사전 차단·병합 검증 절차를 도입해 재발 이후 데이터 유실 0건.
-2. **서비스 간 통신 배선·인증 정합** — 통합 초기 compose에 포트·환경변수·헬스체크가 없고, 근거 문서 조회에 소유자 확인이 없는 등 결함을 일괄 정리(상세는 `Docs/STATUS.md` 3절).
+2. **서비스 간 통신 배선·인증 정합** — 통합 초기 compose에 포트·환경변수·헬스체크가 없고, 근거 문서 조회에 소유자 확인이 없는 등 결함을 일괄 정리(상세는 [STATUS.md](Docs/STATUS.md) 3절).
 
 </details>
 
@@ -1779,7 +1783,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 3. **재색인 중 RAG 전체 중단** — 재색인이 기존 인덱스를 먼저 비워 그동안 질의가 모두 실패. 후보 런타임에서 새 검색 상태를 구성한 뒤 교체(`publish_index()`)하고, 실패 시 기존 런타임을 유지하도록 변경(RAG 트러블슈팅 파트와 연계).
 4. **백업 cron 무음 실패** — 제한된 PATH에서 `aws` CLI를 못 찾아 백업이 조용히 실패. 스크립트 PATH 보완, 덤프 목차·S3 크기 검사, 성공/실패 시각 분리, 신선도(26시간) 검사, `flock` 중복 방지 추가.
 
-> 위는 AWS 배포 1차 점검(챕터 1) 대응 결과이며, 롤백 수단·무중단 배포 등 일부 운영 과제는 진행 중이다(상세·미해결 목록은 `Docs/reports/AWS_DEPLOY_RISK_REPORT_20261005.md`, `AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md`).
+> 위는 AWS 배포 1차 점검 대응 결과이며, 롤백 수단·무중단 배포 등 일부 운영 과제는 진행 중이다 
+> (상세·미해결 목록은 [AWS_DEPLOY_RISK_REPORT_20261005.md](Docs/reports/AWS_DEPLOY_RISK_REPORT_20261005.md), [AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md](Docs/reports/AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md)).
 
 </details>
 
@@ -1790,6 +1795,20 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 성능 개선 평가 기록: [Docs/reports/](Docs/reports/). 남은 결함은 [Docs/STATUS.md](Docs/STATUS.md) 2절
 
+**4차 프로젝트 테스트·검수 보고서**
+
+| 문서 | 내용 |
+| --- | --- |
+| [QA_REPORT_20260930.md](Docs/reports/QA_REPORT_20260930.md) | 데스크탑·모바일 기능 QA 결과(화면 연결 기능 대상) |
+| [RAG_TROUBLESHOOTING_FIX_REPORT_20261002.md](Docs/reports/RAG_TROUBLESHOOTING_FIX_REPORT_20261002.md) | RAG 검색 트러블슈팅·수정 기록 |
+| [AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md](Docs/reports/AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md) / [AWS_CHAPTER1_ISSUE_VERIFICATION_REPORT_20261006.md](Docs/reports/AWS_CHAPTER1_ISSUE_VERIFICATION_REPORT_20261006.md) | AWS 배포 1차 이슈 대응·운영 검증 결과 |
+| [ELASTICSEARCH_COMPARISON_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md) / [ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md](Docs/reports/ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md) | Elasticsearch 검색기 비교, 서빙·재색인 일관성 수정 |
+| [REPALCE_JUDGE_MODEL_RESULT.md](Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md) / [CATBOOST_JUDGE_COMPARISON.md](Docs/reports/REPLACE_JUDGE_MODEL/CATBOOST_JUDGE_COMPARISON.md) | LLM Judge를 ML 모델로 대체하는 실험 결과(미채택) |
+
+<details>
+<summary><b>&nbsp;&nbsp;3차부터 이어진 성능 평가 보고서</b></summary>
+<br>
+
 | 문서 | 내용 |
 | --- | --- |
 | [01_EVAL_BASELINE.md](Docs/reports/01_EVAL_BASELINE.md) | 최초 250건 평가 — 개선 전 기준점 |
@@ -1799,11 +1818,8 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 | [05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md](Docs/reports/05_TAX_SEMANTIC_CACHE_IMPROVEMENT.md) | Semantic Cache 응답속도 개선 보고서 |
 | [LLM_TAX_HALF.md](Docs/reports/LLM_TAX_HALF.md) | 캐시 적용 전후 비교용 세금 평가 |
 | [06_EVAL_250_COMPARISON.md](Docs/reports/06_EVAL_250_COMPARISON.md) | 최초 대비 최종 250건 개선 비교 |
-| [ELASTICSEARCH_COMPARISON_REPORT.md](Docs/reports/ELASTICSEARCH_REPORT/ELASTICSEARCH_COMPARISON_REPORT.md) / [ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md](Docs/reports/ELASTICSEARCH_SERVING_CONSISTENCY_FIX_REPORT_20260922.md) | Elasticsearch 검색기 비교, 서빙·재색인 일관성 수정 |
-| [REPALCE_JUDGE_MODEL_RESULT.md](Docs/reports/REPLACE_JUDGE_MODEL/REPALCE_JUDGE_MODEL_RESULT.md) / [CATBOOST_JUDGE_COMPARISON.md](Docs/reports/REPLACE_JUDGE_MODEL/CATBOOST_JUDGE_COMPARISON.md) | LLM Judge를 ML 모델로 대체하는 실험 결과(미채택) |
-| [QA_REPORT_20260930.md](Docs/reports/QA_REPORT_20260930.md) | 데스크탑·모바일 기능 QA 결과(화면 연결 기능 대상) |
-| [RAG_TROUBLESHOOTING_FIX_REPORT_20261002.md](Docs/reports/RAG_TROUBLESHOOTING_FIX_REPORT_20261002.md) | RAG 검색 트러블슈팅·수정 기록 |
-| [AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md](Docs/reports/AWS_CHAPTER1_ISSUE_RESOLUTION_REPORT_20261006.md) / [AWS_CHAPTER1_ISSUE_VERIFICATION_REPORT_20261006.md](Docs/reports/AWS_CHAPTER1_ISSUE_VERIFICATION_REPORT_20261006.md) | AWS 배포 1차 이슈 대응·운영 검증 결과 |
+
+</details>
 
 **가이드·기능 정리**
 
@@ -1820,19 +1836,25 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 ## 15. 향후 확장
 
-> 기존 확장 계획이던 **사업계획서 초안 작성**(사업계획서 화면), **영수증 지출 분석**(지출관리 화면, PP-OCRv5 OCR + LLM), **AWS 웹 배포**(App/Data EC2, GitHub Actions, HTTPS·PWA 구성)는 구현됨.
+1. **공고문 DB 적재 시 요약본 즉시 생성**: 공고문이 DB에 적재될 때 요약도 기본으로 함께 생성·저장되도록 개선. 현재는 비용 문제로 보류
 
-1. **공고문 DB 적재 시 요약본 즉시 생성**: 공고문이 DB에 적재될 때 요약도 기본으로 함께 생성·저장되도록 개선
-
-2. **지원금 대상 여부 판정**: 지출 항목이 정부지원금 사용 대상인지 판정(`Docs/FEATURE_ROADMAP_EXPENSE.md` 4절)
+2. **지원금 대상 여부 판정**: 지출 항목이 정부지원금 사용 대상인지 판정
 
 3. **공공입찰 업무지원**: 유스케이스상 추가 기능(범위 밖)으로 남은 항목
 
 4. **앱 배포 확대**: 현재 PWA 설치만 지원. 앱 스토어 배포는 미착수
 
-5. **구독 기능 완성**: 현재 구독은 플랜 표시만 하는 목업으로, 한도 초과 차단·리포트 한도·실제 결제 연동은 미구현(`Docs/reports/subscription_cost.md`)
+5. **구독 기능 완성**: 현재 구독은 플랜 표시만 하는 목업으로, 한도 초과 차단·리포트 한도·실제 결제 연동은 미구현 ([subscription_cost.md](Docs/reports/subscription_cost.md))
 
-6. **무중단 배포**: 현재는 배포마다 502·RAG 중단 구간이 발생. 2대 이상+로드밸런서 구성으로 무중단 배포 전환은 비용 문제로 보류(`Docs/reports/AWS_DEPLOY_RISK_REPORT_20261005.md`)
+6. **무중단 배포**: 현재는 배포마다 502·RAG 중단 구간이 발생. 2대 이상+로드밸런서 구성으로 무중단 배포 전환은 비용 문제로 보류 ([AWS_DEPLOY_RISK_REPORT_20261005.md](Docs/reports/AWS_DEPLOY_RISK_REPORT_20261005.md))
+
+7. **주변 상권분석**: 창업 지역의 상권·수요 데이터를 분석해 입지·업종 판단을 지원하는 기능 추가
+
+8. **사업계획서 등 평가 기준 명확화**: AI 예비진단의 채점 항목·배점 기준을 공고 심사 기준에 맞춰 더 명확하게 정의
+
+9. **로드 밸런싱 추가**: 트래픽 분산을 위한 로드 밸런서를 도입
+
+10. **Devops 완전 적용**: 빌드·배포·모니터링·롤백을 아우르는 CI/CD 파이프라인 고도화
 
 
 ---
