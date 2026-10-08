@@ -254,6 +254,7 @@
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
 │   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
+│   ├── outputs/     # 프로젝트 산출물
 │   ├── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
 │   ├── data/        # README·문서용 이미지·수행결과 GIF
 │   └── branch_work/   # 브랜치별 작업 기록
@@ -328,151 +329,6 @@ flowchart LR
 
 Actor는 청년·1인 창업자(주 사용자) / 관리자 / 외부 시스템(국가법령정보센터·정부24·K-Startup·기업마당·온통청년, 하나로 통합)으로 총 셋으로 구분됨. 
 지출 분석(영수증)은 지출관리 화면으로, 사업계획서는 사업계획서 화면으로 구현됨. 공공입찰 업무지원만 추가 기능(추후 개발)으로 범위 밖.
-
-</details>
-<br>
-
-**청년·1인 창업자 — 상세 유스케이스**
-
-```mermaid
-flowchart TD
-    User((청년·1인 창업자))
-
-    subgraph SYS["플랫폼"]
-        subgraph G1["회원/프로필"]
-            UC01(["회원가입"])
-            UC02(["로그인"])
-            UC03(["개인정보 관리"])
-            UC04(["사업자 정보 관리"])
-        end
-
-        subgraph G2["AI 상담(챗봇)"]
-            UC05(["AI 챗봇 이용"])
-            UC06(["세금/경비처리/절세 Q&A"])
-            UC07(["정책 Q&A"])
-            UC08(["답변 근거 확인"])
-        end
-
-        subgraph G3["세무 관리"]
-            UC09(["사업자 유형 진단"])
-            UC10(["세금 정보 관리"])
-            UC11(["통합 일정 캘린더 조회"])
-            UC12(["맞춤 리마인더 설정"])
-            UC13(["청년창업 세액감면 자동판정"])
-        end
-
-        subgraph G4["지출 분석"]
-            UC14(["영수증 등록"])
-            UC15(["영수증 정보 추출(OCR)"])
-            UC16(["지출 분류"])
-            UC17(["경비처리 가능성 분석"])
-        end
-
-        subgraph G5["지원정책 탐색"]
-            UC18(["지원정책 검색"])
-            UC19(["맞춤 정책 추천"])
-            UC20(["지원 자격 확인"])
-            UC21(["신청기간·방법 확인"])
-            UC22(["공고문 AI 요약"])
-            UC23(["관심 정책 저장"])
-        end
-
-        subgraph G7["사업계획서"]
-            UC29(["사업계획서 초안 생성"])
-            UC30(["사업계획서 AI 예비진단"])
-            UC31(["사업계획서 아이디어 어시스턴트"])
-        end
-
-        subgraph G6["명세 외 구현 기능"]
-            UX1(["창업 로드맵 AI 코치"])
-            UX2(["개인 일정 등록·삭제"])
-            UX3(["알림함 확인"])
-            UX4(["대화 기록 조회·삭제"])
-            UX5(["모집 중 공고·서비스 지표 조회(비로그인)"])
-            UX6(["구독 플랜 조회·변경(목업 결제)"])
-            UX7(["사업계획서 보관함 관리"])
-            UX8(["화면별 온보딩 안내"])
-        end
-    end
-
-    User --- UC01
-    User --- UC02
-    User --- UC03
-    User --- UC04
-    User --- UC05
-    User --- UC06
-    User --- UC07
-    User --- UC08
-    User --- UC09
-    User --- UC10
-    User --- UC11
-    User --- UC12
-    User --- UC13
-    User --- UC14
-    User --- UC15
-    User --- UC16
-    User --- UC17
-    User --- UC18
-    User --- UC19
-    User --- UC20
-    User --- UC21
-    User --- UC22
-    User --- UC23
-    User --- UX1
-    User --- UX2
-    User --- UX3
-    User --- UX4
-    User --- UC29
-    User --- UC30
-    User --- UC31
-    User --- UX5
-    User --- UX6
-    User --- UX7
-    User --- UX8
-
-    UC06 -. include .-> UC08
-```
-
-<details>
-<summary>설명</summary>
-<br>
-
-`지출 분석`(UC14~17)은 지출관리 화면(`ExpenseTracker.jsx`), `사업계획서`(UC29~31)는 사업계획서 화면(`BusinessPlanPage.jsx`)이 제공. 
-`세금/경비처리/절세 Q&A`는 답변마다 근거 문서를 함께 제시해야 하므로 `답변 근거 확인`을 `<<include>>` 관계로 연결. 
-
-`명세 외 구현 기능`(UX1~8)은 FS 번호는 없지만 실제 코드·화면에 있는 기능 : 로드맵 코치(`category=roadmap` 채팅), 개인 일정(`POST`·`DELETE /calendar`), 알림함(`/notifications`, 화면 없음), 대화 기록(`/chat/messages`·`/chat/rooms`), 비로그인 조회(`GET /announcements`·`GET /stats`), 구독(`/users/me/subscription`), 사업계획서 보관함(`/bizplan/plans`), 온보딩 투어(서버 호출 없음). 화면 연결 여부는 [Docs/Design/USECASE.md](Docs/Design/USECASE.md) 참고.
-
-</details>
-<br>
-
-**관리자 · 외부 시스템 — 상세 유스케이스**
-
-```mermaid
-flowchart TD
-    Admin((관리자))
-    Ext(("외부 시스템<br/>국가법령정보센터·정부24·K-Startup·기업마당·온통청년"))
-
-    subgraph SYS2["플랫폼 (관리자 영역)"]
-        UC24(["관리자 로그인"])
-        UC25(["사용자 관리"])
-        UC26(["세법·정책·공고문 데이터 관리"])
-        UC27(["RAG 문서 관리"])
-        UC28(["시스템 모니터링"])
-    end
-
-    Admin --- UC24
-    Admin --- UC25
-    Admin --- UC26
-    Admin --- UC27
-    Admin --- UC28
-    Ext -. 데이터 제공 .-> UC26
-```
-
-<details>
-<summary>설명</summary>
-<br>
-
-실제 데이터 수집은 [DB/scripts](DB/scripts)의 02~13 스크립트를 [DB/run_collection.py](DB/run_collection.py)가 순서대로 실행해 DB에 직접 적재(배포 환경은 GitHub Actions 주간 실행). 관리자 API를 부르는 화면은 없음.
 
 </details>
 
@@ -1642,11 +1498,11 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 | **5. 기능 개발(고도화)** | 지출관리(영수증 OCR 경비처리), 사업계획서 AI 작성, 대화방·사용자 개인화, 구독 플랜(목업), PWA·HTTPS | ✅ 완료 |
 | | RAG 검색 고도화 — Elasticsearch(Nori) 하이브리드 평가, 정책 개인화·세금 multi-hop 보강 | ✅ 완료 |
 | | Semantic Cache — 세금 질문 PostgreSQL 캐시로 평균 응답 29.6% 단축 | ✅ 완료 |
-| **6. 테스트·평가** | 단위 테스트(LLM 42·Backend 16·Frontend 2 파일), holdout250 성능 평가, 데스크탑·모바일 QA | 🔄 진행 중 |
+| **6. 테스트·평가** | 단위 테스트(LLM 46·Backend 17·Frontend 3·서버 스크립트 3 파일), holdout250 성능 평가, 데스크탑·모바일 QA | 🔄 진행 중 |
 | | 통합 테스트(실제 OpenAI·Cohere·PostgreSQL 연동) | 🔄 진행 중 |
 | | 버그 수정 | 🔄 남은 결함은 `Docs/STATUS.md` 2절 |
 | **7. 배포** | Docker Compose 구성(`docker-compose.yml`, `setup.sh`, `setup.bat`) | ✅ 완료 |
-| | CI/CD(GitHub Actions `deploy.yml`·`collect.yml`·`collect-retry.yml`) | ✅ 완료 |
+| | CI/CD(GitHub Actions `deploy.yml`·`collect.yml`·`collect-retry.yml`·`health-check.yml`) | ✅ 완료 |
 | | AWS App/Data EC2 배포, 주간 수집→임베딩→재색인 자동화 | ✅ 완료 |
 | | 배포 안정화(동시 실행 잠금·백업 cron·메모리 한도·무중단 재색인 등 운영 이슈 대응) | 🔄 진행 중 |
 | **8. 문서화** | 설계 문서(DESIGN.md)·README·발표/데모 자료 정리 | 🔄 진행 중 |
