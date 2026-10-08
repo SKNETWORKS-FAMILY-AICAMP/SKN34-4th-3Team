@@ -6,6 +6,7 @@ import { GuideTour } from '../components/GuideTour.jsx';
 import { isWebApp } from '../web/env.js';
 import { GovDetailModal, PolicySummaryCard } from './AnnouncementAnalyzer.jsx';
 import { paginateSupplementFields, reassessSupplementFields, templateContext } from '../businessPlanSupplement.js';
+import { BUSINESS_PLAN_STEPS as VISIBLE_STEPS, getBusinessPlanResumeStep } from '../businessPlanFlow.js';
 
 const BASIC_FIELDS = [
   { key: 'businessName', label: '사업/아이템명', placeholder: '예: 소상공인 재고관리 서비스' },
@@ -72,15 +73,6 @@ function isLegacyDefaultPlan(plan) {
     && plan.sections.every((section) => LEGACY_DEFAULT_KEYS.has(section.key));
 }
 
-const VISIBLE_STEPS = [
-  { key: 'refine', label: '계획 정리' },
-  { key: 'setup', label: '공고 양식 선택' },
-  { key: 'supplement', label: '계획 보완' },
-  { key: 'preview', label: '초안 평가' },
-  { key: 'improve', label: '초안 수정' },
-  { key: 'done', label: '재평가 및 저장' },
-];
-
 // 단계별 섹션 카드. tone은 색 계열(a=파랑, b=보라, c=회색). 사이드 메뉴·카드 머리글이 같은 값을 쓴다.
 const STEP_SECTIONS = {
   refine: [
@@ -103,6 +95,11 @@ const HELP_TOUR_STEP = {
   target: '.tour-fab',
   title: '가이드 다시 보기',
   body: <p>사용법이 궁금하면 언제든 오른쪽 아래 이 버튼을 눌러 지금 단계의 안내를 다시 볼 수 있어요.</p>,
+};
+const NEW_PLAN_TOUR_STEP = {
+  target: '[data-tour="new-plan"]',
+  title: '새로 생성하기',
+  body: <p>새 사업계획서를 시작할 때 누르세요. 현재 작성 중인 내용과 임시저장은 사라지고, 보관함에 저장한 계획서는 남아요.</p>,
 };
 const REFINE_TOUR = [
   {
@@ -576,6 +573,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   const [refining, setRefining] = useState(false);
   const [refinedDone, setRefinedDone] = useState(false);
   const [renderingFormat, setRenderingFormat] = useState('');
+  const [resettingDraft, setResettingDraft] = useState(false);
+  const resettingDraftRef = useRef(false);
   const fileOperationRef = useRef(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [editedBeforeLoad, setEditedBeforeLoad] = useState(false);
@@ -586,6 +585,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   // 저장은 한 번에 하나씩 순서대로 보낸다(보관함 중복 생성·늦게 끝난 옛 저장의 덮어쓰기 방지).
   const saveQueueRef = useRef(Promise.resolve());
   const draftSnapshot = {
+    active, supplementPage,
     form, plan, evalResult, revisionSections, finalPlan, finalEvalResult,
     selectedAnnouncementId, selectedAnnouncementInfo, refinedDone, templateInfo,
     fieldAnalysis, supplementAnswers, supplementImages, supplementChoices, editedSectionKeys,
@@ -642,6 +642,11 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     if (draft.supplementChoices) setSupplementChoices(draft.supplementChoices);
     if (Number.isInteger(draft.supplementPage)) setSupplementPage(draft.supplementPage);
     if (Array.isArray(draft.editedSectionKeys)) setEditedSectionKeys(draft.editedSectionKeys);
+    const validPlan = draft.plan && Array.isArray(draft.plan.sections) && !isLegacyDefaultPlan(draft.plan);
+    setActive(getBusinessPlanResumeStep(validPlan ? draft : {
+      ...draft, plan: null, finalPlan: null,
+      active: ['preview', 'improve', 'done'].includes(draft.active) ? undefined : draft.active,
+    }));
   };
 
   // 임시저장한 값은 복원하고, 비어 있는 기초 정보만 가입 프로필로 채운다.
@@ -820,6 +825,46 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     setSupplementImages({});
     setSupplementChoices({});
     setSupplementPage(0);
+  };
+  const startNewPlan = async () => {
+    if (!userId || resettingDraftRef.current || generating || analyzingFields || refining || inspectingTemplate) return;
+    if (!window.confirm('현재 작성 중인 내용과 임시저장은 사라집니다. 보관함에 저장한 계획서는 유지됩니다. 새 사업계획서를 시작할까요?')) return;
+    resettingDraftRef.current = true;
+    setResettingDraft(true);
+    setErr('');
+    try {
+      await saveQueueRef.current.catch(() => {});
+      await api.newBizplanPlan();
+      planIdRef.current = null;
+      savedDraftRef.current = null;
+      editedFieldsRef.current = new Set();
+      if (templateInputRef.current) templateInputRef.current.value = '';
+      setForm({ ...EMPTY_FORM });
+      setPlan(null);
+      setEvalResult(null);
+      setRevisionSections([]);
+      setFinalPlan(null);
+      setFinalEvalResult(null);
+      setSelectedAnnouncementId('');
+      setSelectedAnnouncementInfo(null);
+      setTemplateFile(null);
+      setTemplateInfo(null);
+      setFieldAnalysis([]);
+      setSupplementAnswers({});
+      setSupplementImages({});
+      setSupplementChoices({});
+      setSupplementPage(0);
+      setEditedSectionKeys([]);
+      setRefinedDone(false);
+      setActive('refine');
+      setEditedBeforeLoad(false);
+    } catch (error) {
+      if (error?.status === 401) onRequireLogin?.();
+      else setErr(error?.detail || '새 사업계획서를 시작하지 못했습니다. 다시 시도해 주세요.');
+    } finally {
+      resettingDraftRef.current = false;
+      setResettingDraft(false);
+    }
   };
   const applyTestPreset = () => {
     Object.keys(DEV_TEST_PRESET).forEach((key) => editedFieldsRef.current.add(key));
@@ -1287,6 +1332,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   };
 
   const goStep = (key) => {
+    if (active === 'supplement' && !evalResult
+      && ['preview', 'improve', 'done'].includes(key)) return;
     setErr('');
     setActive(key);
   };
@@ -1331,12 +1378,13 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
   };
 
   const saveNow = async () => {
+    if (resettingDraftRef.current) return;
     if (!userId) {
       onRequireLogin && onRequireLogin();
       return;
     }
     const snapshotToSave = draftSnapshot;
-    const data = { ...snapshotToSave, supplementPage };
+    const data = snapshotToSave;
     const hasContent = !!plan || Object.values(form).some((v) => String(v || '').trim());
     const run = saveQueueRef.current.then(() => persistDraft(snapshotToSave, data, hasContent));
     saveQueueRef.current = run.catch(() => {});
@@ -1373,12 +1421,12 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     setTimeout(() => setSavedNote(''), 2000);
   };
 
-  // 초안·평가·재평가 결과가 새로 나오면 자동으로 저장해 마이페이지 목록에 바로 반영한다.
+  // 결과와 단계 이동을 저장해 재접속할 때 마지막 작업 위치에서 이어 쓴다.
   useEffect(() => {
-    if (!draftLoaded || !savedDraftRef.current || !plan || !hasUnsavedChanges) return;
+    if (!draftLoaded || !savedDraftRef.current || !hasUnsavedChanges) return;
     saveNow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, evalResult, finalPlan, finalEvalResult]);
+  }, [active, supplementPage, plan, evalResult, finalPlan, finalEvalResult]);
 
   const needsSupplement = fieldAnalysis.some((field) =>
     field.status === 'partial' || field.status === 'missing' || field.status === 'unsupported'
@@ -1393,6 +1441,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
     ? VISIBLE_STEPS : VISIBLE_STEPS.filter((step) => step.key !== 'supplement');
   const activeIdx = visibleSteps.findIndex((step) => step.key === active);
   const nextStep = visibleSteps[activeIdx + 1];
+  const nextStepDisabled = active === 'supplement' && !evalResult;
   const prevStep = activeIdx > 0 ? visibleSteps[activeIdx - 1] : null;
   const evaluationBasis = selectedAnnouncement
     ? `선택한 공고와 ${templateInfo ? '제출한 양식' : '기본 PSST 양식'}`
@@ -1476,7 +1525,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
         aria-label={(currentStep ? currentStep.label : '사업계획서') + ' 가이드 보기'} title="사용 가이드">
         ?
       </button>
-      <GuideTour open={tourOpen} steps={TOURS[active] || REFINE_TOUR} onClose={closeTour}
+      <GuideTour open={tourOpen} steps={[...(TOURS[active] || REFINE_TOUR), NEW_PLAN_TOUR_STEP]} onClose={closeTour}
         label={(currentStep ? currentStep.label : '사업계획서') + ' 가이드'} />
       {/* 진행 단계 브레드크럼: 지금 단계 말고는 모두 눌러서 이동할 수 있다(다음 단계 버튼과 같은 동작). */}
       <nav className="bp2__crumbs" aria-label="진행 단계" data-tour="crumbs">
@@ -1537,7 +1586,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               </button>
             )}
             {nextStep && (
-              <button type="button" className="bp2__next" data-tour="next" onClick={() => goStep(nextStep.key)}>
+              <button type="button" className="bp2__next" data-tour="next" onClick={() => goStep(nextStep.key)}
+                disabled={nextStepDisabled}>
                 다음 단계 · {nextStep.label} ›
               </button>
             )}
@@ -1560,6 +1610,10 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
           </div>
           )}
           {guideText && <p className="bp2__guide">{guideText}</p>}
+          <button type="button" className="bp2__new" data-tour="new-plan" onClick={startNewPlan}
+            disabled={resettingDraft || generating || analyzingFields || refining || inspectingTemplate}>
+            {resettingDraft ? '새 사업계획서 준비 중…' : '＋ 새로 생성하기'}
+          </button>
         </aside>
 
         <main className="bp2__main" ref={mainRef}>
@@ -1780,7 +1834,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                         onClick={() => setSupplementPage(currentSupplementPage + 1)}>다음 →</button>
                     ) : (
                       <button type="button" className="exp-upload" onClick={completeSupplement}
-                        disabled={generating}>{generating ? '초안 작성 중…' : '보완 내용 반영하고 초안 만들기'}</button>
+                        aria-label="보완 내용 반영하고 초안 만들기" title="보완 내용을 반영하고 초안을 만듭니다."
+                        disabled={generating}>{generating ? '초안 작성 중…' : '초안 만들기'}</button>
                     )}
                   </nav>
                 </React.Fragment>
@@ -1815,7 +1870,7 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                     {evalResult.sections.map((s) => (
                       <li key={s.key} className={'bp-eval__row bp-eval__row--' + scoreTone(s.score)}>
                         <div className="bp-eval__rowhead">
-                          <span className="bp-eval__rowlabel">{s.label || s.key}</span>
+                          <span className="bp-eval__rowlabel">{fieldLabel(s.label || s.key)}</span>
                           <span className="bp-eval__rowscore">{s.score}점</span>
                         </div>
                         <div className="bp-eval__bar"><i style={{ width: s.score + '%' }} /></div>
@@ -1845,9 +1900,10 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
               ) : (
                 <React.Fragment>
                   <div className="bp-revise">
-                    {revisionSections.map((section) => {
+                    {revisionSections.map((section, index) => {
                       const feedback = evalResult.sections.find((item) => item.key === section.key)
-                        || evalResult.sections.find((item) => item.label === section.label);
+                        || evalResult.sections.find((item) => item.label === section.label)
+                        || (evalResult.sections.length === revisionSections.length ? evalResult.sections[index] : null);
                       const analyzed = fieldAnalysis.find((item) => item.field_id === section.key);
                       return (
                         <div className="bp-revise__item" key={section.key}>
@@ -1974,7 +2030,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                   </button>
                 )}
                 {nextStep && actionIsPrimary && (
-                  <button type="button" className="bp2__bar-ghost" data-tour="next" onClick={() => goStep(nextStep.key)}>
+                  <button type="button" className="bp2__bar-ghost" data-tour="next" onClick={() => goStep(nextStep.key)}
+                    disabled={nextStepDisabled}>
                     건너뛰고 {nextStep.label} ›
                   </button>
                 )}
@@ -1987,7 +2044,8 @@ export function BusinessPlanPage({ user, onRequireLogin, savedPolicies = [], onT
                   {stepAction.label}
                 </button>
               ) : nextStep ? (
-                <button type="button" className="bp2__bar-main" data-tour="next" onClick={() => goStep(nextStep.key)}>
+                <button type="button" className="bp2__bar-main" data-tour="next" onClick={() => goStep(nextStep.key)}
+                  disabled={nextStepDisabled}>
                   다음 단계 · {nextStep.label} ›
                 </button>
               ) : null}

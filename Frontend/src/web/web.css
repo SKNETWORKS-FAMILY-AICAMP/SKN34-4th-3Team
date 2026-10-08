@@ -942,8 +942,7 @@ html.is-web .bp2__guide::before {
 }
 /* 버튼은 본문 아래 액션 바 하나에만 둔다: 왼쪽 보조(이전 단계 · 임시저장 · 다시 하기), 오른쪽 파란 주 버튼 하나 */
 html.is-web .bp2__bar {
-  position: sticky;
-  bottom: 12px;
+  position: relative;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -1017,15 +1016,11 @@ html.is-web .bp2__bar-main:disabled {
   cursor: not-allowed;
 }
 @media (max-width: 768px) {
-  /* 휴대폰: 탭바 바로 위에 [⋯ | 주 버튼]. 보조 버튼은 ⋯를 누르면 위로 펼쳐진다 */
+  /* 휴대폰: 본문 맨 아래에 [⋯ | 주 버튼]. 보조 버튼은 ⋯를 누르면 위로 펼쳐진다 */
   html.is-web .bp2__bar {
-    position: fixed;
-    left: 12px;
-    right: 12px;
-    bottom: calc(64px + 10px + env(safe-area-inset-bottom));
     z-index: 55;
     padding: 6px;
-    /* blur는 고정 위치 자식(배경 어둡게)의 기준을 바 자신으로 바꿔 버려서 휴대폰에서는 끈다 */
+    /* 배경 어둡게가 화면 전체를 덮도록 휴대폰에서는 blur를 끈다 */
     background: var(--bp-card, var(--surface-solid));
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -1108,10 +1103,6 @@ html.is-web .bp2__bar-main:disabled {
     flex: 1;
     justify-content: center;
     min-height: 48px;
-  }
-  /* 고정 바에 내용이 가리지 않게 */
-  html.is-web body:has(.bp2) {
-    padding-bottom: calc(64px + 76px + env(safe-area-inset-bottom));
   }
 }
 
