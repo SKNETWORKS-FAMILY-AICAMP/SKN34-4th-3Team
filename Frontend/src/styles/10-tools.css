@@ -1476,9 +1476,10 @@
     background: color-mix(in srgb, var(--bp-primary) 10%, var(--bp-card));
     color: var(--bp-primary);
   }
-  .bp2__next:hover {
+  .bp2__next:hover:not(:disabled) {
     background: color-mix(in srgb, var(--bp-primary) 16%, var(--bp-card));
   }
+  .bp2__next:disabled { opacity: 0.45; cursor: not-allowed; }
   .bp2__subactions {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1511,6 +1512,25 @@
     border-color: var(--bp-muted-2);
     color: var(--bp-ink);
   }
+  .bp2__new {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--bp-btn-border);
+    border-radius: 12px;
+    background: var(--bp-card);
+    color: var(--bp-ink-2);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  .bp2__new:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--bp-primary) 45%, transparent);
+    color: var(--bp-primary);
+  }
+  .bp2__new:disabled { opacity: 0.6; cursor: wait; }
   .bp2__saved {
     font-size: 12px;
     color: var(--bp-muted);
@@ -2072,8 +2092,9 @@
   .bp-supplement__attachment { display: grid; gap: 8px; justify-items: start; }
   .bp-supplement__image { display: block; max-width: min(100%, 320px); max-height: 220px; object-fit: contain; border: 1px solid #d9e1e8; border-radius: 8px; background: #fff; }
   .bp-supplement__counter { margin: 0 0 4px; color: var(--ink-soft); text-align: center; font-weight: 700; }
-  .bp-supplement__navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
-  .bp-supplement__navigation span { flex: 1; text-align: center; font-weight: 700; }
+  .bp-supplement__navigation { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; }
+  .bp-supplement__navigation span { flex: none; min-width: 56px; text-align: center; font-weight: 700; white-space: nowrap; }
+  .bp-supplement__navigation .exp-upload { flex: none; width: auto; min-height: 40px; padding: 8px 14px; margin: 0; white-space: nowrap; }
   .bp-supplement__navigation button:disabled { opacity: 0.45; cursor: default; }
   .bp-supplement__choice { display: flex; gap: 16px; margin: 0; padding: 0; border: 0; }
   .bp-supplement__choice legend { margin-bottom: 6px; font-weight: 600; }

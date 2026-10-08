@@ -65,20 +65,27 @@ def test_business_plan_model_failure_is_upstream_error(tmp_path: Path) -> None:
 
 
 def test_business_plan_evaluate_returns_scores(tmp_path: Path) -> None:
+    scores = [
+        {
+            "key": section["key"],
+            "label": section["label"],
+            "score": score,
+            "strengths": strengths,
+            "improvements": improvements,
+        }
+        for section, score, strengths, improvements in zip(
+            PSST_SECTIONS,
+            [80, 75, 65, 70],
+            ["문제가 구체적", "해결 방안이 명확함", "성장 방향이 제시됨", "팀 역할이 명확함"],
+            ["근거 수치 보완", "실행 일정 보완", "시장 규모 근거 보완", "인력 확보 계획 보완"],
+        )
+    ]
     model = FakeStructuredChatModel(
         {
             BusinessPlanEvaluation: {
                 "overall_score": 72,
                 "overall_comment": "전반적으로 양호",
-                "sections": [
-                    {
-                        "key": "problem",
-                        "label": "Problem · 문제인식",
-                        "score": 80,
-                        "strengths": "문제가 구체적",
-                        "improvements": "근거 수치 보완",
-                    }
-                ],
+                "sections": scores,
             }
         }
     )
@@ -89,14 +96,25 @@ def test_business_plan_evaluate_returns_scores(tmp_path: Path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["overallScore"] == 72
-    assert body["sections"][0] == {
-        "key": "problem",
-        "label": "Problem · 문제인식",
-        "score": 80,
-        "strengths": "문제가 구체적",
-        "improvements": "근거 수치 보완",
-    }
+    assert body["sections"] == scores
     assert body["llmUsed"] is True
+
+
+def test_business_plan_evaluate_rejects_missing_scores(tmp_path: Path) -> None:
+    model = FakeStructuredChatModel({BusinessPlanEvaluation: {
+        "overall_score": 72,
+        "overall_comment": "전반적으로 양호",
+        "sections": [{
+            "key": "problem", "label": "Problem · 문제인식", "score": 80,
+            "strengths": "문제가 구체적", "improvements": "근거 수치 보완",
+        }],
+    }})
+    client = build_client(tmp_path / "index.json", llm_factory=lambda: model)
+
+    response = client.post("/rag/business-plan-evaluate", json={"sections": PSST_SECTIONS})
+
+    assert response.status_code == 502
+    assert "sections" not in response.json()
 
 
 # ---- 아이디어 어시스턴트 ----

@@ -313,7 +313,7 @@ Backend/
   services/        # 비즈니스 로직 (세액감면·정책 자격 Rule은 여기)
   schemas/         # 요청/응답
   core/            # 설정, 토큰, Postgres(db.py), raw SQL 데이터 접근(repo.py), LLM 클라이언트
-  tests/           # 표준 unittest 16개 파일
+  tests/           # 표준 unittest 17개 파일(테스트 함수 139개, 2026-10-07 기준)
   pyproject.toml   # Python >= 3.13, uv로 관리 (uv.lock)
   Dockerfile       # uv sync --frozen 후 uvicorn 실행
 ```

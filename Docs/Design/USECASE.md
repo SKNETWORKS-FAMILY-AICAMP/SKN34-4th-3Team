@@ -89,7 +89,7 @@ flowchart TD
         subgraph G7["사업계획서"]
             UC29(["사업계획서 초안 생성"])
             UC30(["사업계획서 AI 예비진단"])
-            UC31(["사업계획서 아이디어 어시스턴트"])
+            UC31(["사업계획서 아이디어 어시스턴트 ✕"])
         end
 
         subgraph G6["명세 외 구현 기능"]
@@ -142,17 +142,17 @@ flowchart TD
     UC06 -. include .-> UC08
 ```
 
-노드 뒤 표시는 **화면 연결 여부**다. `✕`는 Backend 구현은 있으나 부르는 화면이 없는 것, `△`는 일부 경로만 연결됐거나 부르는 코드가 죽은 코드(`TaxTool.jsx`·`GovExplorer.jsx`)인 것, 표시가 없으면 살아 있는 화면이 부르는 것이다. 기능별 근거는 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열에 있다.
+노드 뒤 표시는 **화면 연결 여부**다. `✕`는 Backend 구현은 있으나 부르는 화면이 없는 것, `△`는 일부 경로만 연결됐거나 부르는 코드가 죽은 코드(`TaxTool.jsx`·`GovExplorer.jsx`·모바일 앱 `Frontend/src/mobile/*`)인 것, 표시가 없으면 살아 있는 화면이 부르는 것이다. 기능별 근거는 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열에 있다.
 
 `지출 분석`(UC14~17)은 추가 기능으로 점선 표시했으나, 지출관리 화면(`Frontend/src/pages/ExpenseTracker.jsx`)이 붙어 메인 범위로 옮겼다. 영수증을 OCR + LLM으로 읽고 경비 인정 가능성·판단 이유·근거 법령을 보여준다. 지원금 대상 여부 판정은 아직 없다.
 
-`사업계획서`(UC29~31)는 원본 기능 목록에 없던 기능이라 기존 번호(UC01~28) 뒤에 이어 붙였다. 사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 부른다(5절 참고).
+`사업계획서`(UC29~31)는 원본 기능 목록에 없던 기능이라 기존 번호(UC01~28) 뒤에 이어 붙였다. 사업계획서 화면(`Frontend/src/pages/BusinessPlanPage.jsx`)이 UC29·30을 부른다(5절 참고). UC31 아이디어 어시스턴트는 Backend `POST /bizplan/coach`와 LLM `/rag/business-plan-coach`가 있으나 부르는 화면이 없다.
 
 `세금/경비처리/절세 Q&A`는 답변마다 근거 문서를 함께 제시해야 하므로 `답변 근거 확인`을 `<<include>>` 관계로 연결했다. RAG 기반 시스템이라는 것을 다이어그램에서도 드러내기 위함이다.
 
 `청년창업 세액감면 자동판정`은 설계 초안에서 `답변 근거 확인`을 include했으나 구현에서는 뺐다. 판정 응답은 LLM이 생성한 `legalBasis` 문장만 담고 근거 문서 목록을 저장·조회하지 않는다(`GET /chat/messages/{id}/sources`는 챗 메시지 전용).
 
-`명세 외 구현 기능`(UX1~8)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages`의 `category=roadmap`(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 서버 `user_roadmap_progress`(`/users/me/roadmap-progress`)에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`, 비로그인 조회는 `GET /announcements`·`GET /stats`, 구독은 `GET`·`PUT /users/me/subscription`(마이페이지 `구독 · 결제`, 실제 결제 없음), 사업계획서 보관함은 `/bizplan/plans*`(마이페이지 `사업계획서`), 온보딩 안내는 서버 호출 없이 화면별로 처음 한 번 뜨는 투어(`Frontend/src/components/PageTour.jsx`·`GuideTour.jsx`, 완료 여부는 브라우저 localStorage)다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx`의 `알림 설정` 블록)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4~8은 화면까지 연결돼 있다. 지출 분석 엑셀 보고서와 채팅 답변 스트리밍은 기존 기능(FS-16·FS-05)의 화면 동작이라 따로 번호를 두지 않았다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
+`명세 외 구현 기능`(UX1~8)은 FS 번호가 없지만 코드에 있는 기능이다. 로드맵 코치는 `POST /chat/messages/stream`의 `category=roadmap`(공용 상담 화면 `components/AiConsult.jsx`)(로드맵 화면은 7단계 × 5개 = 35개 목표에 근거 등급·출처를 붙이고, 체크리스트 진행률을 서버 `user_roadmap_progress`(`/users/me/roadmap-progress`)에 저장한다), 개인 일정은 `POST`·`DELETE /calendar`, 알림함은 `/notifications`, 대화 기록은 `GET`·`DELETE /chat/messages`와 대화방 `GET /chat/rooms`·`PATCH`·`DELETE /chat/rooms/{roomId}`, 비로그인 조회는 `GET /announcements`·`GET /stats`, 구독은 `GET`·`PUT /users/me/subscription`(마이페이지 `구독 · 결제`, 실제 결제 없음), 사업계획서 보관함은 `/bizplan/plans*`(마이페이지 `사업계획서`), 온보딩 안내는 서버 호출 없이 화면별로 처음 한 번 뜨는 투어(`Frontend/src/components/PageTour.jsx`·`GuideTour.jsx`, 완료 여부는 브라우저 localStorage)다(`Docs/Design/API_SPEC.md`). 이 중 **UX3(알림함 확인)만 화면이 없다.** Backend `/notifications/*` 4개는 구현돼 있으나 부르는 화면이 없고, 마이페이지의 "알림 설정"(`Frontend/src/pages/MyPage.jsx`의 `알림 설정` 블록)은 서버를 부르지 않는 로컬 토글이다. UX1·2·4~8은 화면까지 연결돼 있다. 지출 분석 엑셀 보고서와 채팅 답변 스트리밍은 기존 기능(FS-16·FS-05)의 화면 동작이라 따로 번호를 두지 않았다. 기능별 화면 연결 현황은 `Docs/Design/FUNCTIONAL_SPEC.md`의 `화면 연결` 열을 따른다.
 
 ## 3. 관리자 · 외부 시스템 — 상세 유스케이스
 
@@ -183,7 +183,7 @@ flowchart TD
 
 ## 4. 통합 일정 캘린더 범위 확장
 
-`세금 캘린더 조회`(UC11)는 세금 신고·납부 일정만 다뤘으나, 사용자 캘린더는 지원정책 신청기한과 개인 일정도 함께 보여줘야 하므로 `통합 일정 캘린더 조회`로 범위를 넓혔다. 구현(`Backend/services/calendar_service.py`)은 세금 일정 전체, 내 개인 일정, 그리고 **저장한 정책이거나 아직 마감 전인** 정책 마감일을 보여준다. 추천 결과로는 거르지 않는다. 실데이터 캘린더는 마이페이지에 있고 홈 화면 캘린더는 예시 데이터다. 이에 따라 `맞춤 리마인더 설정`(UC12) 역시 세금·지원금 일정 모두를 대상으로 한다.
+`세금 캘린더 조회`(UC11)는 세금 신고·납부 일정만 다뤘으나, 사용자 캘린더는 지원정책 신청기한과 개인 일정도 함께 보여줘야 하므로 `통합 일정 캘린더 조회`로 범위를 넓혔다. 구현(`Backend/services/calendar_service.py`)은 세금 일정 전체, 내 개인 일정, 그리고 **저장한 정책이거나 아직 마감 전인** 정책 마감일을 보여준다. 추천 결과로는 거르지 않는다. 실데이터 캘린더는 마이페이지·공고지원 AI(`AnnouncementAnalyzer.jsx`)·홈 상단 오늘 챙길 일(`web/WebToday.jsx`)이 `GET /calendar`로 쓰고, 홈 화면 `Calendar` 컴포넌트는 예시 데이터다. 이에 따라 `맞춤 리마인더 설정`(UC12) 역시 세금·지원금 일정 모두를 대상으로 한다.
 
 ## 5. 원본 기능 목록에서 추가한 유스케이스
 
