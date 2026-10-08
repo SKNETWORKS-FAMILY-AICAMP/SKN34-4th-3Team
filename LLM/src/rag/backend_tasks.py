@@ -869,7 +869,7 @@ async def evaluate_business_plan(
     """작성된 초안을 항목별로 채점하는 AI 예비진단. 합격 여부가 아니라 참고용 자체 점검이다."""
     sections_text = (
         "\n\n".join(
-            f"[{section.get('label') or section.get('key')}]\n"
+            f"[key={section['key']}, label={section['label']}]\n"
             f"{(section.get('content') or '').strip() or '(작성 안 됨)'}"
             for section in sections
         )
@@ -884,9 +884,21 @@ async def evaluate_business_plan(
             config={"run_name": "backend_business_plan_evaluate"},
         )
     )
-    return result.model_copy(
-        update={"overall_comment": validate_generated_text(result.overall_comment, field_name="overall_comment")}
-    )
+    if len(result.sections) != len(sections):
+        raise ValueError("사업계획서 평가 항목 수가 초안과 일치하지 않습니다.")
+    by_key = {section.key: section for section in result.sections}
+    by_label = {section.label: section for section in result.sections}
+    if len(by_key) == len(sections) and all(section["key"] in by_key for section in sections):
+        ordered = [by_key[section["key"]] for section in sections]
+    elif len(by_label) == len(sections) and all(section["label"] in by_label for section in sections):
+        ordered = [by_label[section["label"]] for section in sections]
+    else:
+        ordered = result.sections
+    return result.model_copy(update={
+        "overall_comment": validate_generated_text(result.overall_comment, field_name="overall_comment"),
+        "sections": [score.model_copy(update={"key": source["key"], "label": source["label"]})
+                     for source, score in zip(sections, ordered)],
+    })
 
 
 async def extract_receipt(

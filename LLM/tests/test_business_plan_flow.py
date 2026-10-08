@@ -80,6 +80,30 @@ def test_evaluation_uses_selected_announcement_criteria() -> None:
     assert "근거 자료 명시" in model.last_prompt_text
 
 
+def test_template_evaluation_keeps_draft_section_identity() -> None:
+    model = FakeStructuredChatModel({BusinessPlanEvaluation: {
+        "overall_score": 60, "overall_comment": "보완이 필요합니다.",
+        "sections": [
+            {"key": "invented_1", "label": "요약", "score": 70,
+             "strengths": "명확합니다.", "improvements": "근거를 추가하세요."},
+            {"key": "invented_2", "label": "요약", "score": 50,
+             "strengths": "구조가 좋습니다.", "improvements": "수치를 추가하세요."},
+        ],
+    }})
+    sections = [
+        {"key": "section_1", "label": "1. 시장 분석", "content": "시장 현황"},
+        {"key": "section_2", "label": "2. 사업 일정", "content": "출시 계획"},
+    ]
+
+    result = asyncio.run(evaluate_business_plan(model, sections=sections))
+
+    assert [(item.key, item.label) for item in result.sections] == [
+        (item["key"], item["label"]) for item in sections
+    ]
+    assert [item.score for item in result.sections] == [70, 50]
+    assert "key=section_1, label=1. 시장 분석" in model.last_prompt_text
+
+
 def test_default_draft_returns_every_default_form_field() -> None:
     first_key, first_label, _ = BUSINESS_PLAN_DEFAULT_FIELDS[0]
     model = FakeStructuredChatModel({BusinessPlanGeneration: {
