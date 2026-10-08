@@ -254,6 +254,7 @@
 ├── Docs/            # 기획·설계·진행 문서
 │   ├── Design/      # 현재 유효한 설계 산출물
 │   ├── reports/     # 특정 시점의 검수·분석 보고서와 계획서
+│   ├── outputs/     # 프로젝트 산출물
 │   ├── imporve_plan/  # 검색 개선 계획·Elasticsearch 설정 가이드
 │   ├── data/        # README·문서용 이미지·수행결과 GIF
 │   └── branch_work/   # 브랜치별 작업 기록
