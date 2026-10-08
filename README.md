@@ -186,8 +186,8 @@
 
 세법·시행령·시행규칙 조문 4,459건, 정책 총 2,931건, 그중 공고 2,187건(2026-09-18 집계. 이후 추가된 법령해석례·생활법령은 미포함)
 
-배포 환경에서는 GitHub Actions가 **매주 1회(매주 월요일 03:00 KST / UTC 일요일 18:00, `collect.yml`)** 전체 수집을 실행하고, 수집이 끝나면 `POST /rag/reindex`로 변경된 청크만 임베딩·Elasticsearch 재색인까지 자동으로 이어감. 
-일시 장애(`transient`)로 실패한 수집은 3시간마다 재시도한다(`collect-retry.yml`, 재시도 대상 없다면 재색인 없이 종료).
+배포 환경에서는 GitHub Actions가 매주 1회 전체 수집을 실행하고, 수집이 끝나면 변경된 청크만 임베딩·Elasticsearch 재색인까지 자동으로 이어감. 
+일시 장애로 실패한 수집은 3시간마다 재시도하고, 재시도 대상 없다면 재색인 없이 종료.
 
 데이터 수집·전처리 상세 내용은 [Docs/data_collection_preprocessing.md](Docs/data_collection_preprocessing.md) 참고
 
