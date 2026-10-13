@@ -1512,46 +1512,42 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 ## 12. 수행결과
 
 #### 메인페이지 
-<!-- ![메인페이지](Docs/data/gifs/1_메인페이지_스크롤.gif) -->
+![메인페이지](Docs/data/gifs/1_메인페이지_스크롤.gif)
 
 #### 창업 로드맵
-<!-- ![창업로드맵](Docs/data/gifs/창업로드맵.gif) -->
+![창업로드맵](Docs/data/gifs/2_창업로드맵.gif)
 
 #### AI 세무 어시스턴트 챗봇
-<!-- ![세무어시스턴트](Docs/data/gifs/세무어시스턴트.gif) -->
+![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트.gif)
 
-#### 영수증 올리기
-<!-- ![영수증업로드](Docs/data/gifs/영수증_업로드.gif) -->
+#### 영수증 업로드
+![영수증업로드](Docs/data/gifs/4_영수증_업로드.gif)
 
 #### 영수증 판독 · 경비 판정 · 법령 상세보기
-<!-- ![영수증판정](Docs/data/gifs/영수증_판정.gif) -->
+![영수증판정](Docs/data/gifs/5_영수증_판정.gif)
 
-#### 사업계획서 작성 및 임시저장
-<!-- ![사업계획서작성](Docs/data/gifs/사업계획서_작성.gif) -->
+#### 지출 내역 엑셀 보고서
+![영수증엑셀](Docs/data/gifs/6_영수증_엑셀.gif)
 
-#### 사업계획서 공고 양식 선택
-<!-- ![사업계획서양식선택](Docs/data/gifs/사업계획서_양식선택.gif) -->
+#### 사업계획서 작성 
+![사업계획서작성](Docs/data/gifs/7_사업계획서_작성.gif)
 
-#### 초안 평가
-<!-- ![초안평가](Docs/data/gifs/사업계획서_초안평가.gif) -->
+#### 사업계획서 초안 평가 및 입력 정리
+![초안평가](Docs/data/gifs/8_사업계획서_초안평가.gif)
 
-#### 초안 수정
-<!-- ![초안수정](Docs/data/gifs/사업계획서_초안수정.gif) -->
+#### 사업계획서 초안 수정 및 재평가
+![사업계획서초안수정재평가](Docs/data/gifs/9_사업계획서_저장.gif)
 
 #### 공고지원 AI 챗봇
-<!-- ![공고지원챗봇](Docs/data/gifs/공고지원챗봇.gif) -->
+![공고지원챗봇](Docs/data/gifs/10_공고지원챗봇.gif)
 
 #### 마이페이지
-<!-- ![마이페이지](Docs/data/gifs/마이페이지.gif) -->
-
-#### 구독 결제
-<!-- ![구독결제](Docs/data/gifs/구독결제.gif) -->
-
-#### 저장한 사업계획서
-<!-- ![저장한사업계획서](Docs/data/gifs/저장한_사업계획서.gif) -->
+![마이페이지](Docs/data/gifs/11_마이페이지.gif)
 
 #### 화면 사용 가이드
-<!-- ![화면사용가이드](Docs/data/gifs/화면사용가이드.gif) -->
+![화면사용가이드](Docs/data/gifs/12_화면사용가이드.gif)
+
+# 모바일
 
 <br>
 
@@ -1559,39 +1555,39 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 <summary><b>&nbsp;&nbsp;이전 버전 화면</b></summary>
 
 #### 메인페이지
-![메인페이지](Docs/data/gifs/1_메인페이지.gif)
+![메인페이지](Docs/data/gifs/old/1_메인페이지.gif)
 
 #### 창업 로드맵
-![창업로드맵](Docs/data/gifs/2_창업로드맵.gif)
+![창업로드맵](Docs/data/gifs/old/2_창업로드맵.gif)
 
 #### 세무 어시스턴트 챗봇
-![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트1-1.gif)
+![세무어시스턴트](Docs/data/gifs/old/3_세무어시스턴트1-1.gif)
 
 #### 대화방 수정 및 삭제
-![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트2-1.gif)
+![세무어시스턴트](Docs/data/gifs/old/3_세무어시스턴트2-1.gif)
 
 #### 공고 확인
-![공고지원](Docs/data/gifs/4_공고지원수정본1.gif)
-![공고원문](Docs/data/gifs/4_공고지원수정본2.gif)
+![공고지원](Docs/data/gifs/old/4_공고지원수정본1.gif)
+![공고원문](Docs/data/gifs/old/4_공고지원수정본2.gif)
 
 #### 공고 지원 챗봇
-![공고지원](Docs/data/gifs/4_공고지원2-1.gif)
+![공고지원](Docs/data/gifs/old/4_공고지원2-1.gif)
 
 #### 마이페이지 - 대화 이력 확인
-![마이페이지](Docs/data/gifs/5_마이페이지1.gif)
+![마이페이지](Docs/data/gifs/old/5_마이페이지1.gif)
 
 #### 마이페이지 - 캘린더 일정 추가
-![마이페이지](Docs/data/gifs/5_마이페이지2.gif)
+![마이페이지](Docs/data/gifs/old/5_마이페이지2.gif)
 
 #### 마이페이지 - 사용자 정보 수정
-![마이페이지](Docs/data/gifs/5_마이페이지3.gif)
+![마이페이지](Docs/data/gifs/old/5_마이페이지3.gif)
 
 #### 마이페이지 - 저장한 공고 및 추천 공고 확인
-![마이페이지저장공고](Docs/data/gifs/5_마이페이지수정본1.gif)
-![마이페이지추천공고](Docs/data/gifs/5_마이페이지수정본2.gif)
+![마이페이지저장공고](Docs/data/gifs/old/5_마이페이지수정본1.gif)
+![마이페이지추천공고](Docs/data/gifs/old/5_마이페이지수정본2.gif)
 
 #### 다크모드 지원
-![다크모드](Docs/data/gifs/6_다크모드.gif)
+![다크모드](Docs/data/gifs/old/6_다크모드.gif)
 
 </details>
 
