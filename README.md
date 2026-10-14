@@ -1511,7 +1511,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 
 ## 12. 수행결과
 
-#### 메인페이지 
+#### 메인페이지 (전체 스크롤)
 ![메인페이지](Docs/data/gifs/1_메인페이지_스크롤.gif)
 
 #### 창업 로드맵
@@ -1520,7 +1520,7 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 #### AI 세무 어시스턴트 챗봇
 ![세무어시스턴트](Docs/data/gifs/3_세무어시스턴트.gif)
 
-#### 영수증 업로드
+#### 영수증 올리기
 ![영수증업로드](Docs/data/gifs/4_영수증_업로드.gif)
 
 #### 영수증 판독 · 경비 판정 · 법령 상세보기
@@ -1529,14 +1529,14 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 #### 지출 내역 엑셀 보고서
 ![영수증엑셀](Docs/data/gifs/6_영수증_엑셀.gif)
 
-#### 사업계획서 작성 
+#### 사업계획서 작성 및 임시저장
 ![사업계획서작성](Docs/data/gifs/7_사업계획서_작성.gif)
 
-#### 사업계획서 초안 평가 및 입력 정리
+#### 사업계획서 초안 평가 (AI 자체 점수)
 ![초안평가](Docs/data/gifs/8_사업계획서_초안평가.gif)
 
-#### 사업계획서 초안 수정 및 재평가
-![사업계획서초안수정재평가](Docs/data/gifs/9_사업계획서_저장.gif)
+#### 사업계획서 저장
+![사업계획서저장](Docs/data/gifs/9_사업계획서_저장.gif)
 
 #### 공고지원 AI 챗봇
 ![공고지원챗봇](Docs/data/gifs/10_공고지원챗봇.gif)
@@ -1547,7 +1547,24 @@ AI 예비진단(`/bizplan/evaluate`)은 실제 심사가 아닌 참고용 자체
 #### 화면 사용 가이드
 ![화면사용가이드](Docs/data/gifs/12_화면사용가이드.gif)
 
-# 모바일
+<br>
+
+### 📱 모바일 화면
+
+<table>
+<tr>
+<td align="center"><b>메인페이지</b><br><img src="Docs/data/gifs/1_모바일_메인페이지.gif" width="200"></td>
+<td align="center"><b>세무 AI</b><br><img src="Docs/data/gifs/2_모바일_메인세무ai.gif" width="200"></td>
+<td align="center"><b>창업 로드맵</b><br><img src="Docs/data/gifs/3_모바일_로드맵.gif" width="200"></td>
+<td align="center"><b>영수증·지출관리</b><br><img src="Docs/data/gifs/4_모바일_영수증지출관리.gif" width="200"></td>
+</tr>
+<tr>
+<td align="center"><b>사업계획서</b><br><img src="Docs/data/gifs/5_모바일_사업계획서.gif" width="200"></td>
+<td align="center"><b>공고지원</b><br><img src="Docs/data/gifs/6_모바일_공고지원.gif" width="200"></td>
+<td align="center"><b>마이페이지</b><br><img src="Docs/data/gifs/7_모바일_마이페이지.gif" width="200"></td>
+<td></td>
+</tr>
+</table>
 
 <br>
 
