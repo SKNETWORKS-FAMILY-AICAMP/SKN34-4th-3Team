@@ -42,10 +42,10 @@
 
 | 이름 | 담당 | 설명 | GitHub |
 | :---: | :---: | :---: | :---: |
-| 김태윤 | **PM** | - | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
-| 김현지 | **DB** | - | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/HJK013) |
-| 채정석 | **Frontend** | - | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
-| 황호순 | **LLM** | - | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
+| 김태윤 | **PM · Backend/DevOps** | 프로젝트 총괄, 백엔드 개발 및 CI/CD·운영 자동화 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/kty2001) |
+| 김현지 | **DB · QA** | 데이터 수집, 산출물 및 QA | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/HJK013) |
+| 채정석 | **Frontend · OCR** | 프론트엔드(UI/UX) 구축, 영수증 OCR 고도화, 모바일·반응형 웹앱 화면 구현, PPT 제작 및 발표 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/qnfdhk-rgb) |
+| 황호순 | **LLM · Infra** | LLM 고도화, 사업계획서 기능, AWS 배포 및 인프라 | [![GitHub](https://img.shields.io/badge/-181717?style=flat-square&logo=github&logoColor=white)](https://github.com/Amber8800) |
 
 
 
@@ -1833,13 +1833,13 @@ Windows cmd.exe에서는 `setup.bat`을 같은 인자로 쓴다.
 
 
 ### 김태윤
-> -
+> 이번 프로젝트에서 CI/CD, 스케줄링, PWA, AWS 등 기존에 사용해보고 싶었던 기술들을 모두 도입해 볼 수 있어서 좋았다.
 
 ### 김현지
-> -
+> 데이터 수집 범위를 넓히고, 또한 기존에 구현하지 못했었던 수집 스케줄링 부분도 시도해보며 배울 수 있었던 시간이었다. 다음에는 데이터를 넘어 기능 개발까지 영역을 넓혀보고 싶다.
 
 ### 채정석
-> -
+> 4차 프로젝트에서 협업에 더 신경 썼지만 내가 수정한 부분이 팀원들에게 바로 반영되지 못한 점이 아쉬웠고, 프로젝트마다 드러나는 이런 아쉬움을 하나씩 고쳐가며 더 성장하겠다.
 
 ### 황호순
-> -
+> LLM 고도화 작업에서 여러 방법을 시도하고 적용 시켜보면서 많이 배웠지만 놓친 부분도 많은것 같아 아쉬움도 크다. 평소 배포 관련해서도 궁금한게 있었는데 이번 기회에 AWS를 통해 배포 과정을 경험할 수 있어서 좋았다.
